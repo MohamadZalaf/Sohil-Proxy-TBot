@@ -34,7 +34,9 @@
     "react-native-sqlite-storage": "^6.0.1",
     "expo-sqlite": "~11.3.3",
     "expo-background-fetch": "~11.3.0",
-    "expo-task-manager": "~11.3.0"
+    "expo-task-manager": "~11.3.0",
+    "react-native-exec": "^1.0.5",
+    "expo-file-system": "~15.4.5"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"

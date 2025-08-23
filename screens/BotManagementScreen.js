@@ -19,7 +19,10 @@ import {
   IconButton,
 } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import TelegramBotService from '../services/TelegramBotService';
+import TermuxBotService from '../services/TermuxBotService';
+import axios from 'axios';
+
+const API_BASE_URL = 'http://localhost:5000/api';
 
 export default function BotManagementScreen() {
   const [botStatus, setBotStatus] = useState(false);
@@ -42,8 +45,13 @@ export default function BotManagementScreen() {
 
   const checkBotStatus = async () => {
     try {
-      const status = TelegramBotService.getStatus();
-      setBotStatus(status);
+      // التحقق من حالة البوت المحلي
+      const localStatus = TermuxBotService.getStatus();
+      
+      // التحقق من صحة البوت عبر API
+      const healthCheck = await TermuxBotService.checkBotHealth();
+      
+      setBotStatus(localStatus && healthCheck);
     } catch (error) {
       console.error('خطأ في التحقق من حالة البوت:', error);
     }
@@ -52,9 +60,12 @@ export default function BotManagementScreen() {
   const handleStartBot = async () => {
     setLoading(true);
     try {
-      await TelegramBotService.startPolling();
-      setBotStatus(true);
-      Alert.alert('نجح', 'تم بدء البوت بنجاح من الهاتف! 🚀\n\nالبوت يعمل الآن في الخلفية ويستقبل الطلبات.');
+      const success = await TermuxBotService.startBot();
+      if (success) {
+        setBotStatus(true);
+        // بدء مراقبة حالة البوت
+        setTimeout(() => checkBotStatus(), 5000);
+      }
     } catch (error) {
       Alert.alert('خطأ', 'فشل في بدء البوت');
       console.error('خطأ في بدء البوت:', error);
@@ -74,13 +85,9 @@ export default function BotManagementScreen() {
           onPress: async () => {
             setLoading(true);
             try {
-              const response = await axios.post(`${API_BASE_URL}/bot/stop`);
-              
-              if (response.data.success) {
+              const success = await TermuxBotService.stopBot();
+              if (success) {
                 setBotStatus(false);
-                Alert.alert('نجح', response.data.message);
-              } else {
-                Alert.alert('خطأ', response.data.message);
               }
             } catch (error) {
               Alert.alert('خطأ', 'فشل في إيقاف البوت');
