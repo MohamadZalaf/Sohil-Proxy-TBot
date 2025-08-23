@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 ADMIN_PASSWORD = "sohilSOHIL"
 TOKEN = "8408804784:AAG8cSTsDQfycDaXOX9YMmc_OB3wABez7LA"
 DATABASE_FILE = "proxy_bot.db"
+ADMIN_CHAT_ID = None  # سيتم تحديده عند أول تسجيل دخول للأدمن
 
 # حالات المحادثة
 (
@@ -482,6 +483,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
         except:
             pass  # في حالة عدم إمكانية إرسال الرسالة
+        
+        # إشعار الأدمن بانضمام عضو جديد عبر الإحالة
+        await send_referral_notification(context, referred_by, user)
     
     db.log_action(user.id, "start_command")
     
@@ -518,7 +522,10 @@ async def admin_login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 async def handle_admin_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """التحقق من كلمة مرور الأدمن"""
     if update.message.text == ADMIN_PASSWORD:
+        global ADMIN_CHAT_ID
         context.user_data['is_admin'] = True
+        ADMIN_CHAT_ID = update.effective_user.id  # حفظ معرف الأدمن
+        
         db.log_action(update.effective_user.id, "admin_login_success")
         
         # لوحة مفاتيح عادية للأدمن
@@ -685,14 +692,26 @@ async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYP
         # إذا كانت صورة
         file_id = update.message.photo[-1].file_id
         payment_proof = f"photo:{file_id}"
+        
+        # إرسال رسالة بعنوان إثبات الدفع
+        await context.bot.send_photo(
+            chat_id=update.effective_chat.id,
+            photo=file_id,
+            caption=f"إثبات دفع للطلب بمعرف: {order_id}"
+        )
     else:
         # إذا كان نص
         payment_proof = f"text:{update.message.text}"
+        
+        # إرسال رسالة بعنوان إثبات الدفع
+        await update.message.reply_text(
+            f"إثبات دفع للطلب بمعرف: {order_id}\n\nالتفاصيل: {update.message.text}"
+        )
     
     db.update_order_payment_proof(order_id, payment_proof)
     
-    # تسجيل الطلب في السجل (بدون إرسال إشعار)
-    db.log_action(user_id, "order_submitted", order_id)
+    # إرسال إشعار للأدمن مع زر المعالجة
+    await send_admin_notification(context, order_id)
     
     await update.message.reply_text(MESSAGES[language]['order_received'])
     
@@ -700,13 +719,13 @@ async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYP
     
     return ConversationHandler.END
 
-async def send_withdrawal_notification(chat_id: int, withdrawal_id: str, user: tuple) -> None:
+async def send_withdrawal_notification(context: ContextTypes.DEFAULT_TYPE, withdrawal_id: str, user: tuple) -> None:
     """إرسال إشعار طلب سحب للأدمن"""
     message = f"""💸 طلب سحب رصيد جديد
 
 👤 الاسم: {user[2]} {user[3]}
 📱 اسم المستخدم: @{user[1] or 'غير محدد'}
-🆔 معرف المستخدم: {user[0]}
+🆔 معرف المستخدم: `{user[0]}`
 
 ━━━━━━━━━━━━━━━
 💰 المبلغ المطلوب: `{user[5]:.2f}$`
@@ -716,11 +735,59 @@ async def send_withdrawal_notification(chat_id: int, withdrawal_id: str, user: t
 🔗 معرف الطلب: `{withdrawal_id}`
 📅 تاريخ الطلب: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
 
-    # حفظ الإشعار في قاعدة البيانات
-    db.log_action(0, "withdrawal_notification", f"New withdrawal: {withdrawal_id}")
+    # زر معالجة طلب السحب
+    keyboard = [[InlineKeyboardButton("💸 معالجة طلب السحب", callback_data=f"process_{withdrawal_id}")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # طباعة الإشعار في وحدة التحكم
-    print(f"📬 إشعار سحب رصيد جديد:\n{message}")
+    if ADMIN_CHAT_ID:
+        try:
+            await context.bot.send_message(
+                ADMIN_CHAT_ID, 
+                message, 
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            print(f"خطأ في إرسال إشعار طلب السحب: {e}")
+    
+    # حفظ الإشعار في قاعدة البيانات
+    db.log_action(user[0], "withdrawal_notification", f"New withdrawal: {withdrawal_id}")
+
+async def send_referral_notification(context: ContextTypes.DEFAULT_TYPE, referrer_id: int, new_user) -> None:
+    """إرسال إشعار للأدمن بانضمام عضو جديد عبر الإحالة"""
+    # الحصول على بيانات المحيل
+    referrer = db.get_user(referrer_id)
+    
+    if referrer:
+        message = f"""👥 عضو جديد عبر الإحالة
+
+🆕 العضو الجديد:
+👤 الاسم: {new_user.first_name} {new_user.last_name or ''}
+📱 اسم المستخدم: @{new_user.username or 'غير محدد'}
+🆔 معرف المستخدم: `{new_user.id}`
+
+━━━━━━━━━━━━━━━
+👥 تم إحالته بواسطة:
+👤 الاسم: {referrer[2]} {referrer[3]}
+📱 اسم المستخدم: @{referrer[1] or 'غير محدد'}
+🆔 معرف المحيل: `{referrer[0]}`
+
+━━━━━━━━━━━━━━━
+💰 تم إضافة `0.1$` لرصيد المحيل
+📅 تاريخ الانضمام: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+
+        if ADMIN_CHAT_ID:
+            try:
+                await context.bot.send_message(
+                    ADMIN_CHAT_ID, 
+                    message,
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                print(f"خطأ في إرسال إشعار الإحالة: {e}")
+        
+        # حفظ الإشعار في قاعدة البيانات
+        db.log_action(new_user.id, "referral_notification", f"Referred by: {referrer_id}")
 
 async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: str) -> None:
     """إرسال إشعار للأدمن بطلب جديد"""
@@ -779,10 +846,23 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
                 (order[1], "payment_proof_saved", proof_message)
             )
         
+        # إرسال للأدمن مع زر المعالجة
+        keyboard = [[InlineKeyboardButton("🔧 معالجة الطلب", callback_data=f"process_{order_id}")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        if ADMIN_CHAT_ID:
+            try:
+                await context.bot.send_message(
+                    ADMIN_CHAT_ID, 
+                    message, 
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                print(f"خطأ في إرسال إشعار الأدمن: {e}")
+        
         # حفظ تفاصيل الطلب في قاعدة البيانات
         db.log_action(order[1], "order_details_logged", f"Order: {order_id} - {order[2]} - {order[3]}")
-        
-        # الأدمن يمكنه رؤية الطلبات من خلال قائمة "الطلبات المعلقة"
 
 async def handle_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة قسم الإحالات"""
@@ -913,11 +993,21 @@ async def handle_admin_country_selection(update: Update, context: ContextTypes.D
     
     if query.data == "admin_other_country":
         context.user_data['admin_input_state'] = ENTER_COUNTRY
-        await query.edit_message_text("يرجى إدخال اسم الدولة:")
+        await query.edit_message_text("4️⃣ يرجى إدخال اسم الدولة:")
         return ENTER_COUNTRY
+    elif query.data.startswith("admin_state_"):
+        state_code = query.data.replace("admin_state_", "")
+        context.user_data['admin_proxy_state'] = US_STATES['ar'].get(state_code, state_code)
+        context.user_data['admin_input_state'] = ENTER_USERNAME
+        await query.edit_message_text("6️⃣ يرجى إدخال اسم المستخدم للبروكسي:")
+        return ENTER_USERNAME
+    elif query.data == "admin_other_state":
+        context.user_data['admin_input_state'] = ENTER_STATE
+        await query.edit_message_text("5️⃣ يرجى إدخال اسم الولاية:")
+        return ENTER_STATE
     else:
         country_code = query.data.replace("admin_country_", "")
-        context.user_data['admin_proxy_country'] = COUNTRIES['ar'][country_code]
+        context.user_data['admin_proxy_country'] = STATIC_COUNTRIES['ar'][country_code]
         
         # عرض قائمة الولايات إذا كانت متوفرة
         if country_code == "US":
@@ -927,7 +1017,7 @@ async def handle_admin_country_selection(update: Update, context: ContextTypes.D
         else:
             # انتقل مباشرة لاسم المستخدم
             context.user_data['admin_input_state'] = ENTER_USERNAME
-            await query.edit_message_text("يرجى إدخال اسم المستخدم للبروكسي:")
+            await query.edit_message_text("6️⃣ يرجى إدخال اسم المستخدم للبروكسي:")
             return ENTER_USERNAME
         
         keyboard = []
@@ -936,7 +1026,7 @@ async def handle_admin_country_selection(update: Update, context: ContextTypes.D
         keyboard.append([InlineKeyboardButton("غير ذلك", callback_data="admin_other_state")])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("اختر الولاية:", reply_markup=reply_markup)
+        await query.edit_message_text("5️⃣ اختر الولاية:", reply_markup=reply_markup)
         return ENTER_STATE
 
 async def handle_withdrawal_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -973,8 +1063,8 @@ async def handle_withdrawal_request(update: Update, context: ContextTypes.DEFAUL
 
 Your request has been sent to admin and will be processed soon."""
         
-        # تسجيل طلب السحب في السجل
-        db.log_action(user_id, "withdrawal_request", withdrawal_id)
+        # إرسال إشعار طلب السحب للأدمن
+        await send_withdrawal_notification(context, withdrawal_id, user)
         
         await query.edit_message_text(message, parse_mode='Markdown')
     else:
@@ -1061,19 +1151,25 @@ async def add_referral_bonus(user_id: int, referred_user_id: int) -> None:
 
 async def cleanup_old_orders() -> None:
     """تنظيف الطلبات القديمة (48 ساعة)"""
-    # حذف الطلبات الفاشلة القديمة
-    db.execute_query("""
+    # حذف الطلبات الفاشلة القديمة (بعد 48 ساعة كما هو مطلوب في المواصفات)
+    deleted_failed = db.execute_query("""
         DELETE FROM orders 
         WHERE status = 'failed' 
         AND created_at < datetime('now', '-48 hours')
     """)
     
-    # حذف الطلبات المكتملة القديمة (اختياري - يمكن الاحتفاظ بها للإحصائيات)
-    # db.execute_query("""
-    #     DELETE FROM orders 
-    #     WHERE status = 'completed' 
-    #     AND processed_at < datetime('now', '-30 days')
-    # """)
+    # تسجيل عدد الطلبات المحذوفة
+    if deleted_failed:
+        print(f"تم حذف {len(deleted_failed)} طلب فاشل قديم")
+    
+    # يمكن الاحتفاظ بالطلبات المكتملة للإحصائيات (لا نحذفها)
+
+# تشغيل تنظيف الطلبات كل ساعة
+async def schedule_cleanup():
+    """جدولة تنظيف الطلبات"""
+    while True:
+        await asyncio.sleep(3600)  # كل ساعة
+        await cleanup_old_orders()
 
 def create_requirements_file():
     """إنشاء ملف requirements.txt"""
@@ -1255,16 +1351,24 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
     order_id = context.user_data['processing_order_id']
     
     # إرسال رسالة للمستخدم أن الطلب قيد المعالجة
-    order_query = "SELECT user_id FROM orders WHERE id = ?"
-    user_result = db.execute_query(order_query, (order_id,))
-    if user_result:
-        user_id = user_result[0][0]
+    order_query = "SELECT user_id, proxy_type FROM orders WHERE id = ?"
+    order_result = db.execute_query(order_query, (order_id,))
+    if order_result:
+        user_id = order_result[0][0]
+        order_type = order_result[0][1]
+        
         await context.bot.send_message(
             user_id,
             "جاري معالجة الطلب يدوياً من الأدمن بأقرب وقت."
         )
+        
+        # التحقق من نوع الطلب
+        if order_type == 'withdrawal':
+            # معالجة طلب السحب
+            await handle_withdrawal_approval(query, context, order_id, user_id)
+            return ConversationHandler.END
     
-    # بدء جمع معلومات البروكسي
+    # بدء جمع معلومات البروكسي للطلبات العادية
     keyboard = [
         [InlineKeyboardButton("ستاتيك", callback_data="proxy_type_static")],
         [InlineKeyboardButton("سوكس", callback_data="proxy_type_socks")]
@@ -1272,11 +1376,36 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await query.edit_message_text(
-        "اختر نوع البروكسي:",
+        "1️⃣ اختر نوع البروكسي:",
         reply_markup=reply_markup
     )
     
     return ENTER_PROXY_TYPE
+
+async def handle_withdrawal_approval(query, context: ContextTypes.DEFAULT_TYPE, order_id: str, user_id: int) -> None:
+    """معالجة موافقة طلب السحب"""
+    # الحصول على بيانات المستخدم
+    user = db.get_user(user_id)
+    
+    if user:
+        # تصفير رصيد المستخدم
+        db.execute_query("UPDATE users SET referral_balance = 0 WHERE user_id = ?", (user_id,))
+        
+        # تحديث حالة طلب السحب
+        db.execute_query("UPDATE orders SET status = 'completed', processed_at = CURRENT_TIMESTAMP WHERE id = ?", (order_id,))
+        
+        # إرسال رسالة للمستخدم
+        await context.bot.send_message(
+            user_id,
+            f"✅ تم الموافقة على طلب سحب الرصيد\n\n💰 المبلغ: `{user[5]:.2f}$`\n🆔 معرف الطلب: `{order_id}`\n\nسيتم التواصل معك قريباً لإتمام عملية التحويل.",
+            parse_mode='Markdown'
+        )
+        
+        # رسالة تأكيد للأدمن
+        await query.edit_message_text(
+            f"✅ تم الموافقة على طلب السحب بنجاح!\n\n👤 المستخدم: {user[2]} {user[3]}\n💰 المبلغ: `{user[5]:.2f}$`\n🆔 معرف الطلب: `{order_id}`\n\n⚠️ تم تصفير رصيد المستخدم تلقائياً.",
+            parse_mode='Markdown'
+        )
 
 async def handle_payment_failed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة فشل الدفع"""
@@ -1378,8 +1507,9 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
         if query.data.startswith("proxy_type_"):
             proxy_type = query.data.replace("proxy_type_", "")
             context.user_data['admin_proxy_type'] = proxy_type
+            context.user_data['admin_input_state'] = ENTER_PROXY_ADDRESS
             
-            await query.edit_message_text("يرجى إدخال عنوان البروكسي:")
+            await query.edit_message_text("2️⃣ يرجى إدخال عنوان البروكسي:")
             return ENTER_PROXY_ADDRESS
     
     else:
@@ -1390,7 +1520,7 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
         if current_state == ENTER_PROXY_ADDRESS:
             context.user_data['admin_proxy_address'] = text
             context.user_data['admin_input_state'] = ENTER_PROXY_PORT
-            await update.message.reply_text("يرجى إدخال البورت:")
+            await update.message.reply_text("3️⃣ يرجى إدخال البورت:")
             return ENTER_PROXY_PORT
         
         elif current_state == ENTER_PROXY_PORT:
@@ -1398,24 +1528,24 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
             
             # عرض قائمة الدول
             keyboard = []
-            for code, name in COUNTRIES['ar'].items():
+            for code, name in STATIC_COUNTRIES['ar'].items():
                 keyboard.append([InlineKeyboardButton(name, callback_data=f"admin_country_{code}")])
             keyboard.append([InlineKeyboardButton("غير ذلك", callback_data="admin_other_country")])
             
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text("اختر الدولة:", reply_markup=reply_markup)
+            await update.message.reply_text("4️⃣ اختر الدولة:", reply_markup=reply_markup)
             return ENTER_COUNTRY
         
         elif current_state == ENTER_USERNAME:
             context.user_data['admin_proxy_username'] = text
             context.user_data['admin_input_state'] = ENTER_PASSWORD
-            await update.message.reply_text("يرجى إدخال كلمة المرور:")
+            await update.message.reply_text("7️⃣ يرجى إدخال كلمة المرور:")
             return ENTER_PASSWORD
         
         elif current_state == ENTER_PASSWORD:
             context.user_data['admin_proxy_password'] = text
             context.user_data['admin_input_state'] = ENTER_THANK_MESSAGE
-            await update.message.reply_text("يرجى إدخال رسالة شكر قصيرة:")
+            await update.message.reply_text("8️⃣ يرجى إدخال رسالة شكر قصيرة:")
             return ENTER_THANK_MESSAGE
         
         elif current_state == ENTER_THANK_MESSAGE:
