@@ -1,0 +1,1 @@
+web: python telegram_proxy_bot.py
