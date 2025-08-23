@@ -210,11 +210,7 @@ sohilskaf123@gmail.com
         'manual_input': 'إدخال يدوي',
         'payment_methods': 'اختر طريقة الدفع:',
         'send_payment_proof': 'يرجى إرسال إثبات الدفع (صورة أو نص):',
-        'order_received': '✅ تم استلام طلبك بنجاح!
-
-📋 سيتم معالجة الطلب يدوياً من الأدمن بأقرب وقت.
-
-📧 ستصلك تحديثات الحالة تلقائياً.',
+        'order_received': '✅ تم استلام طلبك بنجاح!\n\n📋 سيتم معالجة الطلب يدوياً من الأدمن بأقرب وقت.\n\n📧 ستصلك تحديثات الحالة تلقائياً.',
         'main_menu_buttons': ['🔒 طلب بروكسي ستاتيك', '🧦 طلب بروكسي سوكس', '👥 إحالاتي', '⚙️ الإعدادات'],
         'admin_main_buttons': ['📋 إدارة الطلبات', '💰 إدارة الأموال', '👥 الإحالات', '⚙️ الإعدادات'],
         'language_change_success': 'تم تغيير اللغة إلى العربية ✅\nيرجى استخدام الأمر /start لإعادة تحميل القوائم',
@@ -1109,6 +1105,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_withdrawal_request(update, context)
     elif query.data in ["send_custom_message", "no_custom_message"]:
         await handle_custom_message_choice(update, context)
+    elif query.data.startswith("quiet_"):
+        await handle_quiet_hours_selection(update, context)
     else:
         await query.answer("قيد التطوير...")
 
@@ -1301,7 +1299,8 @@ async def schedule_cleanup():
 def create_requirements_file():
     """إنشاء ملف requirements.txt"""
     requirements = """python-telegram-bot==20.7
-sqlite3"""
+pandas>=1.3.0
+openpyxl>=3.0.0"""
     
     with open("requirements.txt", "w", encoding="utf-8") as f:
         f.write(requirements)
@@ -1826,6 +1825,7 @@ async def handle_admin_orders_menu(update: Update, context: ContextTypes.DEFAULT
     """معالجة قائمة إدارة الطلبات للأدمن"""
     keyboard = [
         [KeyboardButton("📋 الطلبات المعلقة")],
+        [KeyboardButton("🔍 الاستعلام عن طلب")],
         [KeyboardButton("🗑️ حذف الطلبات الفاشلة"), KeyboardButton("🗑️ حذف الطلبات المكتملة")],
         [KeyboardButton("🔙 العودة للقائمة الرئيسية")]
     ]
@@ -2031,6 +2031,8 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         # إدارة الطلبات
         elif text == "📋 الطلبات المعلقة":
             await show_pending_orders_admin(update, context)
+        elif text == "🔍 الاستعلام عن طلب":
+            return await admin_order_inquiry(update, context)
         elif text == "🗑️ حذف الطلبات الفاشلة":
             await delete_failed_orders(update, context)
         elif text == "🗑️ حذف الطلبات المكتملة":
@@ -2041,20 +2043,24 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             await show_sales_statistics(update, context)
         elif text == "💲 إدارة الأسعار":
             await manage_prices_menu(update, context)
+        elif text == "💰 تعديل أسعار ستاتيك":
+            return await set_static_prices(update, context)
+        elif text == "💰 تعديل أسعار سوكس":
+            return await set_socks_prices(update, context)
         
         # إدارة الإحالات
         elif text == "💵 تحديد قيمة الإحالة":
-            await set_referral_amount(update, context)
+            return await set_referral_amount(update, context)
         elif text == "📊 إحصائيات المستخدمين":
             await show_user_statistics(update, context)
         elif text == "🗑️ تصفير رصيد مستخدم":
-            await reset_user_balance(update, context)
+            return await reset_user_balance(update, context)
         
         # إعدادات الأدمن
         elif text == "🌐 تغيير اللغة":
             await handle_settings(update, context)
         elif text == "🔕 ساعات الهدوء":
-            await set_quiet_hours(update, context)
+            return await set_quiet_hours(update, context)
         elif text == "📊 تحميل قاعدة البيانات":
             await database_export_menu(update, context)
         
@@ -2081,6 +2087,311 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         await handle_referrals(update, context)
     elif text == MESSAGES[language]['main_menu_buttons'][3]:  # الإعدادات
         await handle_settings(update, context)
+
+# ==== الوظائف المفقودة ====
+
+async def manage_prices_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """قائمة إدارة الأسعار"""
+    keyboard = [
+        [KeyboardButton("💰 تعديل أسعار ستاتيك")],
+        [KeyboardButton("💰 تعديل أسعار سوكس")],
+        [KeyboardButton("🔙 العودة للقائمة الرئيسية")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        "💲 إدارة الأسعار\nاختر نوع البروكسي لتعديل أسعاره:",
+        reply_markup=reply_markup
+    )
+
+async def set_referral_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """تحديد قيمة الإحالة"""
+    await update.message.reply_text(
+        "💵 تحديد قيمة الإحالة الواحدة\n\nيرجى إرسال قيمة الإحالة بالدولار (مثال: `0.1`):",
+        parse_mode='Markdown'
+    )
+    return REFERRAL_AMOUNT
+
+async def handle_referral_amount_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة تحديث قيمة الإحالة"""
+    try:
+        amount = float(update.message.text)
+        
+        # حفظ في قاعدة البيانات
+        db.execute_query(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+            ("referral_amount", str(amount))
+        )
+        
+        await update.message.reply_text(f"✅ تم تحديث قيمة الإحالة إلى `{amount}$`", parse_mode='Markdown')
+        
+    except ValueError:
+        await update.message.reply_text("❌ يرجى إرسال رقم صحيح!")
+        return REFERRAL_AMOUNT
+    
+    return ConversationHandler.END
+
+async def set_quiet_hours(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """تحديد ساعات الهدوء"""
+    keyboard = [
+        [InlineKeyboardButton("🔕 08:00 - 18:00", callback_data="quiet_8_18")],
+        [InlineKeyboardButton("🔕 22:00 - 06:00", callback_data="quiet_22_6")],
+        [InlineKeyboardButton("🔕 12:00 - 14:00", callback_data="quiet_12_14")],
+        [InlineKeyboardButton("🔕 20:00 - 22:00", callback_data="quiet_20_22")],
+        [InlineKeyboardButton("🔊 24 ساعة مع صوت", callback_data="quiet_24h")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "🔕 ساعات الهدوء\n\nاختر الفترة التي تريد فيها إشعارات صامتة:\n(خارج هذه الفترات ستصل الإشعارات بصوت)",
+        reply_markup=reply_markup
+    )
+    return QUIET_HOURS
+
+async def handle_quiet_hours_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة اختيار ساعات الهدوء"""
+    query = update.callback_query
+    await query.answer()
+    
+    quiet_period = query.data.replace("quiet_", "")
+    
+    # حفظ في قاعدة البيانات
+    db.execute_query(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+        ("quiet_hours", quiet_period)
+    )
+    
+    if quiet_period == "24h":
+        message = "🔊 تم تعيين الإشعارات بصوت لمدة 24 ساعة"
+    else:
+        start_hour, end_hour = quiet_period.split("_")
+        message = f"🔕 تم تعيين ساعات الهدوء: `{start_hour}:00 - {end_hour}:00`"
+    
+    await query.edit_message_text(message, parse_mode='Markdown')
+    return ConversationHandler.END
+
+async def admin_signout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """تسجيل خروج الأدمن"""
+    context.user_data['is_admin'] = False
+    user_id = update.effective_user.id
+    language = get_user_language(user_id)
+    
+    # إنشاء الأزرار الرئيسية للمستخدم
+    keyboard = [
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][0])],
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][1])],
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2]), 
+         KeyboardButton(MESSAGES[language]['main_menu_buttons'][3])]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        "👋 تم تسجيل الخروج من لوحة الأدمن\n\n" + MESSAGES[language]['welcome'],
+        reply_markup=reply_markup
+    )
+
+async def admin_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """الاستعلام عن طلب"""
+    await update.message.reply_text(
+        "🔍 الاستعلام عن طلب\n\nيرجى إرسال معرف الطلب (`16` خانة):",
+        parse_mode='Markdown'
+    )
+    return ADMIN_ORDER_INQUIRY
+
+async def handle_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة الاستعلام عن طلب"""
+    order_id = update.message.text.strip()
+    
+    # التحقق من صحة معرف الطلب
+    if len(order_id) != 16:
+        await update.message.reply_text("❌ معرف الطلب يجب أن يكون `16` خانة", parse_mode='Markdown')
+        return ADMIN_ORDER_INQUIRY
+    
+    # البحث عن الطلب
+    query = """
+        SELECT o.*, u.first_name, u.last_name, u.username 
+        FROM orders o 
+        JOIN users u ON o.user_id = u.user_id 
+        WHERE o.id = ?
+    """
+    result = db.execute_query(query, (order_id,))
+    
+    if not result:
+        await update.message.reply_text(f"❌ لم يتم العثور على طلب بالمعرف: `{order_id}`", parse_mode='Markdown')
+        return ConversationHandler.END
+    
+    order = result[0]
+    status = order[8]  # حالة الطلب
+    
+    if status == 'pending':
+        # إعادة إرسال الطلب مع إثبات الدفع
+        await resend_order_notification(update, context, order)
+        await update.message.reply_text("✅ تم إعادة إرسال الطلب مع زر المعالجة")
+    elif status == 'completed':
+        processed_date = order[10] if order[10] else "غير محدد"
+        await update.message.reply_text(f"ℹ️ الطلب `{order_id}` تم معالجته بالفعل\n📅 تاريخ المعالجة: {processed_date}", parse_mode='Markdown')
+    elif status == 'failed':
+        await update.message.reply_text(f"ℹ️ الطلب `{order_id}` فشل ولم يتم معالجته", parse_mode='Markdown')
+    
+    return ConversationHandler.END
+
+async def resend_order_notification(update: Update, context: ContextTypes.DEFAULT_TYPE, order: tuple) -> None:
+    """إعادة إرسال إشعار الطلب"""
+    order_id = order[0]
+    
+    # تحديد طريقة الدفع باللغة العربية
+    payment_methods_ar = {
+        'shamcash': 'شام كاش',
+        'syriatel': 'سيرياتيل كاش',
+        'coinex': 'Coinex',
+        'binance': 'Binance',
+        'payeer': 'Payeer'
+    }
+    
+    payment_method_ar = payment_methods_ar.get(order[5], order[5])
+    
+    message = f"""🔔 طلب معاد إرساله
+
+👤 الاسم: `{order[11]} {order[12] or ''}`
+📱 اسم المستخدم: @{order[13] or 'غير محدد'}
+🆔 معرف المستخدم: `{order[1]}`
+
+━━━━━━━━━━━━━━━
+📦 تفاصيل الطلب:
+🔧 نوع البروكسي: {order[2]}
+🌍 الدولة: {order[3]}
+🏠 الولاية: {order[4]}
+
+━━━━━━━━━━━━━━━
+💳 تفاصيل الدفع:
+💰 طريقة الدفع: {payment_method_ar}
+📄 إثبات الدفع: {"✅ مرفق" if order[7] else "❌ غير مرفق"}
+
+━━━━━━━━━━━━━━━
+🔗 معرف الطلب: `{order_id}`
+📅 تاريخ الطلب: {order[9]}
+📊 الحالة: ⏳ معلق"""
+
+    keyboard = [[InlineKeyboardButton("🔧 معالجة الطلب", callback_data=f"process_{order_id}")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='Markdown')
+    
+    # إرسال إثبات الدفع إذا كان متوفراً
+    if order[7]:  # payment_proof
+        if order[7].startswith("photo:"):
+            file_id = order[7].replace("photo:", "")
+            await context.bot.send_photo(
+                update.effective_chat.id,
+                photo=file_id,
+                caption=f"📸 إثبات دفع للطلب بمعرف: `{order_id}`",
+                parse_mode='Markdown'
+            )
+        elif order[7].startswith("text:"):
+            text_proof = order[7].replace("text:", "")
+            await update.message.reply_text(
+                f"📝 إثبات دفع للطلب بمعرف: `{order_id}`\n\nالنص:\n{text_proof}",
+                parse_mode='Markdown'
+            )
+
+async def set_static_prices(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """تحديد أسعار الستاتيك"""
+    await update.message.reply_text(
+        "💰 تعديل أسعار البروكسي الستاتيك\n\nيرجى إرسال الأسعار بالتنسيق التالي:\n`ISP:3,Verizon:4,ATT:6`\n\nأو إرسال سعر واحد فقط مثل: `5`",
+        parse_mode='Markdown'
+    )
+    return SET_PRICE_STATIC
+
+async def set_socks_prices(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """تحديد أسعار السوكس"""
+    await update.message.reply_text(
+        "💰 تعديل أسعار بروكسي السوكس\n\nيرجى إرسال الأسعار بالتنسيق التالي:\n`5proxy:0.4,10proxy:0.7`\n\nأو إرسال سعر واحد فقط مثل: `0.5`",
+        parse_mode='Markdown'
+    )
+    return SET_PRICE_SOCKS
+
+async def handle_static_price_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة تحديث أسعار الستاتيك"""
+    prices_text = update.message.text
+    
+    try:
+        # حفظ الأسعار في قاعدة البيانات
+        db.execute_query(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+            ("static_prices", prices_text)
+        )
+        
+        await update.message.reply_text(f"✅ تم تحديث أسعار البروكسي الستاتيك بنجاح!\n💰 الأسعار الجديدة: `{prices_text}`", parse_mode='Markdown')
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ خطأ في تحديث الأسعار: {str(e)}")
+    
+    return ConversationHandler.END
+
+async def handle_socks_price_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة تحديث أسعار السوكس"""
+    prices_text = update.message.text
+    
+    try:
+        # حفظ الأسعار في قاعدة البيانات
+        db.execute_query(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+            ("socks_prices", prices_text)
+        )
+        
+        await update.message.reply_text(f"✅ تم تحديث أسعار بروكسي السوكس بنجاح!\n💰 الأسعار الجديدة: `{prices_text}`", parse_mode='Markdown')
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ خطأ في تحديث الأسعار: {str(e)}")
+    
+    return ConversationHandler.END
+
+async def reset_user_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """تصفير رصيد مستخدم"""
+    await update.message.reply_text(
+        "🗑️ تصفير رصيد مستخدم\n\nيرجى إرسال معرف المستخدم أو `@username`:",
+        parse_mode='Markdown'
+    )
+    return USER_LOOKUP
+
+async def handle_balance_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة تصفير الرصيد"""
+    search_term = update.message.text
+    
+    # البحث عن المستخدم
+    if search_term.startswith('@'):
+        username = search_term[1:]
+        query = "SELECT * FROM users WHERE username = ?"
+        user_result = db.execute_query(query, (username,))
+    else:
+        try:
+            user_id = int(search_term)
+            query = "SELECT * FROM users WHERE user_id = ?"
+            user_result = db.execute_query(query, (user_id,))
+        except ValueError:
+            await update.message.reply_text("❌ معرف المستخدم غير صحيح!")
+            return ConversationHandler.END
+    
+    if not user_result:
+        await update.message.reply_text("❌ المستخدم غير موجود!")
+        return ConversationHandler.END
+    
+    user = user_result[0]
+    user_id = user[0]
+    old_balance = user[5]
+    
+    # تصفير الرصيد
+    db.execute_query("UPDATE users SET referral_balance = 0 WHERE user_id = ?", (user_id,))
+    
+    await update.message.reply_text(
+        f"✅ تم تصفير رصيد المستخدم بنجاح!\n\n"
+        f"👤 الاسم: `{user[2]} {user[3] or ''}`\n"
+        f"💰 الرصيد السابق: `{old_balance:.2f}$`\n"
+        f"💰 الرصيد الجديد: `0.00$`",
+        parse_mode='Markdown'
+    )
+    
+    return ConversationHandler.END
 
 def main() -> None:
     """الدالة الرئيسية"""
@@ -2119,7 +2430,15 @@ def main() -> None:
             ENTER_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
             ENTER_THANK_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
             CUSTOM_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input)],
-            USER_LOOKUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_lookup)],
+            USER_LOOKUP: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_lookup),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_balance_reset)
+            ],
+            REFERRAL_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_referral_amount_update)],
+            SET_PRICE_STATIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_static_price_update)],
+            SET_PRICE_SOCKS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_socks_price_update)],
+            ADMIN_ORDER_INQUIRY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_order_inquiry)],
+            QUIET_HOURS: [CallbackQueryHandler(handle_quiet_hours_selection, pattern="^quiet_")]
         },
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
     )
@@ -2135,6 +2454,7 @@ def main() -> None:
     
     # إضافة المعالجات
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("admin_signout", admin_signout))
     application.add_handler(admin_conv_handler)
     application.add_handler(payment_conv_handler)
     application.add_handler(CallbackQueryHandler(handle_callback_query))
