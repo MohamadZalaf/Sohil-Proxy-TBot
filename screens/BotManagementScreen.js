@@ -19,9 +19,7 @@ import {
   IconButton,
 } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import axios from 'axios';
-
-const API_BASE_URL = 'http://localhost:5000/api';
+import TelegramBotService from '../services/TelegramBotService';
 
 export default function BotManagementScreen() {
   const [botStatus, setBotStatus] = useState(false);
@@ -44,8 +42,8 @@ export default function BotManagementScreen() {
 
   const checkBotStatus = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/bot/status`);
-      setBotStatus(response.data.running);
+      const status = TelegramBotService.getStatus();
+      setBotStatus(status);
     } catch (error) {
       console.error('خطأ في التحقق من حالة البوت:', error);
     }
@@ -54,16 +52,9 @@ export default function BotManagementScreen() {
   const handleStartBot = async () => {
     setLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/bot/start`, {
-        admin_id: adminId
-      });
-      
-      if (response.data.success) {
-        setBotStatus(true);
-        Alert.alert('نجح', response.data.message);
-      } else {
-        Alert.alert('خطأ', response.data.message);
-      }
+      await TelegramBotService.startPolling();
+      setBotStatus(true);
+      Alert.alert('نجح', 'تم بدء البوت بنجاح من الهاتف! 🚀\n\nالبوت يعمل الآن في الخلفية ويستقبل الطلبات.');
     } catch (error) {
       Alert.alert('خطأ', 'فشل في بدء البوت');
       console.error('خطأ في بدء البوت:', error);
