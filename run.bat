@@ -1,35 +1,35 @@
 @echo off
-echo 🤖 بوت البروكسي - نظام إدارة البروكسيات المتقدم
+echo Proxy Bot - Advanced Proxy Management System
 echo ================================================
 echo.
-echo 🚀 جاري بدء تشغيل البوت...
+echo Starting the bot...
 echo.
 
-REM تحقق من وجود Python
+REM Check Python installation
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ❌ خطأ: Python غير مثبت أو غير موجود في PATH
-    echo يرجى تثبيت Python 3.7 أو أحدث
+    echo Error: Python is not installed or not in PATH
+    echo Please install Python 3.7 or newer
     pause
     exit /b 1
 )
 
-REM تثبيت المتطلبات إذا لم تكن مثبتة
+REM Install requirements if not installed
 if not exist "venv" (
-    echo 📦 إنشاء البيئة الافتراضية...
+    echo Creating virtual environment...
     python -m venv venv
 )
 
-REM تفعيل البيئة الافتراضية
+REM Activate virtual environment
 call venv\Scripts\activate.bat
 
-REM تثبيت المتطلبات
-echo 🔧 تثبيت المتطلبات...
+REM Install requirements
+echo Installing requirements...
 pip install -r requirements.txt
 
-REM تشغيل البوت
+REM Run the bot
 echo.
-echo ✅ جاهز للتشغيل!
+echo Ready to run!
 echo.
 python start_bot.py
 

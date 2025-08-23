@@ -1,109 +1,109 @@
 @echo off
-echo 📱 بناء APK - بوت البروكسي
-echo المطور: Mohamad Zalaf ©2025
+echo APK Build - Proxy Bot
+echo Developer: Mohamad Zalaf (c)2025
 echo ================================
 echo.
 
-REM التحقق من المتطلبات
-echo 🔍 التحقق من المتطلبات...
+REM Check requirements
+echo Checking requirements...
 
-REM تحقق من Node.js
+REM Check Node.js
 node --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ❌ Node.js غير مثبت. يرجى تثبيته أولاً
+    echo Node.js is not installed. Please install it first
     pause
     exit /b 1
 )
 
-REM تحقق من npm
+REM Check npm
 npm --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ❌ npm غير مثبت. يرجى تثبيته أولاً
+    echo npm is not installed. Please install it first
     pause
     exit /b 1
 )
 
-echo ✅ Node.js متوفر
-echo ✅ npm متوفر
+echo Node.js is available
+echo npm is available
 
-REM تثبيت المتطلبات
+REM Install requirements
 echo.
-echo 📦 تثبيت المتطلبات...
+echo Installing requirements...
 npm install
 
-REM تحقق من وجود Expo CLI
+REM Check Expo CLI
 expo --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo 🔧 تثبيت Expo CLI...
+    echo Installing Expo CLI...
     npm install -g @expo/cli
 )
 
-REM تحقق من وجود EAS CLI
+REM Check EAS CLI
 eas --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo 🔧 تثبيت EAS CLI...
+    echo Installing EAS CLI...
     npm install -g eas-cli
 )
 
 echo.
-echo 🚀 بدء بناء APK...
+echo Starting APK build...
 echo.
-echo اختر طريقة البناء:
-echo 1^) EAS Build ^(الأحدث والأفضل^)
-echo 2^) Expo Build ^(التقليدية^)
+echo Choose build method:
+echo 1^) EAS Build ^(Latest and Best^)
+echo 2^) Expo Build ^(Traditional^)
 echo.
-set /p choice=أدخل اختيارك (1 أو 2): 
+set /p choice=Enter your choice (1 or 2): 
 
 if "%choice%"=="1" (
     echo.
-    echo 🔧 بناء APK باستخدام EAS Build...
+    echo Building APK using EAS Build...
     echo.
-    echo تحتاج لتسجيل الدخول في Expo أولاً:
+    echo You need to login to Expo first:
     eas login
     
     echo.
-    echo إعداد المشروع...
+    echo Setting up project...
     eas build:configure
     
     echo.
-    echo بناء APK للإنتاج...
+    echo Building APK for production...
     eas build --platform android --profile production
     
     echo.
-    echo ✅ تم بدء عملية البناء!
-    echo 🔗 ستحصل على رابط التنزيل قريباً
-    echo 📱 أو تحقق من: https://expo.dev/
+    echo Build process started!
+    echo You will get a download link soon
+    echo Or check: https://expo.dev/
     
 ) else if "%choice%"=="2" (
     echo.
-    echo 🔧 بناء APK باستخدام Expo Build...
+    echo Building APK using Expo Build...
     echo.
-    echo تحتاج لتسجيل الدخول في Expo أولاً:
+    echo You need to login to Expo first:
     expo login
     
     echo.
-    echo بناء APK...
+    echo Building APK...
     expo build:android -t apk
     
     echo.
-    echo ✅ تم بدء عملية البناء!
-    echo ⏳ قد يستغرق 10-20 دقيقة
-    echo 🔗 ستحصل على رابط التنزيل عند الانتهاء
+    echo Build process started!
+    echo May take 10-20 minutes
+    echo You will get a download link when finished
     
 ) else (
-    echo ❌ اختيار غير صحيح
+    echo Invalid choice
     pause
     exit /b 1
 )
 
 echo.
-echo 📋 ملاحظات مهمة:
-echo • احتفظ برابط التنزيل
-echo • انقل APK لهاتفك الأندرويد
-echo • فعّل 'مصادر غير معروفة' قبل التثبيت
-echo • تأكد من تشغيل البوت على الكمبيوتر أولاً
+echo Important notes:
+echo • Keep the download link
+echo • Transfer APK to your Android phone
+echo • Enable 'Unknown sources' before installation
+echo • Make sure to run the bot on computer first
 echo.
-echo 🎉 شكراً لاستخدام بوت البروكسي!
-echo 👨‍💻 المطور: Mohamad Zalaf ©2025
+echo Thanks for using Proxy Bot!
+echo Developer: Mohamad Zalaf (c)2025
 
 pause

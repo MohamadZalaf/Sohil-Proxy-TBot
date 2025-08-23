@@ -1,33 +1,33 @@
 #!/bin/bash
 
-echo "🤖 بوت البروكسي - نظام إدارة البروكسيات المتقدم"
+echo "Proxy Bot - Advanced Proxy Management System"
 echo "================================================"
 echo ""
-echo "🚀 جاري بدء تشغيل البوت..."
+echo "Starting the bot..."
 echo ""
 
-# تحقق من وجود Python
+# Check Python installation
 if ! command -v python3 &> /dev/null; then
-    echo "❌ خطأ: Python3 غير مثبت"
-    echo "يرجى تثبيت Python 3.7 أو أحدث"
+    echo "Error: Python3 is not installed"
+    echo "Please install Python 3.7 or newer"
     exit 1
 fi
 
-# إنشاء البيئة الافتراضية إذا لم تكن موجودة
+# Create virtual environment if not exists
 if [ ! -d "venv" ]; then
-    echo "📦 إنشاء البيئة الافتراضية..."
+    echo "Creating virtual environment..."
     python3 -m venv venv
 fi
 
-# تفعيل البيئة الافتراضية
+# Activate virtual environment
 source venv/bin/activate
 
-# تثبيت المتطلبات
-echo "🔧 تثبيت المتطلبات..."
+# Install requirements
+echo "Installing requirements..."
 pip install -r requirements.txt
 
-# تشغيل البوت
+# Run the bot
 echo ""
-echo "✅ جاهز للتشغيل!"
+echo "Ready to run!"
 echo ""
 python start_bot.py
