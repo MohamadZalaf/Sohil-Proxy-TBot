@@ -620,7 +620,19 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
     user_id = update.effective_user.id
     language = get_user_language(user_id)
     
-    if query.data.startswith("country_"):
+    if query.data == "manual_country":
+        # الإدخال اليدوي للدولة
+        await query.edit_message_text("يرجى إدخال اسم الدولة يدوياً:")
+        context.user_data['waiting_for'] = 'manual_country'
+        return
+    
+    elif query.data == "manual_state":
+        # الإدخال اليدوي للولاية
+        await query.edit_message_text("يرجى إدخال اسم الولاية/المنطقة يدوياً:")
+        context.user_data['waiting_for'] = 'manual_state'
+        return
+    
+    elif query.data.startswith("country_"):
         country_code = query.data.replace("country_", "")
         context.user_data['selected_country'] = country_code
         
@@ -841,7 +853,7 @@ async def send_order_copy_to_user(update: Update, context: ContextTypes.DEFAULT_
         if language == 'ar':
             message = f"""📋 نسخة من طلبك
             
-👤 الاسم: `{order[11]} {order[12] or ''}`
+👤 الاسم: `{order[12]} {order[12] or ''}`
 🆔 معرف المستخدم: `{order[1]}`
 
 ━━━━━━━━━━━━━━━
@@ -863,7 +875,7 @@ async def send_order_copy_to_user(update: Update, context: ContextTypes.DEFAULT_
         else:
             message = f"""📋 Copy of Your Order
             
-👤 Name: `{order[11]} {order[12] or ''}`
+👤 Name: `{order[12]} {order[12] or ''}`
 🆔 User ID: `{order[1]}`
 
 ━━━━━━━━━━━━━━━
@@ -912,8 +924,8 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
         
         message = f"""🔔 طلب جديد
 
-👤 الاسم: `{order[11]} {order[12] or ''}`
-📱 اسم المستخدم: @{order[13] or 'غير محدد'}
+👤 الاسم: `{order[12]} {order[12] or ''}`
+📱 اسم المستخدم: @{order[14] or 'غير محدد'}
 🆔 معرف المستخدم: `{order[1]}`
 
 ━━━━━━━━━━━━━━━
@@ -2012,6 +2024,36 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
     language = get_user_language(user_id)
     is_admin = context.user_data.get('is_admin', False)
     
+    # معالجة الإدخال اليدوي للدول والولايات
+    waiting_for = context.user_data.get('waiting_for')
+    if waiting_for == 'manual_country':
+        context.user_data['selected_country'] = text
+        context.user_data.pop('waiting_for', None)
+        await update.message.reply_text(f"تم اختيار الدولة: {text}\nيرجى إدخال اسم المنطقة/الولاية:")
+        context.user_data['waiting_for'] = 'manual_state'
+        return
+    
+    elif waiting_for == 'manual_state':
+        context.user_data['selected_state'] = text
+        context.user_data.pop('waiting_for', None)
+        await update.message.reply_text(f"تم اختيار المنطقة: {text}")
+        
+        # الانتقال لطرق الدفع
+        keyboard = [
+            [InlineKeyboardButton("💳 شام كاش", callback_data="payment_shamcash")],
+            [InlineKeyboardButton("💳 سيرياتيل كاش", callback_data="payment_syriatel")],
+            [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
+            [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
+            [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            MESSAGES[language]['payment_methods'],
+            reply_markup=reply_markup
+        )
+        return
+    
     # أزرار الأدمن
     if is_admin:
         # القوائم الرئيسية للأدمن
@@ -2252,8 +2294,8 @@ async def resend_order_notification(update: Update, context: ContextTypes.DEFAUL
     
     message = f"""🔔 طلب معاد إرساله
 
-👤 الاسم: `{order[11]} {order[12] or ''}`
-📱 اسم المستخدم: @{order[13] or 'غير محدد'}
+👤 الاسم: `{order[12]} {order[12] or ''}`
+📱 اسم المستخدم: @{order[14] or 'غير محدد'}
 🆔 معرف المستخدم: `{order[1]}`
 
 ━━━━━━━━━━━━━━━
