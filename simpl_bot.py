@@ -12,6 +12,9 @@ import sqlite3
 import json
 import random
 import string
+import pandas as pd
+import io
+import csv
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 
@@ -53,8 +56,8 @@ DATABASE_FILE = "proxy_bot.db"
     ENTER_COUNTRY, ENTER_STATE, ENTER_USERNAME, ENTER_PASSWORD,
     ENTER_THANK_MESSAGE, PAYMENT_PROOF, CUSTOM_MESSAGE,
     REFERRAL_AMOUNT, USER_LOOKUP, QUIET_HOURS, LANGUAGE_SELECTION,
-    PAYMENT_METHOD_SELECTION
-) = range(18)
+    PAYMENT_METHOD_SELECTION, WITHDRAWAL_REQUEST
+) = range(19)
 
 # قواميس البيانات
 STATIC_COUNTRIES = {
@@ -206,6 +209,8 @@ sohilskaf123@gmail.com
         'send_payment_proof': 'يرجى إرسال إثبات الدفع (صورة أو نص):',
         'order_received': 'تم استلام طلبك بنجاح! جاري معالجة الطلب يدوياً من الأدمن بأقرب وقت.',
         'main_menu_buttons': ['🔒 طلب بروكسي ستاتيك', '🧦 طلب بروكسي سوكس', '👥 إحالاتي', '⚙️ الإعدادات'],
+        'admin_main_buttons': ['📋 إدارة الطلبات', '💰 إدارة الأموال', '👥 الإحالات', '⚙️ الإعدادات'],
+        'language_change_success': 'تم تغيير اللغة إلى العربية ✅\nيرجى استخدام الأمر /start لإعادة تحميل القوائم',
         'admin_panel': '🔧 لوحة الأدمن',
         'manage_orders': 'إدارة الطلبات',
         'pending_orders': 'الطلبات المعلقة',
@@ -289,6 +294,8 @@ Order ID: {}""",
         'send_payment_proof': 'Please send payment proof (image or text):',
         'order_received': 'Your order has been received successfully! Admin will process it manually soon.',
         'main_menu_buttons': ['🔒 Request Static Proxy', '🧦 Request Socks Proxy', '👥 My Referrals', '⚙️ Settings'],
+        'admin_main_buttons': ['📋 Manage Orders', '💰 Manage Money', '👥 Referrals', '⚙️ Settings'],
+        'language_change_success': 'Language changed to English ✅\nPlease use /start command to reload menus',
         'admin_panel': '🔧 Admin Panel',
         'manage_orders': 'Manage Orders',
         'pending_orders': 'Pending Orders',
@@ -514,18 +521,17 @@ async def handle_admin_password(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data['is_admin'] = True
         db.log_action(update.effective_user.id, "admin_login_success")
         
+        # لوحة مفاتيح عادية للأدمن
         keyboard = [
-            [InlineKeyboardButton("إدارة الطلبات", callback_data="manage_orders")],
-            [InlineKeyboardButton("إدارة الأموال", callback_data="manage_money")],
-            [InlineKeyboardButton("الإحالات", callback_data="admin_referrals")],
-            [InlineKeyboardButton("تصفير رصيد", callback_data="reset_balance")],
-            [InlineKeyboardButton("الإعدادات", callback_data="admin_settings")],
-            [InlineKeyboardButton("استعلام عن مستخدم", callback_data="user_lookup")]
+            [KeyboardButton("📋 إدارة الطلبات")],
+            [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+            [KeyboardButton("⚙️ الإعدادات"), KeyboardButton("🔍 استعلام عن مستخدم")],
+            [KeyboardButton("🔙 عودة للمستخدم")]
         ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         
         await update.message.reply_text(
-            "🔧 لوحة الأدمن",
+            "🔧 مرحباً بك في لوحة الأدمن\nاختر الخدمة المطلوبة:",
             reply_markup=reply_markup
         )
         return ADMIN_MENU
@@ -550,9 +556,9 @@ async def handle_static_proxy_request(update: Update, context: ContextTypes.DEFA
         MESSAGES[language]['static_package'].format(order_id)
     )
     
-    # عرض قائمة الدول
+    # عرض قائمة الدول للستاتيك
     keyboard = []
-    for code, name in COUNTRIES[language].items():
+    for code, name in STATIC_COUNTRIES[language].items():
         keyboard.append([InlineKeyboardButton(name, callback_data=f"country_{code}")])
     keyboard.append([InlineKeyboardButton(MESSAGES[language]['manual_input'], callback_data="manual_country")])
     
@@ -579,9 +585,9 @@ async def handle_socks_proxy_request(update: Update, context: ContextTypes.DEFAU
         MESSAGES[language]['socks_package'].format(order_id)
     )
     
-    # عرض قائمة الدول (مع دول إضافية للسوكس)
+    # عرض قائمة الدول للسوكس (مع دول إضافية)
     keyboard = []
-    for code, name in COUNTRIES[language].items():
+    for code, name in SOCKS_COUNTRIES[language].items():
         keyboard.append([InlineKeyboardButton(name, callback_data=f"country_{code}")])
     keyboard.append([InlineKeyboardButton(MESSAGES[language]['manual_input'], callback_data="manual_country")])
     
@@ -685,14 +691,36 @@ async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYP
     
     db.update_order_payment_proof(order_id, payment_proof)
     
-    # إرسال إشعار للأدمن
-    await send_admin_notification(context, order_id)
+    # تسجيل الطلب في السجل (بدون إرسال إشعار)
+    db.log_action(user_id, "order_submitted", order_id)
     
     await update.message.reply_text(MESSAGES[language]['order_received'])
     
     db.log_action(user_id, "payment_proof_submitted", order_id)
     
     return ConversationHandler.END
+
+async def send_withdrawal_notification(chat_id: int, withdrawal_id: str, user: tuple) -> None:
+    """إرسال إشعار طلب سحب للأدمن"""
+    message = f"""💸 طلب سحب رصيد جديد
+
+👤 الاسم: {user[2]} {user[3]}
+📱 اسم المستخدم: @{user[1] or 'غير محدد'}
+🆔 معرف المستخدم: {user[0]}
+
+━━━━━━━━━━━━━━━
+💰 المبلغ المطلوب: `{user[5]:.2f}$`
+📊 نوع الطلب: سحب رصيد الإحالات
+
+━━━━━━━━━━━━━━━
+🔗 معرف الطلب: `{withdrawal_id}`
+📅 تاريخ الطلب: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+
+    # حفظ الإشعار في قاعدة البيانات
+    db.log_action(0, "withdrawal_notification", f"New withdrawal: {withdrawal_id}")
+    
+    # طباعة الإشعار في وحدة التحكم
+    print(f"📬 إشعار سحب رصيد جديد:\n{message}")
 
 async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: str) -> None:
     """إرسال إشعار للأدمن بطلب جديد"""
@@ -751,16 +779,10 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
                 (order[1], "payment_proof_saved", proof_message)
             )
         
-        # إرسال للأدمن
-        # لتفعيل إرسال الإشعارات، ضع معرف الأدمن هنا:
-        # ADMIN_CHAT_ID = 123456789  # ضع معرف الأدمن هنا
-        # await context.bot.send_message(ADMIN_CHAT_ID, message, reply_markup=reply_markup)
+        # حفظ تفاصيل الطلب في قاعدة البيانات
+        db.log_action(order[1], "order_details_logged", f"Order: {order_id} - {order[2]} - {order[3]}")
         
-        # طباعة الإشعار في وحدة التحكم للاختبار
-        print(f"📬 إشعار أدمن جديد:\n{message}")
-        
-        # حفظ الإشعار في قاعدة البيانات
-        db.log_action(0, "admin_notification", f"New order: {order_id}")
+        # الأدمن يمكنه رؤية الطلبات من خلال قائمة "الطلبات المعلقة"
 
 async def handle_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة قسم الإحالات"""
@@ -779,24 +801,37 @@ async def handle_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     query = "SELECT COUNT(*) FROM referrals WHERE referrer_id = ?"
     referral_count = db.execute_query(query, (user_id,))[0][0]
     
-    message = f"""👥 نظام الإحالات
+    if language == 'ar':
+        message = f"""👥 نظام الإحالات
 
 🔗 رابط الإحالة الخاص بك:
 {referral_link}
 
-💰 رصيدك: {referral_balance:.2f}$
+💰 رصيدك: `{referral_balance:.2f}$`
 👥 عدد إحالاتك: {referral_count}
 
 ━━━━━━━━━━━━━━━
-شارك رابطك واحصل على 0.1$ لكل إحالة!"""
+شارك رابطك واحصل على `0.1$` لكل إحالة!
+الحد الأدنى للسحب: `1.0$`"""
+    else:
+        message = f"""👥 Referral System
+
+🔗 Your referral link:
+{referral_link}
+
+💰 Your balance: `{referral_balance:.2f}$`
+👥 Your referrals: {referral_count}
+
+━━━━━━━━━━━━━━━
+Share your link and earn `0.1$` per referral!
+Minimum withdrawal: `1.0$`"""
     
     keyboard = [
-        [InlineKeyboardButton("💸 سحب الرصيد", callback_data="withdraw_balance")],
-        [InlineKeyboardButton("📊 إحصائيات الإحالات", callback_data="referral_stats")]
+        [InlineKeyboardButton("💸 سحب الرصيد" if language == 'ar' else "💸 Withdraw Balance", callback_data="withdraw_balance")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(message, reply_markup=reply_markup)
+    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='Markdown')
 
 async def handle_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة الإعدادات"""
@@ -823,10 +858,18 @@ async def handle_language_change(update: Update, context: ContextTypes.DEFAULT_T
     
     if query.data == "lang_ar":
         new_language = "ar"
-        message = "تم تغيير اللغة إلى العربية ✅"
+        message = """تم تغيير اللغة إلى العربية ✅
+يرجى استخدام الأمر /start لإعادة تحميل القوائم
+
+Language changed to Arabic ✅  
+Please use /start command to reload menus"""
     else:
         new_language = "en"
-        message = "Language changed to English ✅"
+        message = """Language changed to English ✅
+Please use /start command to reload menus
+
+تم تغيير اللغة إلى الإنجليزية ✅
+يرجى استخدام الأمر /start لإعادة تحميل القوائم"""
     
     db.update_user_language(user_id, new_language)
     db.log_action(user_id, "language_change", new_language)
@@ -903,22 +946,57 @@ async def handle_withdrawal_request(update: Update, context: ContextTypes.DEFAUL
     
     user_id = update.effective_user.id
     user = db.get_user(user_id)
+    language = get_user_language(user_id)
     
-    if user and user[5] > 0:  # رصيد الإحالات
-        message = f"""💸 طلب سحب الرصيد
-
-💰 رصيدك الحالي: {user[5]:.2f}$
-
-لسحب رصيدك، يرجى التواصل مع الأدمن وإرسال هذه المعلومات:
-- اسمك: {user[2]} {user[3]}
-- معرف المستخدم: {user_id}
-- المبلغ المطلوب: {user[5]:.2f}$
-
-سيتم معالجة طلبك في أقرب وقت ممكن."""
+    if user and user[5] >= 1.0:  # الحد الأدنى 1 دولار
+        # إنشاء معرف طلب السحب
+        withdrawal_id = generate_order_id()
         
-        await query.edit_message_text(message)
+        # حفظ طلب السحب في قاعدة البيانات
+        db.execute_query(
+            "INSERT INTO orders (id, user_id, proxy_type, payment_amount, status) VALUES (?, ?, ?, ?, ?)",
+            (withdrawal_id, user_id, 'withdrawal', user[5], 'pending')
+        )
+        
+        if language == 'ar':
+            message = f"""💸 تم إرسال طلب سحب الرصيد
+
+💰 المبلغ المطلوب: `{user[5]:.2f}$`
+🆔 معرف الطلب: `{withdrawal_id}`
+
+تم إرسال طلبك للأدمن وسيتم معالجته في أقرب وقت ممكن."""
+        else:
+            message = f"""💸 Withdrawal request sent
+
+💰 Amount: `{user[5]:.2f}$`
+🆔 Request ID: `{withdrawal_id}`
+
+Your request has been sent to admin and will be processed soon."""
+        
+        # تسجيل طلب السحب في السجل
+        db.log_action(user_id, "withdrawal_request", withdrawal_id)
+        
+        await query.edit_message_text(message, parse_mode='Markdown')
     else:
-        await query.edit_message_text("ليس لديك رصيد كافٍ للسحب.")
+        min_amount = 1.0
+        current_balance = user[5] if user else 0.0
+        
+        if language == 'ar':
+            message = f"""❌ رصيد غير كافٍ للسحب
+
+💰 رصيدك الحالي: `{current_balance:.2f}$`
+📊 الحد الأدنى للسحب: `{min_amount:.1f}$`
+
+يرجى دعوة المزيد من الأصدقاء لزيادة رصيدك!"""
+        else:
+            message = f"""❌ Insufficient balance for withdrawal
+
+💰 Current balance: `{current_balance:.2f}$`
+📊 Minimum withdrawal: `{min_amount:.1f}$`
+
+Please invite more friends to increase your balance!"""
+        
+        await query.edit_message_text(message, parse_mode='Markdown')
 
 async def handle_custom_message_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة اختيار إرسال رسالة مخصصة"""
@@ -1004,6 +1082,107 @@ sqlite3"""
     
     with open("requirements.txt", "w", encoding="utf-8") as f:
         f.write(requirements)
+
+async def export_database_excel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """تصدير قاعدة البيانات إلى Excel"""
+    try:
+        # قراءة البيانات من قاعدة البيانات
+        conn = sqlite3.connect(DATABASE_FILE)
+        
+        # إنشاء ملف Excel مع عدة أوراق
+        with pd.ExcelWriter('database_export.xlsx', engine='openpyxl') as writer:
+            # جدول المستخدمين
+            users_df = pd.read_sql_query("SELECT * FROM users", conn)
+            users_df.to_excel(writer, sheet_name='Users', index=False)
+            
+            # جدول الطلبات
+            orders_df = pd.read_sql_query("SELECT * FROM orders", conn)
+            orders_df.to_excel(writer, sheet_name='Orders', index=False)
+            
+            # جدول الإحالات
+            referrals_df = pd.read_sql_query("SELECT * FROM referrals", conn)
+            referrals_df.to_excel(writer, sheet_name='Referrals', index=False)
+            
+            # جدول السجلات
+            logs_df = pd.read_sql_query("SELECT * FROM logs", conn)
+            logs_df.to_excel(writer, sheet_name='Logs', index=False)
+        
+        conn.close()
+        
+        # إرسال الملف
+        with open('database_export.xlsx', 'rb') as file:
+            await update.message.reply_document(
+                document=file,
+                filename=f"database_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                caption="📊 تم تصدير قاعدة البيانات بصيغة Excel"
+            )
+        
+        # حذف الملف المؤقت
+        os.remove('database_export.xlsx')
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ خطأ في تصدير Excel: {str(e)}")
+
+async def export_database_csv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """تصدير قاعدة البيانات إلى CSV"""
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        
+        # تصدير جدول المستخدمين
+        users_df = pd.read_sql_query("SELECT * FROM users", conn)
+        users_df.to_csv('users_export.csv', index=False, encoding='utf-8-sig')
+        
+        # تصدير جدول الطلبات
+        orders_df = pd.read_sql_query("SELECT * FROM orders", conn)
+        orders_df.to_csv('orders_export.csv', index=False, encoding='utf-8-sig')
+        
+        conn.close()
+        
+        # إرسال الملفات
+        with open('users_export.csv', 'rb') as file:
+            await update.message.reply_document(
+                document=file,
+                filename=f"users_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                caption="👥 بيانات المستخدمين - CSV"
+            )
+        
+        with open('orders_export.csv', 'rb') as file:
+            await update.message.reply_document(
+                document=file,
+                filename=f"orders_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                caption="📋 بيانات الطلبات - CSV"
+            )
+        
+        # حذف الملفات المؤقتة
+        os.remove('users_export.csv')
+        os.remove('orders_export.csv')
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ خطأ في تصدير CSV: {str(e)}")
+
+async def export_database_sqlite(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """تصدير ملف قاعدة البيانات الأصلي"""
+    try:
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_filename = f"proxy_bot_backup_{timestamp}.db"
+        
+        # نسخ ملف قاعدة البيانات
+        import shutil
+        shutil.copy2(DATABASE_FILE, backup_filename)
+        
+        # إرسال الملف
+        with open(backup_filename, 'rb') as file:
+            await update.message.reply_document(
+                document=file,
+                filename=backup_filename,
+                caption="🗃️ نسخة احتياطية من قاعدة البيانات - SQLite"
+            )
+        
+        # حذف الملف المؤقت
+        os.remove(backup_filename)
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ خطأ في تصدير قاعدة البيانات: {str(e)}")
 
 def create_readme_file():
     """إنشاء ملف README.md"""
@@ -1377,13 +1556,257 @@ async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(report)
     return ConversationHandler.END
 
+async def handle_admin_orders_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة قائمة إدارة الطلبات للأدمن"""
+    keyboard = [
+        [KeyboardButton("📋 الطلبات المعلقة")],
+        [KeyboardButton("🗑️ حذف الطلبات الفاشلة"), KeyboardButton("🗑️ حذف الطلبات المكتملة")],
+        [KeyboardButton("🔙 العودة للقائمة الرئيسية")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        "📋 إدارة الطلبات\nاختر العملية المطلوبة:",
+        reply_markup=reply_markup
+    )
+
+async def handle_admin_money_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة قائمة إدارة الأموال للأدمن"""
+    keyboard = [
+        [KeyboardButton("📊 إحصاء المبيعات")],
+        [KeyboardButton("💲 إدارة الأسعار")],
+        [KeyboardButton("🔙 العودة للقائمة الرئيسية")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        "💰 إدارة الأموال\nاختر العملية المطلوبة:",
+        reply_markup=reply_markup
+    )
+
+async def handle_admin_referrals_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة قائمة إدارة الإحالات للأدمن"""
+    keyboard = [
+        [KeyboardButton("💵 تحديد قيمة الإحالة")],
+        [KeyboardButton("📊 إحصائيات المستخدمين")],
+        [KeyboardButton("🗑️ تصفير رصيد مستخدم")],
+        [KeyboardButton("🔙 العودة للقائمة الرئيسية")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        "👥 إدارة الإحالات\nاختر العملية المطلوبة:",
+        reply_markup=reply_markup
+    )
+
+async def handle_admin_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة قائمة إعدادات الأدمن"""
+    keyboard = [
+        [KeyboardButton("🌐 تغيير اللغة")],
+        [KeyboardButton("🔕 ساعات الهدوء")],
+        [KeyboardButton("📊 تحميل قاعدة البيانات")],
+        [KeyboardButton("🔙 العودة للقائمة الرئيسية")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        "⚙️ إعدادات الأدمن\nاختر العملية المطلوبة:",
+        reply_markup=reply_markup
+    )
+
+async def handle_admin_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة استعلام عن مستخدم"""
+    await update.message.reply_text(
+        "🔍 استعلام عن مستخدم\n\nيرجى إرسال:\n- معرف المستخدم (رقم)\n- أو اسم المستخدم (@username)"
+    )
+
+async def return_to_user_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """العودة لوضع المستخدم العادي"""
+    context.user_data['is_admin'] = False
+    user_id = update.effective_user.id
+    language = get_user_language(user_id)
+    
+    # إنشاء الأزرار الرئيسية للمستخدم
+    keyboard = [
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][0])],
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][1])],
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2]), 
+         KeyboardButton(MESSAGES[language]['main_menu_buttons'][3])]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        MESSAGES[language]['welcome'],
+        reply_markup=reply_markup
+    )
+
+async def show_pending_orders_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """عرض الطلبات المعلقة للأدمن"""
+    pending_orders = db.get_pending_orders()
+    
+    if not pending_orders:
+        await update.message.reply_text("✅ لا توجد طلبات معلقة حالياً.")
+        return
+    
+    message = "📋 الطلبات المعلقة:\n\n"
+    for i, order in enumerate(pending_orders[:10], 1):  # عرض أول 10 طلبات
+        message += f"{i}. 🆔 `{order[0]}`\n"
+        message += f"   📦 النوع: {order[2]}\n"
+        message += f"   🌍 الدولة: {order[3]}\n"
+        message += f"   📅 التاريخ: {order[9]}\n\n"
+    
+    if len(pending_orders) > 10:
+        message += f"... و {len(pending_orders) - 10} طلبات أخرى"
+    
+    await update.message.reply_text(message, parse_mode='Markdown')
+
+async def delete_failed_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """حذف الطلبات الفاشلة"""
+    result = db.execute_query("DELETE FROM orders WHERE status = 'failed'")
+    deleted_count = db.execute_query("SELECT changes()")[0][0]
+    
+    await update.message.reply_text(f"🗑️ تم حذف {deleted_count} طلب فاشل.")
+
+async def delete_completed_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """حذف الطلبات المكتملة"""
+    result = db.execute_query("DELETE FROM orders WHERE status = 'completed'")
+    deleted_count = db.execute_query("SELECT changes()")[0][0]
+    
+    await update.message.reply_text(f"🗑️ تم حذف {deleted_count} طلب مكتمل.")
+
+async def show_sales_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """عرض إحصائيات المبيعات"""
+    # إحصائيات المبيعات الناجحة
+    stats = db.execute_query("""
+        SELECT COUNT(*), SUM(payment_amount) 
+        FROM orders 
+        WHERE status = 'completed' AND proxy_type != 'withdrawal'
+    """)[0]
+    
+    # إحصائيات السحوبات
+    withdrawals = db.execute_query("""
+        SELECT COUNT(*), SUM(payment_amount)
+        FROM orders 
+        WHERE proxy_type = 'withdrawal' AND status = 'completed'
+    """)[0]
+    
+    total_orders = stats[0] or 0
+    total_revenue = stats[1] or 0.0
+    withdrawal_count = withdrawals[0] or 0
+    withdrawal_amount = withdrawals[1] or 0.0
+    
+    message = f"""📊 إحصائيات المبيعات
+
+💰 المبيعات الناجحة:
+📦 عدد الطلبات: {total_orders}
+💵 إجمالي الإيرادات: `{total_revenue:.2f}$`
+
+💸 السحوبات:
+📋 عدد الطلبات: {withdrawal_count}
+💰 إجمالي المسحوب: `{withdrawal_amount:.2f}$`
+
+━━━━━━━━━━━━━━━
+📈 صافي الربح: `{total_revenue - withdrawal_amount:.2f}$`"""
+    
+    await update.message.reply_text(message, parse_mode='Markdown')
+
+async def database_export_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """قائمة تصدير قاعدة البيانات"""
+    keyboard = [
+        [KeyboardButton("📊 Excel"), KeyboardButton("📄 CSV")],
+        [KeyboardButton("🗃️ SQLite Database")],
+        [KeyboardButton("🔙 العودة للقائمة الرئيسية")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        "📊 تحميل قاعدة البيانات\nاختر صيغة التصدير:",
+        reply_markup=reply_markup
+    )
+
+async def return_to_admin_main(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """العودة للقائمة الرئيسية للأدمن"""
+    keyboard = [
+        [KeyboardButton("📋 إدارة الطلبات")],
+        [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+        [KeyboardButton("⚙️ الإعدادات"), KeyboardButton("🔍 استعلام عن مستخدم")],
+        [KeyboardButton("🔙 عودة للمستخدم")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        "🔧 لوحة الأدمن الرئيسية\nاختر الخدمة المطلوبة:",
+        reply_markup=reply_markup
+    )
+
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة الرسائل النصية"""
     text = update.message.text
     user_id = update.effective_user.id
     language = get_user_language(user_id)
+    is_admin = context.user_data.get('is_admin', False)
     
-    # التحقق من الأزرار الرئيسية
+    # أزرار الأدمن
+    if is_admin:
+        # القوائم الرئيسية للأدمن
+        if text == "📋 إدارة الطلبات":
+            await handle_admin_orders_menu(update, context)
+        elif text == "💰 إدارة الأموال":
+            await handle_admin_money_menu(update, context)
+        elif text == "👥 الإحالات":
+            await handle_admin_referrals_menu(update, context)
+        elif text == "⚙️ الإعدادات":
+            await handle_admin_settings_menu(update, context)
+        elif text == "🔍 استعلام عن مستخدم":
+            await handle_admin_user_lookup(update, context)
+        elif text == "🔙 عودة للمستخدم":
+            await return_to_user_mode(update, context)
+        
+        # إدارة الطلبات
+        elif text == "📋 الطلبات المعلقة":
+            await show_pending_orders_admin(update, context)
+        elif text == "🗑️ حذف الطلبات الفاشلة":
+            await delete_failed_orders(update, context)
+        elif text == "🗑️ حذف الطلبات المكتملة":
+            await delete_completed_orders(update, context)
+        
+        # إدارة الأموال
+        elif text == "📊 إحصاء المبيعات":
+            await show_sales_statistics(update, context)
+        elif text == "💲 إدارة الأسعار":
+            await manage_prices_menu(update, context)
+        
+        # إدارة الإحالات
+        elif text == "💵 تحديد قيمة الإحالة":
+            await set_referral_amount(update, context)
+        elif text == "📊 إحصائيات المستخدمين":
+            await show_user_statistics(update, context)
+        elif text == "🗑️ تصفير رصيد مستخدم":
+            await reset_user_balance(update, context)
+        
+        # إعدادات الأدمن
+        elif text == "🌐 تغيير اللغة":
+            await handle_settings(update, context)
+        elif text == "🔕 ساعات الهدوء":
+            await set_quiet_hours(update, context)
+        elif text == "📊 تحميل قاعدة البيانات":
+            await database_export_menu(update, context)
+        
+        # معالجة تصدير قاعدة البيانات
+        elif text == "📊 Excel":
+            await export_database_excel(update, context)
+        elif text == "📄 CSV":
+            await export_database_csv(update, context)
+        elif text == "🗃️ SQLite Database":
+            await export_database_sqlite(update, context)
+        
+        # العودة للقائمة الرئيسية
+        elif text == "🔙 العودة للقائمة الرئيسية":
+            await return_to_admin_main(update, context)
+        
+        return
+    
+    # التحقق من الأزرار الرئيسية للمستخدم
     if text == MESSAGES[language]['main_menu_buttons'][0]:  # طلب بروكسي ستاتيك
         await handle_static_proxy_request(update, context)
     elif text == MESSAGES[language]['main_menu_buttons'][1]:  # طلب بروكسي سوكس
