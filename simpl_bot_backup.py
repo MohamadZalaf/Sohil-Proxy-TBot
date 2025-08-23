@@ -15,7 +15,6 @@ import string
 import pandas as pd
 import io
 import csv
-import openpyxl
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 
@@ -58,9 +57,8 @@ ADMIN_CHAT_ID = None  # سيتم تحديده عند أول تسجيل دخول 
     ENTER_COUNTRY, ENTER_STATE, ENTER_USERNAME, ENTER_PASSWORD,
     ENTER_THANK_MESSAGE, PAYMENT_PROOF, CUSTOM_MESSAGE,
     REFERRAL_AMOUNT, USER_LOOKUP, QUIET_HOURS, LANGUAGE_SELECTION,
-    PAYMENT_METHOD_SELECTION, WITHDRAWAL_REQUEST, SET_PRICE_STATIC,
-    SET_PRICE_SOCKS, ADMIN_ORDER_INQUIRY
-) = range(22)
+    PAYMENT_METHOD_SELECTION, WITHDRAWAL_REQUEST
+) = range(19)
 
 # قواميس البيانات
 STATIC_COUNTRIES = {
@@ -210,21 +208,14 @@ sohilskaf123@gmail.com
         'manual_input': 'إدخال يدوي',
         'payment_methods': 'اختر طريقة الدفع:',
         'send_payment_proof': 'يرجى إرسال إثبات الدفع (صورة أو نص):',
-        'order_received': '✅ تم استلام طلبك بنجاح!
-
-📋 سيتم معالجة الطلب يدوياً من الأدمن بأقرب وقت.
-
-📧 ستصلك تحديثات الحالة تلقائياً.',
+        'order_received': 'تم استلام طلبك بنجاح! جاري معالجة الطلب يدوياً من الأدمن بأقرب وقت.',
         'main_menu_buttons': ['🔒 طلب بروكسي ستاتيك', '🧦 طلب بروكسي سوكس', '👥 إحالاتي', '⚙️ الإعدادات'],
         'admin_main_buttons': ['📋 إدارة الطلبات', '💰 إدارة الأموال', '👥 الإحالات', '⚙️ الإعدادات'],
         'language_change_success': 'تم تغيير اللغة إلى العربية ✅\nيرجى استخدام الأمر /start لإعادة تحميل القوائم',
         'admin_panel': '🔧 لوحة الأدمن',
         'manage_orders': 'إدارة الطلبات',
         'pending_orders': 'الطلبات المعلقة',
-        'admin_login_prompt': 'يرجى إدخال كلمة المرور:',
-        'order_processing': '⚙️ جاري معالجة طلبك الآن من قبل الأدمن...',
-        'order_success': '✅ تم إنجاز طلبك بنجاح! تم إرسال تفاصيل البروكسي إليك.',
-        'order_failed': '❌ تم رفض طلبك. يرجى التحقق من إثبات الدفع والمحاولة مرة أخرى.'
+        'admin_login_prompt': 'يرجى إدخال كلمة المرور:'
     },
     'en': {
         'welcome': """🎯 Welcome to Proxy Sales Bot
@@ -302,17 +293,14 @@ Order ID: {}""",
         'manual_input': 'Manual Input',
         'payment_methods': 'Choose payment method:',
         'send_payment_proof': 'Please send payment proof (image or text):',
-        'order_received': '✅ Your order has been received successfully!\n\n📋 Admin will process it manually soon.\n\n📧 You will receive status updates automatically.',
+        'order_received': 'Your order has been received successfully! Admin will process it manually soon.',
         'main_menu_buttons': ['🔒 Request Static Proxy', '🧦 Request Socks Proxy', '👥 My Referrals', '⚙️ Settings'],
         'admin_main_buttons': ['📋 Manage Orders', '💰 Manage Money', '👥 Referrals', '⚙️ Settings'],
         'language_change_success': 'Language changed to English ✅\nPlease use /start command to reload menus',
         'admin_panel': '🔧 Admin Panel',
         'manage_orders': 'Manage Orders',
         'pending_orders': 'Pending Orders',
-        'admin_login_prompt': 'Please enter password:',
-        'order_processing': '⚙️ Your order is now being processed by admin...',
-        'order_success': '✅ Your order has been completed successfully! Proxy details have been sent to you.',
-        'order_failed': '❌ Your order has been rejected. Please check your payment proof and try again.'
+        'admin_login_prompt': 'Please enter password:'
     }
 }
 
@@ -705,31 +693,27 @@ async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYP
         file_id = update.message.photo[-1].file_id
         payment_proof = f"photo:{file_id}"
         
-        # إرسال نسخة للمستخدم
-        await update.message.reply_photo(
+        # إرسال رسالة بعنوان إثبات الدفع
+        await context.bot.send_photo(
+            chat_id=update.effective_chat.id,
             photo=file_id,
-            caption=f"📸 إثبات دفع للطلب بمعرف: `{order_id}`\n\n✅ تم حفظ إثبات الدفع",
-            parse_mode='Markdown'
+            caption=f"إثبات دفع للطلب بمعرف: {order_id}"
         )
     else:
         # إذا كان نص
         payment_proof = f"text:{update.message.text}"
         
-        # إرسال نسخة للمستخدم
+        # إرسال رسالة بعنوان إثبات الدفع
         await update.message.reply_text(
-            f"📝 إثبات دفع للطلب بمعرف: `{order_id}`\n\nالتفاصيل:\n{update.message.text}\n\n✅ تم حفظ إثبات الدفع",
-            parse_mode='Markdown'
+            f"إثبات دفع للطلب بمعرف: {order_id}\n\nالتفاصيل: {update.message.text}"
         )
     
     db.update_order_payment_proof(order_id, payment_proof)
     
-    # إرسال نسخة من الطلب للمستخدم
-    await send_order_copy_to_user(update, context, order_id)
-    
     # إرسال إشعار للأدمن مع زر المعالجة
-    await send_admin_notification(context, order_id, payment_proof)
+    await send_admin_notification(context, order_id)
     
-    await update.message.reply_text(MESSAGES[language]['order_received'], parse_mode='Markdown')
+    await update.message.reply_text(MESSAGES[language]['order_received'])
     
     db.log_action(user_id, "payment_proof_submitted", order_id)
     
@@ -805,91 +789,7 @@ async def send_referral_notification(context: ContextTypes.DEFAULT_TYPE, referre
         # حفظ الإشعار في قاعدة البيانات
         db.log_action(new_user.id, "referral_notification", f"Referred by: {referrer_id}")
 
-async def send_order_copy_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE, order_id: str) -> None:
-    """إرسال نسخة من الطلب للمستخدم"""
-    user_id = update.effective_user.id
-    language = get_user_language(user_id)
-    
-    # الحصول على تفاصيل الطلب
-    query = """
-        SELECT o.*, u.first_name, u.last_name, u.username 
-        FROM orders o 
-        JOIN users u ON o.user_id = u.user_id 
-        WHERE o.id = ?
-    """
-    result = db.execute_query(query, (order_id,))
-    
-    if result:
-        order = result[0]
-        
-        # تحديد طريقة الدفع باللغة المناسبة
-        payment_methods = {
-            'ar': {
-                'shamcash': 'شام كاش',
-                'syriatel': 'سيرياتيل كاش', 
-                'coinex': 'Coinex',
-                'binance': 'Binance',
-                'payeer': 'Payeer'
-            },
-            'en': {
-                'shamcash': 'Sham Cash',
-                'syriatel': 'Syriatel Cash',
-                'coinex': 'Coinex', 
-                'binance': 'Binance',
-                'payeer': 'Payeer'
-            }
-        }
-        
-        payment_method = payment_methods[language].get(order[5], order[5])
-        
-        if language == 'ar':
-            message = f"""📋 نسخة من طلبك
-            
-👤 الاسم: `{order[11]} {order[12] or ''}`
-🆔 معرف المستخدم: `{order[1]}`
-
-━━━━━━━━━━━━━━━
-📦 تفاصيل الطلب:
-🔧 نوع البروكسي: {order[2]}
-🌍 الدولة: {order[3]}
-🏠 الولاية: {order[4]}
-
-━━━━━━━━━━━━━━━
-💳 تفاصيل الدفع:
-💰 طريقة الدفع: {payment_method}
-
-━━━━━━━━━━━━━━━
-🔗 معرف الطلب: `{order[0]}`
-📅 تاريخ الطلب: {order[9]}
-📊 الحالة: ⏳ تحت المراجعة
-
-يرجى الاحتفاظ بمعرف الطلب للمراجعة المستقبلية."""
-        else:
-            message = f"""📋 Copy of Your Order
-            
-👤 Name: `{order[11]} {order[12] or ''}`
-🆔 User ID: `{order[1]}`
-
-━━━━━━━━━━━━━━━
-📦 Order Details:
-🔧 Proxy Type: {order[2]}
-🌍 Country: {order[3]}
-🏠 State: {order[4]}
-
-━━━━━━━━━━━━━━━
-💳 Payment Details:
-💰 Payment Method: {payment_method}
-
-━━━━━━━━━━━━━━━
-🔗 Order ID: `{order[0]}`
-📅 Order Date: {order[9]}
-📊 Status: ⏳ Under Review
-
-Please keep the order ID for future reference."""
-        
-        await context.bot.send_message(user_id, message, parse_mode='Markdown')
-
-async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: str, payment_proof: str = None) -> None:
+async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: str) -> None:
     """إرسال إشعار للأدمن بطلب جديد"""
     # الحصول على تفاصيل الطلب
     query = """
@@ -916,9 +816,9 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
         
         message = f"""🔔 طلب جديد
 
-👤 الاسم: `{order[11]} {order[12] or ''}`
-📱 اسم المستخدم: @{order[13] or 'غير محدد'}
-🆔 معرف المستخدم: `{order[1]}`
+👤 الاسم: {order[7]} {order[8]}
+📱 اسم المستخدم: @{order[9] or 'غير محدد'}
+🆔 معرف المستخدم: {order[1]}
 
 ━━━━━━━━━━━━━━━
 📦 تفاصيل الطلب:
@@ -932,9 +832,8 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
 📄 إثبات الدفع: {"✅ مرفق" if order[7] else "❌ غير مرفق"}
 
 ━━━━━━━━━━━━━━━
-🔗 معرف الطلب: `{order[0]}`
-📅 تاريخ الطلب: {order[9]}
-📊 الحالة: ⏳ معلق"""
+🔗 معرف الطلب: {order[0]}
+📅 تاريخ الطلب: {order[9]}"""
         
         keyboard = [[InlineKeyboardButton("🔧 معالجة الطلب", callback_data=f"process_{order_id}")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -953,32 +852,12 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
         
         if ADMIN_CHAT_ID:
             try:
-                # إرسال الإشعار الرئيسي
                 await context.bot.send_message(
                     ADMIN_CHAT_ID, 
                     message, 
                     reply_markup=reply_markup,
                     parse_mode='Markdown'
                 )
-                
-                # إرسال إثبات الدفع إذا كان متوفراً
-                if payment_proof:
-                    if payment_proof.startswith("photo:"):
-                        file_id = payment_proof.replace("photo:", "")
-                        await context.bot.send_photo(
-                            ADMIN_CHAT_ID,
-                            photo=file_id,
-                            caption=f"📸 إثبات دفع للطلب بمعرف: `{order_id}`",
-                            parse_mode='Markdown'
-                        )
-                    elif payment_proof.startswith("text:"):
-                        text_proof = payment_proof.replace("text:", "")
-                        await context.bot.send_message(
-                            ADMIN_CHAT_ID,
-                            f"📝 إثبات دفع للطلب بمعرف: `{order_id}`\n\nالنص:\n{text_proof}",
-                            parse_mode='Markdown'
-                        )
-                
             except Exception as e:
                 print(f"خطأ في إرسال إشعار الأدمن: {e}")
         
@@ -991,12 +870,7 @@ async def handle_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     language = get_user_language(user_id)
     
     # إنشاء رابط الإحالة
-    try:
-        bot_info = await context.bot.get_me()
-        bot_username = bot_info.username
-    except:
-        bot_username = "your_bot"  # fallback if bot info fails
-    
+    bot_username = context.bot.username
     referral_link = f"https://t.me/{bot_username}?start={user_id}"
     
     # الحصول على رصيد الإحالة
@@ -1011,10 +885,10 @@ async def handle_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         message = f"""👥 نظام الإحالات
 
 🔗 رابط الإحالة الخاص بك:
-`{referral_link}`
+{referral_link}
 
 💰 رصيدك: `{referral_balance:.2f}$`
-👥 عدد إحالاتك: `{referral_count}`
+👥 عدد إحالاتك: {referral_count}
 
 ━━━━━━━━━━━━━━━
 شارك رابطك واحصل على `0.1$` لكل إحالة!
@@ -1023,10 +897,10 @@ async def handle_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         message = f"""👥 Referral System
 
 🔗 Your referral link:
-`{referral_link}`
+{referral_link}
 
 💰 Your balance: `{referral_balance:.2f}$`
-👥 Your referrals: `{referral_count}`
+👥 Your referrals: {referral_count}
 
 ━━━━━━━━━━━━━━━
 Share your link and earn `0.1$` per referral!
@@ -1231,13 +1105,12 @@ async def handle_custom_message_choice(update: Update, context: ContextTypes.DEF
         
         if user_result:
             user_id = user_result[0][0]
-            user_language = get_user_language(user_id)
             await context.bot.send_message(
                 user_id,
-                MESSAGES[user_language]['order_failed']
+                "عذراً، تم رفض طلبك. يرجى التأكد من صحة إثبات الدفع والمحاولة مرة أخرى."
             )
         
-        await query.edit_message_text(f"تم إشعار المستخدم برفض الطلب.\nمعرف الطلب: `{order_id}`", parse_mode='Markdown')
+        await query.edit_message_text(f"تم إشعار المستخدم برفض الطلب.\nمعرف الطلب: {order_id}")
         return ConversationHandler.END
 
 async def handle_custom_message_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1483,12 +1356,10 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
     if order_result:
         user_id = order_result[0][0]
         order_type = order_result[0][1]
-        user_language = get_user_language(user_id)
         
-        # إرسال إشعار بدء المعالجة
         await context.bot.send_message(
             user_id,
-            MESSAGES[user_language]['order_processing']
+            "جاري معالجة الطلب يدوياً من الأدمن بأقرب وقت."
         )
         
         # التحقق من نوع الطلب
@@ -1714,14 +1585,7 @@ async def send_proxy_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE,
 معرف الطلب: {order_id}"""
         
         # إرسال البروكسي للمستخدم
-        await context.bot.send_message(user_id, proxy_message, parse_mode='Markdown')
-        
-        # إرسال إشعار نجاح الطلب
-        user_language = get_user_language(user_id)
-        await context.bot.send_message(
-            user_id,
-            MESSAGES[user_language]['order_success']
-        )
+        await context.bot.send_message(user_id, proxy_message)
         
         # تحديث حالة الطلب
         proxy_details = {
@@ -1739,7 +1603,7 @@ async def send_proxy_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE,
         )
         
         # رسالة تأكيد للأدمن
-        await update.message.reply_text(f"✅ تم إرسال البروكسي للمستخدم بنجاح!\nمعرف الطلب: `{order_id}`", parse_mode='Markdown')
+        await update.message.reply_text(f"✅ تم إرسال البروكسي للمستخدم بنجاح!\nمعرف الطلب: {order_id}")
         
         # تنظيف البيانات المؤقتة
         admin_keys = [k for k in context.user_data.keys() if k.startswith('admin_')]
