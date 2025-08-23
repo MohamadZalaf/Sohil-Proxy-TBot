@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # إعدادات البوت
 BOT_TOKEN = "8408804784:AAG8cSTsDQfycDaXOX9YMmc_OB3wABez7LA"
-ADMIN_ID = None  # سيتم تحديده من التطبيق
+ADMIN_ID = "6891599955"  # معرف الأدمن
 BOT_RUNNING = False
 
 # إعداد Flask للتطبيق
@@ -333,6 +333,27 @@ class DatabaseManager:
         
         conn.close()
         return result[0] if result else default
+    
+    def get_user_info(self, user_id):
+        """الحصول على معلومات المستخدم"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+        result = cursor.fetchone()
+        
+        conn.close()
+        
+        if result:
+            return {
+                'user_id': result[0],
+                'username': result[1],
+                'first_name': result[2],
+                'last_name': result[3],
+                'is_banned': bool(result[4]),
+                'join_date': result[5]
+            }
+        return {}
 
 # إنشاء مدير قاعدة البيانات
 db = DatabaseManager()
@@ -474,39 +495,79 @@ class TelegramBot:
     
     def handle_proxy_request(self, chat_id, user_id, proxy_type_id):
         """معالجة طلب البروكسي"""
+        # الحصول على معلومات نوع البروكسي
+        proxy_types = db.get_active_proxy_types()
+        selected_proxy = None
+        for proxy in proxy_types:
+            if proxy[0] == proxy_type_id:
+                selected_proxy = proxy
+                break
+        
+        if not selected_proxy:
+            self.send_message(chat_id, "❌ نوع البروكسي غير متوفر")
+            return
+        
         # إنشاء الطلب
         order_id = db.create_order(user_id, proxy_type_id)
         
-        # إرسال رسالة للمستخدم
-        self.send_message(chat_id, """
+        # إرسال رسالة مفصلة للمستخدم
+        user_message = f"""
 ✅ تم استلام طلبك بنجاح!
 
-📝 رقم الطلب: {}
+📋 تفاصيل الطلب:
+🆔 رقم الطلب: {order_id}
+🛒 نوع البروكسي: {selected_proxy[1]}
+📝 الوصف: {selected_proxy[2]}
+💰 السعر: ${selected_proxy[3]}
 ⏳ حالة الطلب: قيد المعالجة
+📅 تاريخ الطلب: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
-سيتم التواصل معك قريباً لتأكيد الدفع وإرسال معلومات البروكسي.
+💳 خطوات الدفع:
+1️⃣ سيتم التواصل معك قريباً لتأكيد الدفع
+2️⃣ بعد تأكيد الدفع سيتم تجهيز البروكسي
+3️⃣ ستحصل على معلومات البروكسي كاملة
 
 شكراً لثقتك بنا! 🙏
-        """.format(order_id))
-        
-        # إرسال إشعار للأدمن
-        admin_id = db.get_setting('admin_id')
-        if admin_id:
-            # الحصول على معلومات الطلب
-            orders = db.get_pending_orders()
-            for order in orders:
-                if order[0] == order_id:  # order[0] هو id
-                    admin_text = f"""
-🔔 طلب جديد!
 
-👤 المستخدم: {order[6]} ({order[7]})
-🛒 نوع البروكسي: {order[8]}
-💰 السعر: ${order[9]}
-📅 التاريخ: {order[4]}
+للاستفسار تواصل مع الدعم: @support
+        """
+        
+        self.send_message(chat_id, user_message)
+        
+        # الحصول على معلومات المستخدم
+        user_info = db.get_user_info(user_id)
+        
+        # إرسال إشعار مفصل للأدمن
+        admin_text = f"""
+🚨 طلب جديد وارد! 🚨
+
+👤 معلومات المستخدم:
+🆔 معرف المستخدم: {user_id}
+👤 الاسم: {user_info.get('first_name', 'غير محدد')} {user_info.get('last_name', '')}
+📱 اسم المستخدم: @{user_info.get('username', 'غير محدد')}
+
+🛒 تفاصيل الطلب:
 🆔 رقم الطلب: {order_id}
-                    """
-                    self.send_message(admin_id, admin_text)
-                    break
+🌐 نوع البروكسي: {selected_proxy[1]}
+📝 الوصف: {selected_proxy[2]}
+💰 السعر: ${selected_proxy[3]}
+📅 وقت الطلب: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+⚡ يرجى معالجة الطلب من خلال تطبيق الإدارة
+
+💡 لمعالجة الطلب:
+1️⃣ افتح تطبيق إدارة البوت
+2️⃣ انتقل لقسم "الطلبات المعلقة"
+3️⃣ اضغط على "معالجة الطلب"
+        """
+        
+        # إرسال للأدمن المحدد
+        self.send_message(ADMIN_ID, admin_text)
+        
+        # إرسال للأدمن المحفوظ في قاعدة البيانات (إن وجد)
+        saved_admin_id = db.get_setting('admin_id')
+        if saved_admin_id and saved_admin_id != ADMIN_ID:
+            self.send_message(saved_admin_id, admin_text)
     
     def start_polling(self):
         """بدء البوت"""
@@ -560,7 +621,25 @@ def start_bot():
         bot_thread.start()
         BOT_RUNNING = True
         
-        return jsonify({'success': True, 'message': 'تم بدء البوت بنجاح'})
+        # إشعار الأدمن ببدء البوت
+        start_message = f"""
+🚀 تم بدء البوت بنجاح!
+
+📊 معلومات البوت:
+🤖 حالة البوت: نشط ويعمل
+🕐 وقت البدء: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+🌐 الخادم: محلي (Local Server)
+👤 الأدمن المسؤول: {ADMIN_ID}
+
+✅ البوت جاهز لاستقبال الطلبات
+📱 يمكن للمستخدمين التفاعل مع البوت الآن
+
+🔧 لإدارة البوت استخدم تطبيق الإدارة
+        """
+        
+        bot.send_message(ADMIN_ID, start_message)
+        
+        return jsonify({'success': True, 'message': 'تم بدء البوت بنجاح مع إرسال الإشعار'})
     else:
         return jsonify({'success': False, 'message': 'البوت يعمل بالفعل'})
 
@@ -570,9 +649,24 @@ def stop_bot():
     global BOT_RUNNING
     
     if BOT_RUNNING:
+        # إشعار الأدمن بإيقاف البوت
+        stop_message = f"""
+⏹️ تم إيقاف البوت
+
+📊 معلومات الإيقاف:
+🤖 حالة البوت: متوقف
+🕐 وقت الإيقاف: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+👤 تم الإيقاف بواسطة: الأدمن
+
+⚠️ البوت لن يستقبل طلبات جديدة
+🔧 لإعادة تشغيل البوت استخدم تطبيق الإدارة
+        """
+        
+        bot.send_message(ADMIN_ID, stop_message)
+        
         bot.stop_polling()
         BOT_RUNNING = False
-        return jsonify({'success': True, 'message': 'تم إيقاف البوت'})
+        return jsonify({'success': True, 'message': 'تم إيقاف البوت مع إرسال الإشعار'})
     else:
         return jsonify({'success': False, 'message': 'البوت متوقف بالفعل'})
 
@@ -602,14 +696,82 @@ def get_users():
 @app.route('/api/users/<int:user_id>/ban', methods=['POST'])
 def ban_user(user_id):
     """حظر مستخدم"""
+    # الحصول على معلومات المستخدم قبل الحظر
+    user_info = db.get_user_info(user_id)
+    
     db.ban_user(user_id)
-    return jsonify({'success': True, 'message': 'تم حظر المستخدم'})
+    
+    # إرسال إشعار للمستخدم المحظور
+    ban_message = """
+🚫 تم حظرك من استخدام البوت
+
+للاستفسار عن سبب الحظر أو طلب إلغاء الحظر، يرجى التواصل مع الإدارة.
+
+📞 للتواصل: @support
+    """
+    
+    try:
+        bot.send_message(user_id, ban_message)
+    except:
+        pass  # في حالة عدم إمكانية الإرسال
+    
+    # إشعار الأدمن
+    admin_message = f"""
+🚫 تم حظر مستخدم
+
+👤 معلومات المستخدم المحظور:
+🆔 معرف المستخدم: {user_id}
+👤 الاسم: {user_info.get('first_name', 'غير محدد')} {user_info.get('last_name', '')}
+📱 اسم المستخدم: @{user_info.get('username', 'غير محدد')}
+📅 تاريخ الحظر: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+✅ تم إرسال إشعار للمستخدم بالحظر
+    """
+    
+    bot.send_message(ADMIN_ID, admin_message)
+    
+    return jsonify({'success': True, 'message': 'تم حظر المستخدم مع إرسال الإشعارات'})
 
 @app.route('/api/users/<int:user_id>/unban', methods=['POST'])
 def unban_user(user_id):
     """إلغاء حظر مستخدم"""
+    # الحصول على معلومات المستخدم
+    user_info = db.get_user_info(user_id)
+    
     db.unban_user(user_id)
-    return jsonify({'success': True, 'message': 'تم إلغاء حظر المستخدم'})
+    
+    # إرسال إشعار للمستخدم بإلغاء الحظر
+    unban_message = """
+✅ تم إلغاء حظرك من البوت!
+
+يمكنك الآن استخدام البوت بشكل طبيعي.
+
+🛒 لطلب بروكسي جديد اضغط /start
+
+مرحباً بك مرة أخرى! 🙏
+    """
+    
+    try:
+        bot.send_message(user_id, unban_message)
+    except:
+        pass  # في حالة عدم إمكانية الإرسال
+    
+    # إشعار الأدمن
+    admin_message = f"""
+✅ تم إلغاء حظر مستخدم
+
+👤 معلومات المستخدم:
+🆔 معرف المستخدم: {user_id}
+👤 الاسم: {user_info.get('first_name', 'غير محدد')} {user_info.get('last_name', '')}
+📱 اسم المستخدم: @{user_info.get('username', 'غير محدد')}
+📅 تاريخ إلغاء الحظر: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+✅ تم إرسال إشعار للمستخدم بإلغاء الحظر
+    """
+    
+    bot.send_message(ADMIN_ID, admin_message)
+    
+    return jsonify({'success': True, 'message': 'تم إلغاء حظر المستخدم مع إرسال الإشعارات'})
 
 @app.route('/api/proxy-types', methods=['GET'])
 def get_proxy_types():
@@ -637,7 +799,25 @@ def add_proxy_type():
         data['description'],
         data['price']
     )
-    return jsonify({'success': True, 'id': proxy_id})
+    
+    # إشعار الأدمن بإضافة نوع بروكسي جديد
+    admin_message = f"""
+🆕 تم إضافة نوع بروكسي جديد!
+
+📋 تفاصيل البروكسي الجديد:
+🆔 المعرف: {proxy_id}
+🏷️ الاسم: {data['name']}
+📝 الوصف: {data['description']}
+💰 السعر: ${data['price']}
+📅 تاريخ الإضافة: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+✅ البروكسي متوفر الآن للمستخدمين
+🛒 يمكن للمستخدمين طلبه من البوت
+    """
+    
+    bot.send_message(ADMIN_ID, admin_message)
+    
+    return jsonify({'success': True, 'id': proxy_id, 'message': 'تم إضافة نوع البروكسي مع إرسال الإشعار'})
 
 @app.route('/api/orders/pending', methods=['GET'])
 def get_pending_orders():
@@ -697,28 +877,76 @@ def complete_order(order_id):
     for order in orders:
         if order[0] == order_id:
             user_id = order[1]
+            username = order[7]
+            first_name = order[8]
+            proxy_name = order[9]
+            price = order[10]
             
-            # تنسيق رسالة البروكسي
-            message = f"""
-🎉 تم تجهيز البروكسي الخاص بك!
+            # تنسيق رسالة البروكسي للمستخدم
+            user_message = f"""
+🎉 تم تجهيز البروكسي الخاص بك بنجاح! 🎉
 
 📋 معلومات البروكسي:
+🆔 رقم الطلب: {order_id}
 🌐 العنوان: {proxy_info['host']}
 🔌 البورت: {proxy_info['port']}
 🔐 اسم المستخدم: {proxy_info['username']}
 🗝️ كلمة المرور: {proxy_info['password']}
 🌍 الدولة: {proxy_info['country']}
 📍 المنطقة: {proxy_info['region']}
+⚡ نوع البروكسي: {proxy_name}
 📅 تاريخ الانتهاء: {proxy_info['expiry_date']}
 ⏰ وقت الانتهاء: {proxy_info['expiry_time']}
 
+✅ حالة الطلب: مكتمل
+💰 المبلغ المدفوع: ${price}
+
+📖 تعليمات الاستخدام:
+1️⃣ استخدم المعلومات أعلاه في إعدادات البروكسي
+2️⃣ تأكد من صحة البيانات قبل الاستخدام
+3️⃣ في حالة وجود مشاكل تواصل معنا فوراً
+
+⚠️ مهم: احتفظ بهذه المعلومات في مكان آمن
+
 شكراً لاختيارك خدماتنا! 🙏
+للدعم الفني: @support
             """
             
-            bot.send_message(user_id, message)
+            # إرسال الرسالة للمستخدم
+            bot.send_message(user_id, user_message)
+            
+            # إرسال إشعار للأدمن بإكمال الطلب
+            admin_notification = f"""
+✅ تم إكمال الطلب بنجاح!
+
+📋 تفاصيل الطلب المكتمل:
+🆔 رقم الطلب: {order_id}
+👤 المستخدم: {first_name} (@{username})
+🆔 معرف المستخدم: {user_id}
+🌐 نوع البروكسي: {proxy_name}
+💰 المبلغ: ${price}
+📅 تاريخ الإكمال: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+🌐 البروكسي المرسل:
+• العنوان: {proxy_info['host']}:{proxy_info['port']}
+• الدولة: {proxy_info['country']}
+• المنطقة: {proxy_info['region']}
+• تاريخ الانتهاء: {proxy_info['expiry_date']} {proxy_info['expiry_time']}
+
+💰 تم إضافة ${price} للأرباح الإجمالية
+            """
+            
+            # إرسال للأدمن
+            bot.send_message(ADMIN_ID, admin_notification)
+            
+            # إرسال للأدمن المحفوظ في قاعدة البيانات (إن وجد)
+            saved_admin_id = db.get_setting('admin_id')
+            if saved_admin_id and saved_admin_id != ADMIN_ID:
+                bot.send_message(saved_admin_id, admin_notification)
+            
             break
     
-    return jsonify({'success': True, 'message': 'تم إكمال الطلب وإرسال البروكسي'})
+    return jsonify({'success': True, 'message': 'تم إكمال الطلب وإرسال البروكسي مع إشعار الأدمن'})
 
 @app.route('/api/earnings', methods=['GET'])
 def get_earnings():
