@@ -11,6 +11,7 @@ import ProxyManagementScreen from './screens/ProxyManagementScreen';
 import UserManagementScreen from './screens/UserManagementScreen';
 import OrderManagementScreen from './screens/OrderManagementScreen';
 import PaymentManagementScreen from './screens/PaymentManagementScreen';
+import SettingsScreen from './screens/SettingsScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -52,6 +53,9 @@ export default function App() {
                   break;
                 case 'PaymentManagement':
                   iconName = 'payment';
+                  break;
+                case 'Settings':
+                  iconName = 'settings-applications';
                   break;
                 default:
                   iconName = 'help';
@@ -113,6 +117,14 @@ export default function App() {
             options={{
               title: 'إدارة المدفوعات',
               tabBarLabel: 'المدفوعات'
+            }}
+          />
+          <Tab.Screen 
+            name="Settings" 
+            component={SettingsScreen}
+            options={{
+              title: 'الإعدادات',
+              tabBarLabel: 'الإعدادات'
             }}
           />
         </Tab.Navigator>

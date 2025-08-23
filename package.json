@@ -36,7 +36,8 @@
     "expo-background-fetch": "~11.3.0",
     "expo-task-manager": "~11.3.0",
     "react-native-exec": "^1.0.5",
-    "expo-file-system": "~15.4.5"
+    "expo-file-system": "~15.4.5",
+    "@react-native-async-storage/async-storage": "1.18.2"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"

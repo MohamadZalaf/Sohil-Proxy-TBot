@@ -29,7 +29,11 @@
         "WAKE_LOCK",
         "RECEIVE_BOOT_COMPLETED",
         "FOREGROUND_SERVICE",
-        "ACCESS_NETWORK_STATE"
+        "ACCESS_NETWORK_STATE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_EXTERNAL_STORAGE",
+        "SYSTEM_ALERT_WINDOW",
+        "QUERY_ALL_PACKAGES"
       ]
     },
     "web": {

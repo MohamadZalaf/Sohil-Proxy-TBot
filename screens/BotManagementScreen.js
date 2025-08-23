@@ -20,6 +20,8 @@ import {
 } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import TermuxBotService from '../services/TermuxBotService';
+import CloudServerService from '../services/CloudServerService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:5000/api';
@@ -28,6 +30,8 @@ export default function BotManagementScreen() {
   const [botStatus, setBotStatus] = useState(false);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [deploymentMode, setDeploymentMode] = useState('termux');
+  const [serverConfig, setServerConfig] = useState(null);
   const [apiKey, setApiKey] = useState('8408804784:AAG8cSTsDQfycDaXOX9YMmc_OB3wABez7LA');
   const [adminId, setAdminId] = useState('6891599955');
   
@@ -41,17 +45,42 @@ export default function BotManagementScreen() {
 
   useEffect(() => {
     checkBotStatus();
+    loadDeploymentSettings();
   }, []);
+
+  const loadDeploymentSettings = async () => {
+    try {
+      // تحميل وضع النشر
+      const mode = await AsyncStorage.getItem('deployment_mode');
+      if (mode) {
+        setDeploymentMode(mode);
+      }
+
+      // تحميل إعدادات الخادم إذا كان الوضع سحابي
+      if (mode === 'cloud') {
+        const config = await CloudServerService.loadServerConfig();
+        setServerConfig(config);
+      }
+    } catch (error) {
+      console.error('خطأ في تحميل إعدادات النشر:', error);
+    }
+  };
 
   const checkBotStatus = async () => {
     try {
-      // التحقق من حالة البوت المحلي
-      const localStatus = TermuxBotService.getStatus();
-      
-      // التحقق من صحة البوت عبر API
-      const healthCheck = await TermuxBotService.checkBotHealth();
-      
-      setBotStatus(localStatus && healthCheck);
+      if (deploymentMode === 'cloud' && serverConfig) {
+        // التحقق من البوت على الخادم السحابي
+        const cloudStatus = await CloudServerService.checkCloudBotStatus(serverConfig);
+        setBotStatus(cloudStatus);
+      } else {
+        // التحقق من حالة البوت المحلي
+        const localStatus = TermuxBotService.getStatus();
+        
+        // التحقق من صحة البوت عبر API
+        const healthCheck = await TermuxBotService.checkBotHealth();
+        
+        setBotStatus(localStatus && healthCheck);
+      }
     } catch (error) {
       console.error('خطأ في التحقق من حالة البوت:', error);
     }
@@ -60,7 +89,16 @@ export default function BotManagementScreen() {
   const handleStartBot = async () => {
     setLoading(true);
     try {
-      const success = await TermuxBotService.startBot();
+      let success = false;
+      
+      if (deploymentMode === 'cloud' && serverConfig) {
+        // تشغيل على الخادم السحابي
+        success = await CloudServerService.deployToCloudServer(serverConfig);
+      } else {
+        // تشغيل محلي على Termux
+        success = await TermuxBotService.startBot();
+      }
+      
       if (success) {
         setBotStatus(true);
         // بدء مراقبة حالة البوت
@@ -85,7 +123,16 @@ export default function BotManagementScreen() {
           onPress: async () => {
             setLoading(true);
             try {
-              const success = await TermuxBotService.stopBot();
+              let success = false;
+              
+              if (deploymentMode === 'cloud' && serverConfig) {
+                // إيقاف على الخادم السحابي
+                success = await CloudServerService.stopCloudBot(serverConfig);
+              } else {
+                // إيقاف محلي
+                success = await TermuxBotService.stopBot();
+              }
+              
               if (success) {
                 setBotStatus(false);
               }
