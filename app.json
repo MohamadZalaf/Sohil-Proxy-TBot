@@ -22,12 +22,14 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
       },
-      "package": "com.proxybot.manager",
+      "package": "com.mohamadzalaf.proxybot",
+      "versionCode": 1,
       "permissions": [
         "INTERNET",
         "WAKE_LOCK",
         "RECEIVE_BOOT_COMPLETED",
-        "FOREGROUND_SERVICE"
+        "FOREGROUND_SERVICE",
+        "ACCESS_NETWORK_STATE"
       ]
     },
     "web": {
@@ -35,6 +37,10 @@
     },
     "plugins": [
       "expo-notifications"
-    ]
+    ],
+    "extra": {
+      "developer": "Mohamad Zalaf",
+      "copyright": "©2025 Mohamad Zalaf. All rights reserved."
+    }
   }
 }
