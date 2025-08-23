@@ -211,7 +211,7 @@ sohilskaf123@gmail.com
         'payment_methods': 'اختر طريقة الدفع:',
         'send_payment_proof': 'يرجى إرسال إثبات الدفع (صورة أو نص):',
         'order_received': '✅ تم استلام طلبك بنجاح!\n\n📋 سيتم معالجة الطلب يدوياً من الأدمن بأقرب وقت.\n\n📧 ستصلك تحديثات الحالة تلقائياً.',
-        'main_menu_buttons': ['🔒 طلب بروكسي ستاتيك', '🧦 طلب بروكسي سوكس', '👥 إحالاتي', '⚙️ الإعدادات'],
+        'main_menu_buttons': ['🔒 طلب بروكسي ستاتيك', '🧦 طلب بروكسي سوكس', '👥 إحالاتي', '📋 تذكير بطلباتي', '⚙️ الإعدادات'],
         'admin_main_buttons': ['📋 إدارة الطلبات', '💰 إدارة الأموال', '👥 الإحالات', '⚙️ الإعدادات'],
         'language_change_success': 'تم تغيير اللغة إلى العربية ✅\nيرجى استخدام الأمر /start لإعادة تحميل القوائم',
         'admin_panel': '🔧 لوحة الأدمن',
@@ -299,7 +299,7 @@ Order ID: {}""",
         'payment_methods': 'Choose payment method:',
         'send_payment_proof': 'Please send payment proof (image or text):',
         'order_received': '✅ Your order has been received successfully!\n\n📋 Admin will process it manually soon.\n\n📧 You will receive status updates automatically.',
-        'main_menu_buttons': ['🔒 Request Static Proxy', '🧦 Request Socks Proxy', '👥 My Referrals', '⚙️ Settings'],
+        'main_menu_buttons': ['🔒 Request Static Proxy', '🧦 Request Socks Proxy', '👥 My Referrals', '📋 Order Reminder', '⚙️ Settings'],
         'admin_main_buttons': ['📋 Manage Orders', '💰 Manage Money', '👥 Referrals', '⚙️ Settings'],
         'language_change_success': 'Language changed to English ✅\nPlease use /start command to reload menus',
         'admin_panel': '🔧 Admin Panel',
@@ -483,11 +483,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if referred_by and is_new_user:
         await add_referral_bonus(referred_by, user.id)
         
-        # إشعار المحيل
+        # إشعار المحيل (بدون كشف الهوية)
         try:
             await context.bot.send_message(
                 referred_by,
-                f"🎉 تهانينا! لقد قام {user.first_name} بالانضمام عبر رابط الإحالة الخاص بك.\n💰 تم إضافة 0.1$ إلى رصيدك!"
+                f"🎉 تهانينا! انضم مستخدم جديد عبر رابط الإحالة الخاص بك.\n💰 تم إضافة `0.1$` إلى رصيدك!",
+                parse_mode='Markdown'
             )
         except:
             pass  # في حالة عدم إمكانية إرسال الرسالة
@@ -511,8 +512,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = [
         [KeyboardButton(MESSAGES[language]['main_menu_buttons'][0])],
         [KeyboardButton(MESSAGES[language]['main_menu_buttons'][1])],
-        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2]), 
-         KeyboardButton(MESSAGES[language]['main_menu_buttons'][3])]
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2])],
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][3]), 
+         KeyboardButton(MESSAGES[language]['main_menu_buttons'][4])]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
@@ -549,7 +551,7 @@ async def handle_admin_password(update: Update, context: ContextTypes.DEFAULT_TY
             "🔧 مرحباً بك في لوحة الأدمن\nاختر الخدمة المطلوبة:",
             reply_markup=reply_markup
         )
-        return ADMIN_MENU
+        return ConversationHandler.END  # إنهاء المحادثة لتمكين إعادة الاستخدام
     else:
         await update.message.reply_text("كلمة المرور غير صحيحة!")
         return ConversationHandler.END
@@ -569,6 +571,12 @@ async def handle_static_proxy_request(update: Update, context: ContextTypes.DEFA
     # عرض رسالة الحزمة
     await update.message.reply_text(
         MESSAGES[language]['static_package'].format(order_id)
+    )
+    
+    # إرسال معرف الطلب للمستخدم
+    await update.message.reply_text(
+        f"🆔 معرف طلبك: `{order_id}`\n\nيرجى الاحتفاظ بهذا المعرف للمراجعة المستقبلية.",
+        parse_mode='Markdown'
     )
     
     # عرض قائمة الدول للستاتيك
@@ -598,6 +606,12 @@ async def handle_socks_proxy_request(update: Update, context: ContextTypes.DEFAU
     # عرض رسالة الحزمة
     await update.message.reply_text(
         MESSAGES[language]['socks_package'].format(order_id)
+    )
+    
+    # إرسال معرف الطلب للمستخدم
+    await update.message.reply_text(
+        f"🆔 معرف طلبك: `{order_id}`\n\nيرجى الاحتفاظ بهذا المعرف للمراجعة المستقبلية.",
+        parse_mode='Markdown'
     )
     
     # عرض قائمة الدول للسوكس (مع دول إضافية)
@@ -962,14 +976,14 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
         if ADMIN_CHAT_ID:
             try:
                 # إرسال الإشعار الرئيسي
-                await context.bot.send_message(
+                main_msg = await context.bot.send_message(
                     ADMIN_CHAT_ID, 
                     message, 
                     reply_markup=reply_markup,
                     parse_mode='Markdown'
                 )
                 
-                # إرسال إثبات الدفع إذا كان متوفراً
+                # إرسال إثبات الدفع كرد على رسالة الطلب
                 if payment_proof:
                     if payment_proof.startswith("photo:"):
                         file_id = payment_proof.replace("photo:", "")
@@ -977,14 +991,16 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
                             ADMIN_CHAT_ID,
                             photo=file_id,
                             caption=f"📸 إثبات دفع للطلب بمعرف: `{order_id}`",
-                            parse_mode='Markdown'
+                            parse_mode='Markdown',
+                            reply_to_message_id=main_msg.message_id
                         )
                     elif payment_proof.startswith("text:"):
                         text_proof = payment_proof.replace("text:", "")
                         await context.bot.send_message(
                             ADMIN_CHAT_ID,
                             f"📝 إثبات دفع للطلب بمعرف: `{order_id}`\n\nالنص:\n{text_proof}",
-                            parse_mode='Markdown'
+                            parse_mode='Markdown',
+                            reply_to_message_id=main_msg.message_id
                         )
                 
             except Exception as e:
@@ -1119,6 +1135,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_custom_message_choice(update, context)
     elif query.data.startswith("quiet_"):
         await handle_quiet_hours_selection(update, context)
+    elif query.data in ["confirm_clear_db", "cancel_clear_db"]:
+        await handle_database_clear(update, context)
     else:
         await query.answer("قيد التطوير...")
 
@@ -1882,7 +1900,7 @@ async def handle_admin_settings_menu(update: Update, context: ContextTypes.DEFAU
     keyboard = [
         [KeyboardButton("🌐 تغيير اللغة")],
         [KeyboardButton("🔕 ساعات الهدوء")],
-        [KeyboardButton("📊 تحميل قاعدة البيانات")],
+        [KeyboardButton("🗃️ إدارة قاعدة البيانات")],
         [KeyboardButton("🔙 العودة للقائمة الرئيسية")]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -1987,6 +2005,20 @@ async def show_sales_statistics(update: Update, context: ContextTypes.DEFAULT_TY
 📈 صافي الربح: `{total_revenue - withdrawal_amount:.2f}$`"""
     
     await update.message.reply_text(message, parse_mode='Markdown')
+
+async def database_management_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """قائمة إدارة قاعدة البيانات"""
+    keyboard = [
+        [KeyboardButton("📊 تحميل قاعدة البيانات")],
+        [KeyboardButton("🗑️ تفريغ قاعدة البيانات")],
+        [KeyboardButton("🔙 العودة للقائمة الرئيسية")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        "🗃️ إدارة قاعدة البيانات\nاختر العملية المطلوبة:",
+        reply_markup=reply_markup
+    )
 
 async def database_export_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """قائمة تصدير قاعدة البيانات"""
@@ -2103,8 +2135,14 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             await handle_settings(update, context)
         elif text == "🔕 ساعات الهدوء":
             return await set_quiet_hours(update, context)
-        elif text == "📊 تحميل قاعدة البيانات":
+        elif text == "🗃️ إدارة قاعدة البيانات":
+            await database_management_menu(update, context)
+        
+        # معالجة إدارة قاعدة البيانات
+        elif text == "📊 تحميل قاعدة البيانات" and is_admin:
             await database_export_menu(update, context)
+        elif text == "🗑️ تفريغ قاعدة البيانات":
+            await confirm_database_clear(update, context)
         
         # معالجة تصدير قاعدة البيانات
         elif text == "📊 Excel":
@@ -2127,7 +2165,9 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         await handle_socks_proxy_request(update, context)
     elif text == MESSAGES[language]['main_menu_buttons'][2]:  # إحالاتي
         await handle_referrals(update, context)
-    elif text == MESSAGES[language]['main_menu_buttons'][3]:  # الإعدادات
+    elif text == MESSAGES[language]['main_menu_buttons'][3]:  # تذكير بطلباتي
+        await handle_order_reminder(update, context)
+    elif text == MESSAGES[language]['main_menu_buttons'][4]:  # الإعدادات
         await handle_settings(update, context)
 
 # ==== الوظائف المفقودة ====
@@ -2175,12 +2215,16 @@ async def handle_referral_amount_update(update: Update, context: ContextTypes.DE
 
 async def set_quiet_hours(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """تحديد ساعات الهدوء"""
+    # الحصول على الإعداد الحالي
+    current_setting = db.execute_query("SELECT value FROM settings WHERE key = 'quiet_hours'")
+    current = current_setting[0][0] if current_setting else "24h"
+    
     keyboard = [
-        [InlineKeyboardButton("🔕 08:00 - 18:00", callback_data="quiet_8_18")],
-        [InlineKeyboardButton("🔕 22:00 - 06:00", callback_data="quiet_22_6")],
-        [InlineKeyboardButton("🔕 12:00 - 14:00", callback_data="quiet_12_14")],
-        [InlineKeyboardButton("🔕 20:00 - 22:00", callback_data="quiet_20_22")],
-        [InlineKeyboardButton("🔊 24 ساعة مع صوت", callback_data="quiet_24h")]
+        [InlineKeyboardButton(f"{'✅' if current == '8_18' else '🔕'} 08:00 - 18:00", callback_data="quiet_8_18")],
+        [InlineKeyboardButton(f"{'✅' if current == '22_6' else '🔕'} 22:00 - 06:00", callback_data="quiet_22_6")],
+        [InlineKeyboardButton(f"{'✅' if current == '12_14' else '🔕'} 12:00 - 14:00", callback_data="quiet_12_14")],
+        [InlineKeyboardButton(f"{'✅' if current == '20_22' else '🔕'} 20:00 - 22:00", callback_data="quiet_20_22")],
+        [InlineKeyboardButton(f"{'✅' if current == '24h' else '🔊'} 24 ساعة مع صوت", callback_data="quiet_24h")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -2317,9 +2361,9 @@ async def resend_order_notification(update: Update, context: ContextTypes.DEFAUL
     keyboard = [[InlineKeyboardButton("🔧 معالجة الطلب", callback_data=f"process_{order_id}")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='Markdown')
+    main_msg = await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='Markdown')
     
-    # إرسال إثبات الدفع إذا كان متوفراً
+    # إرسال إثبات الدفع كرد على رسالة الطلب
     if order[7]:  # payment_proof
         if order[7].startswith("photo:"):
             file_id = order[7].replace("photo:", "")
@@ -2327,13 +2371,16 @@ async def resend_order_notification(update: Update, context: ContextTypes.DEFAUL
                 update.effective_chat.id,
                 photo=file_id,
                 caption=f"📸 إثبات دفع للطلب بمعرف: `{order_id}`",
-                parse_mode='Markdown'
+                parse_mode='Markdown',
+                reply_to_message_id=main_msg.message_id
             )
         elif order[7].startswith("text:"):
             text_proof = order[7].replace("text:", "")
-            await update.message.reply_text(
+            await context.bot.send_message(
+                update.effective_chat.id,
                 f"📝 إثبات دفع للطلب بمعرف: `{order_id}`\n\nالنص:\n{text_proof}",
-                parse_mode='Markdown'
+                parse_mode='Markdown',
+                reply_to_message_id=main_msg.message_id
             )
 
 async def set_static_prices(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -2434,6 +2481,110 @@ async def handle_balance_reset(update: Update, context: ContextTypes.DEFAULT_TYP
     )
     
     return ConversationHandler.END
+
+async def handle_order_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة تذكير الطلبات"""
+    user_id = update.effective_user.id
+    language = get_user_language(user_id)
+    
+    # التحقق من آخر استخدام للتذكير
+    last_reminder = context.user_data.get('last_reminder', 0)
+    current_time = datetime.now().timestamp()
+    
+    # التحقق من مرور ساعة على آخر استخدام
+    if current_time - last_reminder < 3600:  # ساعة واحدة
+        remaining_time = int((3600 - (current_time - last_reminder)) / 60)
+        await update.message.reply_text(
+            f"⏰ يمكنك استخدام التذكير مرة أخرى بعد `{remaining_time}` دقيقة",
+            parse_mode='Markdown'
+        )
+        return
+    
+    # البحث عن الطلبات المعلقة للمستخدم
+    pending_orders = db.execute_query(
+        "SELECT id, created_at FROM orders WHERE user_id = ? AND status = 'pending'",
+        (user_id,)
+    )
+    
+    if not pending_orders:
+        await update.message.reply_text("لا توجد لديك طلبات معلقة حالياً.")
+        return
+    
+    # تحديث وقت آخر استخدام
+    context.user_data['last_reminder'] = current_time
+    
+    # إرسال تذكير للأدمن لكل طلب معلق
+    user = db.get_user(user_id)
+    
+    for order in pending_orders:
+        order_id = order[0]
+        await send_reminder_to_admin(context, order_id, user)
+    
+    await update.message.reply_text(
+        f"✅ تم إرسال تذكير للأدمن بخصوص `{len(pending_orders)}` طلب معلق",
+        parse_mode='Markdown'
+    )
+
+async def send_reminder_to_admin(context: ContextTypes.DEFAULT_TYPE, order_id: str, user: tuple) -> None:
+    """إرسال تذكير للأدمن"""
+    message = f"""🔔 تذكير بطلب معلق
+    
+👤 الاسم: `{user[2]} {user[3] or ''}`
+📱 اسم المستخدم: @{user[1] or 'غير محدد'}
+🆔 معرف المستخدم: `{user[0]}`
+
+💬 مرحباً، لدي طلب معلق بانتظار المعالجة
+
+🔗 معرف الطلب: `{order_id}`
+📅 الوقت: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+
+    keyboard = [[InlineKeyboardButton("🔧 معالجة الطلب", callback_data=f"process_{order_id}")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if ADMIN_CHAT_ID:
+        try:
+            await context.bot.send_message(
+                ADMIN_CHAT_ID,
+                message,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            print(f"خطأ في إرسال التذكير: {e}")
+
+async def confirm_database_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """تأكيد تفريغ قاعدة البيانات"""
+    keyboard = [
+        [InlineKeyboardButton("✅ نعم، تفريغ البيانات", callback_data="confirm_clear_db")],
+        [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_clear_db")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "⚠️ تحذير!\n\nهل أنت متأكد من تفريغ قاعدة البيانات؟\n\n🗑️ سيتم حذف:\n- جميع الطلبات\n- جميع الإحالات\n- جميع السجلات\n\n✅ سيتم الاحتفاظ ب:\n- بيانات المستخدمين\n- بيانات الأدمن\n- إعدادات النظام",
+        reply_markup=reply_markup
+    )
+
+async def handle_database_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة تفريغ قاعدة البيانات"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "confirm_clear_db":
+        try:
+            # حذف البيانات مع الاحتفاظ ببيانات المستخدمين والأدمن
+            db.execute_query("DELETE FROM orders")
+            db.execute_query("DELETE FROM referrals") 
+            db.execute_query("DELETE FROM logs")
+            
+            await query.edit_message_text(
+                "✅ تم تفريغ قاعدة البيانات بنجاح!\n\n🗑️ تم حذف:\n- جميع الطلبات\n- جميع الإحالات\n- جميع السجلات\n\n✅ تم الاحتفاظ ببيانات المستخدمين والإعدادات"
+            )
+        except Exception as e:
+            await query.edit_message_text(f"❌ خطأ في تفريغ قاعدة البيانات: {str(e)}")
+    
+    elif query.data == "cancel_clear_db":
+        await query.edit_message_text("❌ تم إلغاء عملية تفريغ قاعدة البيانات")
 
 def main() -> None:
     """الدالة الرئيسية"""
