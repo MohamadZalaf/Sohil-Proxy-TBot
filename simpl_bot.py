@@ -561,23 +561,14 @@ async def handle_static_proxy_request(update: Update, context: ContextTypes.DEFA
     user_id = update.effective_user.id
     language = get_user_language(user_id)
     
-    # إنشاء معرف الطلب
-    order_id = generate_order_id()
-    context.user_data['current_order_id'] = order_id
+    # حفظ نوع البروكسي فقط بدون إنشاء معرف الطلب
     context.user_data['proxy_type'] = 'static'
     
-    db.log_action(user_id, "static_proxy_request", order_id)
+    db.log_action(user_id, "static_proxy_request_started")
     
-    # عرض رسالة الحزمة
-    await update.message.reply_text(
-        MESSAGES[language]['static_package'].format(order_id)
-    )
-    
-    # إرسال معرف الطلب للمستخدم
-    await update.message.reply_text(
-        f"🆔 معرف طلبك: `{order_id}`\n\nيرجى الاحتفاظ بهذا المعرف للمراجعة المستقبلية.",
-        parse_mode='Markdown'
-    )
+    # عرض رسالة الحزمة بدون معرف الطلب
+    package_message = MESSAGES[language]['static_package'].replace('معرف الطلب: `{}`', 'سيتم إنشاء معرف الطلب بعد إرسال إثبات الدفع')
+    await update.message.reply_text(package_message)
     
     # عرض قائمة الدول للستاتيك
     keyboard = []
@@ -596,23 +587,14 @@ async def handle_socks_proxy_request(update: Update, context: ContextTypes.DEFAU
     user_id = update.effective_user.id
     language = get_user_language(user_id)
     
-    # إنشاء معرف الطلب
-    order_id = generate_order_id()
-    context.user_data['current_order_id'] = order_id
+    # حفظ نوع البروكسي فقط بدون إنشاء معرف الطلب
     context.user_data['proxy_type'] = 'socks'
     
-    db.log_action(user_id, "socks_proxy_request", order_id)
+    db.log_action(user_id, "socks_proxy_request_started")
     
-    # عرض رسالة الحزمة
-    await update.message.reply_text(
-        MESSAGES[language]['socks_package'].format(order_id)
-    )
-    
-    # إرسال معرف الطلب للمستخدم
-    await update.message.reply_text(
-        f"🆔 معرف طلبك: `{order_id}`\n\nيرجى الاحتفاظ بهذا المعرف للمراجعة المستقبلية.",
-        parse_mode='Markdown'
-    )
+    # عرض رسالة الحزمة بدون معرف الطلب
+    package_message = MESSAGES[language]['socks_package'].replace('معرف الطلب: `{}`', 'سيتم إنشاء معرف الطلب بعد إرسال إثبات الدفع')
+    await update.message.reply_text(package_message)
     
     # عرض قائمة الدول للسوكس (مع دول إضافية)
     keyboard = []
@@ -703,14 +685,6 @@ async def handle_payment_method_selection(update: Update, context: ContextTypes.
     payment_method = query.data.replace("payment_", "")
     context.user_data['payment_method'] = payment_method
     
-    # إنشاء الطلب في قاعدة البيانات
-    order_id = context.user_data['current_order_id']
-    proxy_type = context.user_data['proxy_type']
-    country = context.user_data.get('selected_country', 'manual')
-    state = context.user_data.get('selected_state', 'manual')
-    
-    db.create_order(order_id, user_id, proxy_type, country, state, payment_method)
-    
     await query.edit_message_text(MESSAGES[language]['send_payment_proof'])
     
     return PAYMENT_PROOF
@@ -719,7 +693,18 @@ async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYP
     """معالجة إثبات الدفع"""
     user_id = update.effective_user.id
     language = get_user_language(user_id)
-    order_id = context.user_data['current_order_id']
+    
+    # إنشاء معرف الطلب الآن فقط عند إرسال إثبات الدفع
+    order_id = generate_order_id()
+    context.user_data['current_order_id'] = order_id
+    
+    # إنشاء الطلب في قاعدة البيانات
+    proxy_type = context.user_data['proxy_type']
+    country = context.user_data.get('selected_country', 'manual')
+    state = context.user_data.get('selected_state', 'manual')
+    payment_method = context.user_data['payment_method']
+    
+    db.create_order(order_id, user_id, proxy_type, country, state, payment_method)
     
     # حفظ إثبات الدفع
     if update.message.photo:
@@ -1117,12 +1102,12 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     elif query.data.startswith("lang_"):
         await handle_language_change(update, context)
     elif query.data.startswith("process_"):
-        await handle_process_order(update, context)
+        return await handle_process_order(update, context)
     elif query.data in ["payment_success", "payment_failed"]:
         if query.data == "payment_success":
-            await handle_payment_success(update, context)
+            return await handle_payment_success(update, context)
         else:
-            await handle_payment_failed(update, context)
+            return await handle_payment_failed(update, context)
     elif query.data.startswith("proxy_type_"):
         await handle_proxy_details_input(update, context)
     elif query.data.startswith("admin_country_"):
@@ -1480,7 +1465,7 @@ python simpl_bot.py
     with open("README.md", "w", encoding="utf-8") as f:
         f.write(readme_content)
 
-async def handle_process_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_process_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة الطلب من قبل الأدمن"""
     query = update.callback_query
     await query.answer()
@@ -1498,6 +1483,8 @@ async def handle_process_order(update: Update, context: ContextTypes.DEFAULT_TYP
         "هل عملية الدفع ناجحة وحقيقية؟",
         reply_markup=reply_markup
     )
+    
+    return PROCESS_ORDER
 
 async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة نجاح الدفع والبدء في جمع معلومات البروكسي"""
@@ -1910,11 +1897,12 @@ async def handle_admin_settings_menu(update: Update, context: ContextTypes.DEFAU
         reply_markup=reply_markup
     )
 
-async def handle_admin_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_admin_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة استعلام عن مستخدم"""
     await update.message.reply_text(
         "🔍 استعلام عن مستخدم\n\nيرجى إرسال:\n- معرف المستخدم (رقم)\n- أو اسم المستخدم (@username)"
     )
+    return USER_LOOKUP
 
 async def return_to_user_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """العودة لوضع المستخدم العادي"""
@@ -2098,7 +2086,7 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         elif text == "⚙️ الإعدادات":
             await handle_admin_settings_menu(update, context)
         elif text == "🔍 استعلام عن مستخدم":
-            await handle_admin_user_lookup(update, context)
+            return await handle_admin_user_lookup(update, context)
         elif text == "🔙 عودة للمستخدم":
             await return_to_user_mode(update, context)
         
@@ -2585,6 +2573,47 @@ async def handle_database_clear(update: Update, context: ContextTypes.DEFAULT_TY
     
     elif query.data == "cancel_clear_db":
         await query.edit_message_text("❌ تم إلغاء عملية تفريغ قاعدة البيانات")
+
+
+async def show_user_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """عرض إحصائيات المستخدمين مرتبة حسب عدد الإحالات"""
+    stats_query = """
+        SELECT u.first_name, u.last_name, u.username, u.user_id,
+               COUNT(r.id) as referral_count, u.referral_balance
+        FROM users u
+        LEFT JOIN referrals r ON u.user_id = r.referrer_id
+        GROUP BY u.user_id
+        ORDER BY referral_count DESC
+        LIMIT 20
+    """
+    
+    users_stats = db.execute_query(stats_query)
+    
+    if not users_stats:
+        await update.message.reply_text("لا توجد إحصائيات متاحة")
+        return
+    
+    message = "📊 إحصائيات المستخدمين (مرتبة حسب الإحالات)
+
+"
+    
+    for i, user_stat in enumerate(users_stats, 1):
+        name = f"{user_stat[0]} {user_stat[1] or ''}"
+        username = f"@{user_stat[2]}" if user_stat[2] else "بدون معرف"
+        referral_count = user_stat[4]
+        balance = user_stat[5]
+        
+        message += f" {name}
+"
+        message += f"   👤 {username}
+"
+        message += f"   👥 الإحالات: 
+"
+        message += f"   💰 الرصيد: 
+
+"
+    
+    await update.message.reply_text(message, parse_mode='Markdown')
 
 def main() -> None:
     """الدالة الرئيسية"""
