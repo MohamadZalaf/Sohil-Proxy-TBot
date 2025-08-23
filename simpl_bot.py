@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 # الإعدادات الثابتة
 ADMIN_PASSWORD = "sohilSOHIL"
-TOKEN = ""  # ضع التوكن هنا
+TOKEN = "8408804784:AAG8cSTsDQfycDaXOX9YMmc_OB3wABez7LA"
 DATABASE_FILE = "proxy_bot.db"
 
 # حالات المحادثة
@@ -54,7 +54,7 @@ DATABASE_FILE = "proxy_bot.db"
     ENTER_THANK_MESSAGE, PAYMENT_PROOF, CUSTOM_MESSAGE,
     REFERRAL_AMOUNT, USER_LOOKUP, QUIET_HOURS, LANGUAGE_SELECTION,
     PAYMENT_METHOD_SELECTION
-) = range(17)
+) = range(18)
 
 # قواميس البيانات
 COUNTRIES = {
