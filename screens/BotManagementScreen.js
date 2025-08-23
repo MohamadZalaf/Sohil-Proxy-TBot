@@ -224,6 +224,15 @@ export default function BotManagementScreen() {
               إيقاف البوت
             </Button>
           </View>
+
+          <Button
+            mode="outlined"
+            onPress={() => TermuxBotService.showSetupGuide()}
+            style={styles.setupGuideButton}
+            icon="help-circle"
+          >
+            دليل إعداد Termux
+          </Button>
         </Card.Content>
       </Card>
 
@@ -517,5 +526,9 @@ const styles = StyleSheet.create({
   maintenanceButton: {
     flex: 1,
     marginHorizontal: 8,
+  },
+  setupGuideButton: {
+    marginTop: 12,
+    borderColor: '#2196F3',
   },
 });
