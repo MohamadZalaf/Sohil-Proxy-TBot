@@ -2667,6 +2667,18 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_withdrawal_success(update, context)
     elif query.data.startswith("withdrawal_failed_"):
         await handle_withdrawal_failed(update, context)
+    elif query.data == "cancel_user_lookup":
+        await handle_cancel_user_lookup(update, context)
+    elif query.data == "cancel_referral_amount":
+        await handle_cancel_referral_amount(update, context)
+    elif query.data == "cancel_order_inquiry":
+        await handle_cancel_order_inquiry(update, context)
+    elif query.data == "cancel_static_prices":
+        await handle_cancel_static_prices(update, context)
+    elif query.data == "cancel_socks_prices":
+        await handle_cancel_socks_prices(update, context)
+    elif query.data == "cancel_balance_reset":
+        await handle_cancel_balance_reset(update, context)
 
     else:
         await query.answer("قيد التطوير...")
@@ -3414,10 +3426,19 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
         # معالجة النص المدخل
         text = update.message.text
         
-        # التحقق من زر الإلغاء
+        # التحقق من زر الإلغاء (لم يعد مستخدماً نظراً لتحويله لـ inline)
         if text == "❌ إلغاء":
             context.user_data.clear()
-            await update.message.reply_text("❌ تم إلغاء العملية.", reply_markup=ReplyKeyboardRemove())
+            # إعادة تفعيل كيبورد الأدمن
+            keyboard = [
+                [KeyboardButton("📋 إدارة الطلبات")],
+                [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+                [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+                [KeyboardButton("⚙️ الإعدادات")],
+                [KeyboardButton("🚪 تسجيل الخروج")]
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            await update.message.reply_text("❌ تم إلغاء العملية.", reply_markup=reply_markup)
             return ConversationHandler.END
         
         current_state = context.user_data.get('admin_input_state', ENTER_PROXY_ADDRESS)
@@ -3657,7 +3678,16 @@ async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # التحقق من زر الإلغاء
     if search_term == "❌ إلغاء":
-        await update.message.reply_text("❌ تم إلغاء البحث عن المستخدم.", reply_markup=ReplyKeyboardRemove())
+        # إعادة تفعيل كيبورد الأدمن
+        keyboard = [
+            [KeyboardButton("📋 إدارة الطلبات")],
+            [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+            [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+            [KeyboardButton("⚙️ الإعدادات")],
+            [KeyboardButton("🚪 تسجيل الخروج")]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text("❌ تم إلغاء البحث عن المستخدم.", reply_markup=reply_markup)
         return ConversationHandler.END
     
     # البحث بالمعرف أو اسم المستخدم
@@ -3671,11 +3701,29 @@ async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE)
             query = "SELECT * FROM users WHERE user_id = ?"
             user_result = db.execute_query(query, (user_id,))
         except ValueError:
-            await update.message.reply_text("معرف المستخدم غير صحيح!", reply_markup=ReplyKeyboardRemove())
+            # إعادة تفعيل كيبورد الأدمن
+            keyboard = [
+                [KeyboardButton("📋 إدارة الطلبات")],
+                [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+                [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+                [KeyboardButton("⚙️ الإعدادات")],
+                [KeyboardButton("🚪 تسجيل الخروج")]
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            await update.message.reply_text("معرف المستخدم غير صحيح!", reply_markup=reply_markup)
             return ConversationHandler.END
     
     if not user_result:
-        await update.message.reply_text("المستخدم غير موجود!", reply_markup=ReplyKeyboardRemove())
+        # إعادة تفعيل كيبورد الأدمن
+        keyboard = [
+            [KeyboardButton("📋 إدارة الطلبات")],
+            [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+            [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+            [KeyboardButton("⚙️ الإعدادات")],
+            [KeyboardButton("🚪 تسجيل الخروج")]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text("المستخدم غير موجود!", reply_markup=reply_markup)
         return ConversationHandler.END
     
     user = user_result[0]
@@ -3746,7 +3794,16 @@ async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE)
 🔍 تفاصيل الطلبات بحسب الحالة:
 {chr(10).join([f"📌 {status}: {count} طلب - {amount or 0:.2f}$" for status, count, amount in orders_by_status]) if orders_by_status else "لا توجد طلبات"}"""
     
-    await update.message.reply_text(report, reply_markup=ReplyKeyboardRemove())
+    # إعادة تفعيل كيبورد الأدمن
+    keyboard = [
+        [KeyboardButton("📋 إدارة الطلبات")],
+        [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+        [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+        [KeyboardButton("⚙️ الإعدادات")],
+        [KeyboardButton("🚪 تسجيل الخروج")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    await update.message.reply_text(report, reply_markup=reply_markup)
     return ConversationHandler.END
 
 async def handle_user_lookup_unified(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -3821,8 +3878,8 @@ async def handle_admin_settings_menu(update: Update, context: ContextTypes.DEFAU
 
 async def handle_admin_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة استعلام عن مستخدم"""
-    keyboard = [[KeyboardButton("❌ إلغاء")]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_lookup")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
         "🔍 استعلام عن مستخدم\n\nيرجى إرسال:\n- معرف المستخدم (رقم)\n- أو اسم المستخدم (@username)",
         reply_markup=reply_markup
@@ -4105,8 +4162,8 @@ async def manage_prices_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def set_referral_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """تحديد قيمة الإحالة"""
-    keyboard = [[KeyboardButton("❌ إلغاء")]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_referral_amount")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
         "💵 تحديد قيمة الإحالة الواحدة\n\nيرجى إرسال قيمة الإحالة بالدولار (مثال: `0.1`):",
         parse_mode='Markdown',
@@ -4116,9 +4173,18 @@ async def set_referral_amount(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def handle_referral_amount_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة تحديث قيمة الإحالة"""
-    # التحقق من زر الإلغاء
+    # التحقق من زر الإلغاء (لم يعد مستخدماً لأنه تم تحويله لـ inline)
     if update.message.text == "❌ إلغاء":
-        await update.message.reply_text("❌ تم إلغاء تحديث قيمة الإحالة.", reply_markup=ReplyKeyboardRemove())
+        # إعادة تفعيل كيبورد الأدمن
+        keyboard = [
+            [KeyboardButton("📋 إدارة الطلبات")],
+            [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+            [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+            [KeyboardButton("⚙️ الإعدادات")],
+            [KeyboardButton("🚪 تسجيل الخروج")]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text("❌ تم إلغاء تحديث قيمة الإحالة.", reply_markup=reply_markup)
         return ConversationHandler.END
     
     try:
@@ -4136,8 +4202,8 @@ async def handle_referral_amount_update(update: Update, context: ContextTypes.DE
         await broadcast_referral_update(context, amount)
         
     except ValueError:
-        keyboard = [[KeyboardButton("❌ إلغاء")]]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_referral_amount")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("❌ يرجى إرسال رقم صحيح!", reply_markup=reply_markup)
         return REFERRAL_AMOUNT
     
@@ -4290,8 +4356,8 @@ async def admin_signout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def admin_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """الاستعلام عن طلب"""
-    keyboard = [[KeyboardButton("❌ إلغاء")]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_order_inquiry")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
         "🔍 الاستعلام عن طلب\n\nيرجى إرسال معرف الطلب (`16` خانة):",
         parse_mode='Markdown',
@@ -4303,15 +4369,24 @@ async def handle_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYP
     """معالجة الاستعلام عن طلب"""
     order_id = update.message.text.strip()
     
-    # التحقق من زر الإلغاء
+    # التحقق من زر الإلغاء (لم يعد مستخدماً لأنه تم تحويله لـ inline)
     if order_id == "❌ إلغاء":
-        await update.message.reply_text("❌ تم إلغاء الاستعلام عن الطلب.", reply_markup=ReplyKeyboardRemove())
+        # إعادة تفعيل كيبورد الأدمن
+        keyboard = [
+            [KeyboardButton("📋 إدارة الطلبات")],
+            [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+            [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+            [KeyboardButton("⚙️ الإعدادات")],
+            [KeyboardButton("🚪 تسجيل الخروج")]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text("❌ تم إلغاء الاستعلام عن الطلب.", reply_markup=reply_markup)
         return ConversationHandler.END
     
     # التحقق من صحة معرف الطلب
     if len(order_id) != 16:
-        keyboard = [[KeyboardButton("❌ إلغاء")]]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_order_inquiry")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
             "❌ معرف الطلب يجب أن يكون `16` خانة\n\nيرجى إعادة إدخال معرف الطلب:", 
             parse_mode='Markdown',
@@ -4329,7 +4404,16 @@ async def handle_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYP
     result = db.execute_query(query, (order_id,))
     
     if not result:
-        await update.message.reply_text(f"❌ لم يتم العثور على طلب بالمعرف: `{order_id}`", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
+        # إعادة تفعيل كيبورد الأدمن
+        keyboard = [
+            [KeyboardButton("📋 إدارة الطلبات")],
+            [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+            [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+            [KeyboardButton("⚙️ الإعدادات")],
+            [KeyboardButton("🚪 تسجيل الخروج")]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text(f"❌ لم يتم العثور على طلب بالمعرف: `{order_id}`", parse_mode='Markdown', reply_markup=reply_markup)
         return ConversationHandler.END
     
     order = result[0]
@@ -4411,8 +4495,8 @@ async def resend_order_notification(update: Update, context: ContextTypes.DEFAUL
 
 async def set_static_prices(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """تحديد أسعار الستاتيك"""
-    keyboard = [[KeyboardButton("❌ إلغاء")]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_static_prices")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
         "💰 تعديل أسعار البروكسي الستاتيك\n\nيرجى إرسال الأسعار بالتنسيق التالي:\n`ISP:3,Verizon:4,ATT:6`\n\nأو إرسال سعر واحد فقط مثل: `5`",
         parse_mode='Markdown',
@@ -4422,8 +4506,8 @@ async def set_static_prices(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def set_socks_prices(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """تحديد أسعار السوكس"""
-    keyboard = [[KeyboardButton("❌ إلغاء")]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_socks_prices")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
         "💰 تعديل أسعار بروكسي السوكس\n\nيرجى إرسال الأسعار بالتنسيق التالي:\n`5proxy:0.4,10proxy:0.7`\n\nأو إرسال سعر واحد فقط مثل: `0.5`",
         parse_mode='Markdown',
@@ -4435,9 +4519,18 @@ async def handle_static_price_update(update: Update, context: ContextTypes.DEFAU
     """معالجة تحديث أسعار الستاتيك"""
     prices_text = update.message.text
     
-    # التحقق من زر الإلغاء
+    # التحقق من زر الإلغاء (لم يعد مستخدماً لأنه تم تحويله لـ inline)
     if prices_text == "❌ إلغاء":
-        await update.message.reply_text("❌ تم إلغاء تعديل أسعار الستاتيك.", reply_markup=ReplyKeyboardRemove())
+        # إعادة تفعيل كيبورد الأدمن
+        keyboard = [
+            [KeyboardButton("📋 إدارة الطلبات")],
+            [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+            [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+            [KeyboardButton("⚙️ الإعدادات")],
+            [KeyboardButton("🚪 تسجيل الخروج")]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text("❌ تم إلغاء تعديل أسعار الستاتيك.", reply_markup=reply_markup)
         return ConversationHandler.END
     
     try:
@@ -4589,9 +4682,18 @@ async def handle_socks_price_update(update: Update, context: ContextTypes.DEFAUL
     """معالجة تحديث أسعار السوكس"""
     prices_text = update.message.text
     
-    # التحقق من زر الإلغاء
+    # التحقق من زر الإلغاء (لم يعد مستخدماً لأنه تم تحويله لـ inline)
     if prices_text == "❌ إلغاء":
-        await update.message.reply_text("❌ تم إلغاء تعديل أسعار السوكس.", reply_markup=ReplyKeyboardRemove())
+        # إعادة تفعيل كيبورد الأدمن
+        keyboard = [
+            [KeyboardButton("📋 إدارة الطلبات")],
+            [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+            [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+            [KeyboardButton("⚙️ الإعدادات")],
+            [KeyboardButton("🚪 تسجيل الخروج")]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text("❌ تم إلغاء تعديل أسعار السوكس.", reply_markup=reply_markup)
         return ConversationHandler.END
     
     try:
@@ -4703,9 +4805,12 @@ Order ID: {{}}"""
 async def reset_user_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """تصفير رصيد مستخدم"""
     context.user_data['lookup_action'] = 'reset_balance'
+    keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_balance_reset")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
         "🗑️ تصفير رصيد مستخدم\n\nيرجى إرسال معرف المستخدم أو `@username`:",
-        parse_mode='Markdown'
+        parse_mode='Markdown',
+        reply_markup=reply_markup
     )
     return USER_LOOKUP
 
@@ -4724,11 +4829,29 @@ async def handle_balance_reset(update: Update, context: ContextTypes.DEFAULT_TYP
             query = "SELECT * FROM users WHERE user_id = ?"
             user_result = db.execute_query(query, (user_id,))
         except ValueError:
-            await update.message.reply_text("❌ معرف المستخدم غير صحيح!")
+            # إعادة تفعيل كيبورد الأدمن
+            keyboard = [
+                [KeyboardButton("📋 إدارة الطلبات")],
+                [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+                [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+                [KeyboardButton("⚙️ الإعدادات")],
+                [KeyboardButton("🚪 تسجيل الخروج")]
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            await update.message.reply_text("❌ معرف المستخدم غير صحيح!", reply_markup=reply_markup)
             return ConversationHandler.END
     
     if not user_result:
-        await update.message.reply_text("❌ المستخدم غير موجود!")
+        # إعادة تفعيل كيبورد الأدمن
+        keyboard = [
+            [KeyboardButton("📋 إدارة الطلبات")],
+            [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+            [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+            [KeyboardButton("⚙️ الإعدادات")],
+            [KeyboardButton("🚪 تسجيل الخروج")]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text("❌ المستخدم غير موجود!", reply_markup=reply_markup)
         return ConversationHandler.END
     
     user = user_result[0]
@@ -4738,12 +4861,22 @@ async def handle_balance_reset(update: Update, context: ContextTypes.DEFAULT_TYP
     # تصفير الرصيد
     db.execute_query("UPDATE users SET referral_balance = 0 WHERE user_id = ?", (user_id,))
     
+    # إعادة تفعيل كيبورد الأدمن
+    keyboard = [
+        [KeyboardButton("📋 إدارة الطلبات")],
+        [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+        [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+        [KeyboardButton("⚙️ الإعدادات")],
+        [KeyboardButton("🚪 تسجيل الخروج")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
         f"✅ تم تصفير رصيد المستخدم بنجاح!\n\n"
         f"👤 الاسم: `{user[2]} {user[3] or ''}`\n"
         f"💰 الرصيد السابق: `{old_balance:.2f}$`\n"
         f"💰 الرصيد الجديد: `0.00$`",
-        parse_mode='Markdown'
+        parse_mode='Markdown',
+        reply_markup=reply_markup
     )
     
     return ConversationHandler.END
@@ -4886,6 +5019,54 @@ async def handle_cancel_processing(update: Update, context: ContextTypes.DEFAULT
         
     else:
         await query.edit_message_text("❌ لم يتم العثور على طلب لإلغاء معالجته")
+
+async def handle_cancel_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إلغاء البحث عن مستخدم"""
+    query = update.callback_query
+    await query.answer()
+    
+    await query.edit_message_text("❌ تم إلغاء البحث عن المستخدم")
+    return ConversationHandler.END
+
+async def handle_cancel_referral_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إلغاء تحديد قيمة الإحالة"""
+    query = update.callback_query
+    await query.answer()
+    
+    await query.edit_message_text("❌ تم إلغاء تحديد قيمة الإحالة")
+    return ConversationHandler.END
+
+async def handle_cancel_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إلغاء الاستعلام عن طلب"""
+    query = update.callback_query
+    await query.answer()
+    
+    await query.edit_message_text("❌ تم إلغاء الاستعلام عن الطلب")
+    return ConversationHandler.END
+
+async def handle_cancel_static_prices(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إلغاء تعديل أسعار الستاتيك"""
+    query = update.callback_query
+    await query.answer()
+    
+    await query.edit_message_text("❌ تم إلغاء تعديل أسعار الستاتيك")
+    return ConversationHandler.END
+
+async def handle_cancel_socks_prices(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إلغاء تعديل أسعار السوكس"""
+    query = update.callback_query
+    await query.answer()
+    
+    await query.edit_message_text("❌ تم إلغاء تعديل أسعار السوكس")
+    return ConversationHandler.END
+
+async def handle_cancel_balance_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إلغاء تصفير الرصيد"""
+    query = update.callback_query
+    await query.answer()
+    
+    await query.edit_message_text("❌ تم إلغاء تصفير رصيد المستخدم")
+    return ConversationHandler.END
 
 
 async def show_user_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -5353,11 +5534,27 @@ def main() -> None:
             MessageHandler(filters.Regex("^🔕 ساعات الهدوء$"), set_quiet_hours)
         ],
         states={
-            USER_LOOKUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_lookup_unified)],
-            REFERRAL_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_referral_amount_update)],
-            SET_PRICE_STATIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_static_price_update)],
-            SET_PRICE_SOCKS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_socks_price_update)],
-            ADMIN_ORDER_INQUIRY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_order_inquiry)],
+            USER_LOOKUP: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_lookup_unified),
+                CallbackQueryHandler(handle_cancel_user_lookup, pattern="^cancel_user_lookup$"),
+                CallbackQueryHandler(handle_cancel_balance_reset, pattern="^cancel_balance_reset$")
+            ],
+            REFERRAL_AMOUNT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_referral_amount_update),
+                CallbackQueryHandler(handle_cancel_referral_amount, pattern="^cancel_referral_amount$")
+            ],
+            SET_PRICE_STATIC: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_static_price_update),
+                CallbackQueryHandler(handle_cancel_static_prices, pattern="^cancel_static_prices$")
+            ],
+            SET_PRICE_SOCKS: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_socks_price_update),
+                CallbackQueryHandler(handle_cancel_socks_prices, pattern="^cancel_socks_prices$")
+            ],
+            ADMIN_ORDER_INQUIRY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_order_inquiry),
+                CallbackQueryHandler(handle_cancel_order_inquiry, pattern="^cancel_order_inquiry$")
+            ],
             QUIET_HOURS: [CallbackQueryHandler(handle_quiet_hours_selection, pattern="^quiet_")]
         },
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
