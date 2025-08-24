@@ -1645,6 +1645,23 @@ def get_user_language(user_id: int) -> str:
     user = db.get_user(user_id)
     return user[4] if user else 'ar'  # اللغة في العمود الخامس
 
+async def restore_admin_keyboard(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message: str = "🔧 لوحة الأدمن جاهزة"):
+    """إعادة تفعيل كيبورد الأدمن الرئيسي"""
+    admin_keyboard = [
+        [KeyboardButton("📋 إدارة الطلبات")],
+        [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+        [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+        [KeyboardButton("⚙️ الإعدادات")],
+        [KeyboardButton("🚪 تسجيل الخروج")]
+    ]
+    admin_reply_markup = ReplyKeyboardMarkup(admin_keyboard, resize_keyboard=True)
+    
+    await context.bot.send_message(
+        chat_id,
+        message,
+        reply_markup=admin_reply_markup
+    )
+
 def generate_transaction_number(transaction_type: str) -> str:
     """توليد رقم معاملة جديد"""
     # الحصول على آخر رقم معاملة من نفس النوع
@@ -2883,7 +2900,11 @@ If you have any questions, please contact support:
         # تنظيف البيانات المؤقتة
         context.user_data.clear()
         
-        await query.edit_message_text(f"تم إشعار المستخدم برفض الطلب.\nمعرف الطلب: `{order_id}`\n\n⏰ سيتم حذف الطلب تلقائياً بعد 48 ساعة", parse_mode='Markdown')
+        await query.edit_message_text(f"✅ تم إشعار المستخدم برفض الطلب.\nمعرف الطلب: `{order_id}`\n\n⏰ سيتم حذف الطلب تلقائياً بعد 48 ساعة", parse_mode='Markdown')
+        
+        # إعادة تفعيل كيبورد الأدمن الرئيسي
+        await restore_admin_keyboard(context, update.effective_chat.id)
+        
         return ConversationHandler.END
 
 async def handle_custom_message_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -2932,7 +2953,12 @@ If you have any questions, please contact support:
     # تنظيف البيانات المؤقتة
     context.user_data.clear()
     
-    await update.message.reply_text(f"تم إرسال الرسالة المخصصة ورسالة فشل العملية للمستخدم.\nمعرف الطلب: {order_id}\n\n⏰ سيتم حذف الطلب تلقائياً بعد 48 ساعة")
+    await update.message.reply_text(
+        f"✅ تم إرسال الرسالة المخصصة ورسالة فشل العملية للمستخدم.\nمعرف الطلب: {order_id}\n\n⏰ سيتم حذف الطلب تلقائياً بعد 48 ساعة"
+    )
+    
+    # إعادة تفعيل كيبورد الأدمن الرئيسي
+    await restore_admin_keyboard(context, update.effective_chat.id)
     return ConversationHandler.END
 
 async def schedule_order_deletion(context: ContextTypes.DEFAULT_TYPE, order_id: str, user_id: int = None) -> None:
@@ -5158,6 +5184,10 @@ async def handle_cancel_custom_message(update: Update, context: ContextTypes.DEF
     context.user_data.clear()
     
     await query.edit_message_text("❌ تم إلغاء إرسال الرسالة المخصصة")
+    
+    # إعادة تفعيل كيبورد الأدمن الرئيسي
+    await restore_admin_keyboard(context, update.effective_chat.id)
+    
     return ConversationHandler.END
 
 async def handle_cancel_proxy_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
