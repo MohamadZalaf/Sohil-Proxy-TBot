@@ -1739,6 +1739,7 @@ async def change_admin_password(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def handle_password_change(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة تغيير كلمة المرور"""
+    global ADMIN_PASSWORD
     step = context.user_data.get('password_change_step', 'current')
     user_language = get_user_language(update.effective_user.id)
     
@@ -1761,7 +1762,6 @@ async def handle_password_change(update: Update, context: ContextTypes.DEFAULT_T
     
     elif step == 'new':
         # تحديث كلمة المرور
-        global ADMIN_PASSWORD
         new_password = update.message.text
         ADMIN_PASSWORD = new_password
         
@@ -1872,6 +1872,7 @@ async def admin_login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 async def handle_admin_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """التحقق من كلمة مرور الأدمن"""
+    global ADMIN_PASSWORD
     if update.message.text == ADMIN_PASSWORD:
         global ADMIN_CHAT_ID
         context.user_data['is_admin'] = True
