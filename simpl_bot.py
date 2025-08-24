@@ -893,8 +893,8 @@ async def handle_admin_password(update: Update, context: ContextTypes.DEFAULT_TY
         keyboard = [
             [KeyboardButton("📋 إدارة الطلبات")],
             [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
-            [KeyboardButton("⚙️ الإعدادات"), KeyboardButton("🔍 استعلام عن مستخدم")],
-            [KeyboardButton("🔙 عودة للمستخدم")]
+            [KeyboardButton("📢 البث"), KeyboardButton("⚙️ الإعدادات")],
+            [KeyboardButton("🔍 استعلام عن مستخدم"), KeyboardButton("🔙 عودة للمستخدم")]
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         
@@ -1479,10 +1479,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_quiet_hours_selection(update, context)
     elif query.data in ["confirm_clear_db", "cancel_clear_db"]:
         await handle_database_clear(update, context)
-    elif query.data in ["broadcast_all", "broadcast_custom"]:
-        return await handle_broadcast_selection(update, context)
-    elif query.data in ["confirm_broadcast", "cancel_broadcast"]:
-        return await handle_broadcast_confirmation(update, context)
+
     else:
         await query.answer("قيد التطوير...")
 
@@ -2648,8 +2645,6 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             await show_user_statistics(update, context)
         elif text == "🗑️ تصفير رصيد مستخدم":
             return await reset_user_balance(update, context)
-        elif text == "📢 البث" or text == "📢 Broadcast":
-            await show_broadcast_menu(update, context)
         
         # إعدادات الأدمن
         elif text == "🌐 تغيير اللغة":
@@ -3469,6 +3464,28 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
     
     return ConversationHandler.END
 
+async def handle_broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """بدء عملية البث"""
+    # التحقق من صلاحيات الأدمن
+    if not context.user_data.get('is_admin', False):
+        await update.message.reply_text("❌ هذه الخدمة مخصصة للأدمن فقط!")
+        return ConversationHandler.END
+    
+    keyboard = [
+        [InlineKeyboardButton("📢 إرسال للجميع", callback_data="broadcast_all")],
+        [InlineKeyboardButton("👥 إرسال لمستخدمين مخصصين", callback_data="broadcast_custom")],
+        [InlineKeyboardButton("🔙 العودة", callback_data="back_to_admin")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "📢 **قائمة البث**\n\nاختر نوع الإرسال:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+    
+    return BROADCAST_MESSAGE  # الانتقال لحالة انتظار اختيار نوع البث
+
 def main() -> None:
     """الدالة الرئيسية"""
     if not TOKEN:
@@ -3511,9 +3528,6 @@ def main() -> None:
             SET_PRICE_STATIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_static_price_update)],
             SET_PRICE_SOCKS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_socks_price_update)],
             ADMIN_ORDER_INQUIRY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_order_inquiry)],
-            BROADCAST_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_message)],
-            BROADCAST_USERS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_users)],
-            BROADCAST_CONFIRM: [CallbackQueryHandler(handle_broadcast_confirmation, pattern="^(confirm_broadcast|cancel_broadcast)$")],
             QUIET_HOURS: [CallbackQueryHandler(handle_quiet_hours_selection, pattern="^quiet_")]
         },
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
@@ -3528,10 +3542,27 @@ def main() -> None:
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
     )
     
+    # معالج البث
+    broadcast_conv_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex("^📢 البث$") | filters.Regex("^📢 Broadcast$"), handle_broadcast_start)
+        ],
+        states={
+            BROADCAST_MESSAGE: [
+                CallbackQueryHandler(handle_broadcast_selection, pattern="^(broadcast_all|broadcast_custom)$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_message)
+            ],
+            BROADCAST_USERS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_users)],
+            BROADCAST_CONFIRM: [CallbackQueryHandler(handle_broadcast_confirmation, pattern="^(confirm_broadcast|cancel_broadcast)$")],
+        },
+        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+    )
+
     # إضافة المعالجات
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("admin_signout", admin_signout))
     application.add_handler(admin_conv_handler)
+    application.add_handler(broadcast_conv_handler)
     application.add_handler(payment_conv_handler)
     application.add_handler(CallbackQueryHandler(handle_callback_query))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
