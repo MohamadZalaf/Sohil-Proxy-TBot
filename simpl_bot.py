@@ -1250,7 +1250,10 @@ async def handle_custom_message_choice(update: Update, context: ContextTypes.DEF
                 MESSAGES[user_language]['order_failed']
             )
         
-        await query.edit_message_text(f"تم إشعار المستخدم برفض الطلب.\nمعرف الطلب: `{order_id}`", parse_mode='Markdown')
+        # جدولة حذف الطلب بعد 48 ساعة
+        await schedule_order_deletion(context, order_id, user_id if user_result else None)
+        
+        await query.edit_message_text(f"تم إشعار المستخدم برفض الطلب.\nمعرف الطلب: `{order_id}`\n\n⏰ سيتم حذف الطلب تلقائياً بعد 48 ساعة", parse_mode='Markdown')
         return ConversationHandler.END
 
 async def handle_custom_message_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1265,9 +1268,43 @@ async def handle_custom_message_input(update: Update, context: ContextTypes.DEFA
     if user_result:
         user_id = user_result[0][0]
         await context.bot.send_message(user_id, custom_message)
+        
+        # جدولة حذف الطلب بعد 48 ساعة
+        await schedule_order_deletion(context, order_id, user_id)
     
-    await update.message.reply_text(f"تم إرسال الرسالة المخصصة للمستخدم.\nمعرف الطلب: {order_id}")
+    await update.message.reply_text(f"تم إرسال الرسالة المخصصة للمستخدم.\nمعرف الطلب: {order_id}\n\n⏰ سيتم حذف الطلب تلقائياً بعد 48 ساعة")
     return ConversationHandler.END
+
+async def schedule_order_deletion(context: ContextTypes.DEFAULT_TYPE, order_id: str, user_id: int = None) -> None:
+    """جدولة حذف الطلب بعد 48 ساعة"""
+    import asyncio
+    
+    async def delete_after_48_hours():
+        # انتظار 48 ساعة (48 * 60 * 60 ثانية)
+        await asyncio.sleep(48 * 60 * 60)
+        
+        try:
+            # حذف الطلب من قاعدة البيانات
+            db.execute_query("DELETE FROM orders WHERE id = ? AND status = 'failed'", (order_id,))
+            
+            # إشعار المستخدم بانتهاء صلاحية الطلب
+            if user_id:
+                user_language = get_user_language(user_id)
+                failure_message = {
+                    'ar': f"⏰ انتهت صلاحية الطلب `{order_id}` وتم حذفه من النظام.\n\n💡 يمكنك إنشاء طلب جديد في أي وقت.",
+                    'en': f"⏰ Order `{order_id}` has expired and been deleted from the system.\n\n💡 You can create a new order anytime."
+                }
+                
+                await context.bot.send_message(
+                    user_id,
+                    failure_message[user_language],
+                    parse_mode='Markdown'
+                )
+        except Exception as e:
+            logger.error(f"Error deleting expired order {order_id}: {e}")
+    
+    # تشغيل المهمة في الخلفية
+    context.application.create_task(delete_after_48_hours())
 
 # إضافة المزيد من الوظائف المساعدة
 async def add_referral_bonus(user_id: int, referred_user_id: int) -> None:
@@ -1721,28 +1758,43 @@ async def send_proxy_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE,
     """إرسال تفاصيل البروكسي للمستخدم"""
     order_id = context.user_data['processing_order_id']
     
-    # الحصول على معرف المستخدم
-    user_query = "SELECT user_id FROM orders WHERE id = ?"
+    # الحصول على معلومات المستخدم والطلب
+    user_query = """
+        SELECT o.user_id, u.first_name, u.last_name 
+        FROM orders o 
+        JOIN users u ON o.user_id = u.user_id 
+        WHERE o.id = ?
+    """
     user_result = db.execute_query(user_query, (order_id,))
     
     if user_result:
-        user_id = user_result[0][0]
+        user_id, first_name, last_name = user_result[0]
+        user_full_name = f"{first_name} {last_name or ''}".strip()
         
-        # إنشاء رسالة البروكسي
-        proxy_message = f"""✅ تم تجهيز البروكسي الخاص بك
+        # الحصول على التاريخ والوقت الحاليين
+        from datetime import datetime
+        now = datetime.now()
+        current_date = now.strftime("%Y-%m-%d")
+        current_time = now.strftime("%H:%M:%S")
+        
+        # إنشاء رسالة البروكسي للمستخدم
+        proxy_message = f"""✅ تم معالجة طلب {user_full_name}
 
 🔐 تفاصيل البروكسي:
-📡 العنوان: {context.user_data['admin_proxy_address']}
-🔌 البورت: {context.user_data['admin_proxy_port']}
+📡 العنوان: `{context.user_data['admin_proxy_address']}`
+🔌 البورت: `{context.user_data['admin_proxy_port']}`
 🌍 الدولة: {context.user_data.get('admin_proxy_country', 'غير محدد')}
 🏠 الولاية: {context.user_data.get('admin_proxy_state', 'غير محدد')}
-👤 اسم المستخدم: {context.user_data['admin_proxy_username']}
-🔑 كلمة المرور: {context.user_data['admin_proxy_password']}
+👤 اسم المستخدم: `{context.user_data['admin_proxy_username']}`
+🔑 كلمة المرور: `{context.user_data['admin_proxy_password']}`
 
 ━━━━━━━━━━━━━━━
-💬 {thank_message}
+🆔 معرف الطلب: `{order_id}`
+📅 التاريخ: {current_date}
+🕐 الوقت: {current_time}
 
-معرف الطلب: {order_id}"""
+━━━━━━━━━━━━━━━
+💬 {thank_message}"""
         
         # إرسال البروكسي للمستخدم
         await context.bot.send_message(user_id, proxy_message, parse_mode='Markdown')
@@ -1770,7 +1822,25 @@ async def send_proxy_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE,
         )
         
         # رسالة تأكيد للأدمن
-        await update.message.reply_text(f"✅ تم إرسال البروكسي للمستخدم بنجاح!\nمعرف الطلب: `{order_id}`", parse_mode='Markdown')
+        admin_message = f"""✅ تم معالجة طلب {user_full_name}
+
+🔐 تفاصيل البروكسي المرسلة:
+📡 العنوان: `{context.user_data['admin_proxy_address']}`
+🔌 البورت: `{context.user_data['admin_proxy_port']}`
+🌍 الدولة: {context.user_data.get('admin_proxy_country', 'غير محدد')}
+🏠 الولاية: {context.user_data.get('admin_proxy_state', 'غير محدد')}
+👤 اسم المستخدم: `{context.user_data['admin_proxy_username']}`
+🔑 كلمة المرور: `{context.user_data['admin_proxy_password']}`
+
+━━━━━━━━━━━━━━━
+🆔 معرف الطلب: `{order_id}`
+📅 التاريخ: {current_date}
+🕐 الوقت: {current_time}
+
+━━━━━━━━━━━━━━━
+💬 {thank_message}"""
+
+        await update.message.reply_text(admin_message, parse_mode='Markdown')
         
         # تنظيف البيانات المؤقتة
         admin_keys = [k for k in context.user_data.keys() if k.startswith('admin_')]
