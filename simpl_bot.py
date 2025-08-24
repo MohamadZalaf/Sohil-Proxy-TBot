@@ -1607,6 +1607,7 @@ async def handle_admin_menu_actions(update: Update, context: ContextTypes.DEFAUL
         await show_admin_referrals(query, context)
     
     elif query.data == "user_lookup":
+        context.user_data['lookup_action'] = 'lookup'
         await query.edit_message_text("يرجى إرسال معرف المستخدم أو @username للبحث:")
         return USER_LOOKUP
 
@@ -1837,6 +1838,16 @@ async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     await update.message.reply_text(report)
     return ConversationHandler.END
+
+async def handle_user_lookup_unified(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالج موحد للبحث عن المستخدمين وتصفير الرصيد"""
+    # التحقق من السياق لتحديد العملية المطلوبة
+    user_data_action = context.user_data.get('lookup_action', 'lookup')
+    
+    if user_data_action == 'reset_balance':
+        return await handle_balance_reset(update, context)
+    else:
+        return await handle_user_lookup(update, context)
 
 async def handle_admin_orders_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة قائمة إدارة الطلبات للأدمن"""
@@ -2425,6 +2436,7 @@ async def handle_socks_price_update(update: Update, context: ContextTypes.DEFAUL
 
 async def reset_user_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """تصفير رصيد مستخدم"""
+    context.user_data['lookup_action'] = 'reset_balance'
     await update.message.reply_text(
         "🗑️ تصفير رصيد مستخدم\n\nيرجى إرسال معرف المستخدم أو `@username`:",
         parse_mode='Markdown'
@@ -2593,9 +2605,7 @@ async def show_user_statistics(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("لا توجد إحصائيات متاحة")
         return
     
-    message = "📊 إحصائيات المستخدمين (مرتبة حسب الإحالات)
-
-"
+    message = "📊 إحصائيات المستخدمين (مرتبة حسب الإحالات)\n\n"
     
     for i, user_stat in enumerate(users_stats, 1):
         name = f"{user_stat[0]} {user_stat[1] or ''}"
@@ -2603,15 +2613,10 @@ async def show_user_statistics(update: Update, context: ContextTypes.DEFAULT_TYP
         referral_count = user_stat[4]
         balance = user_stat[5]
         
-        message += f" {name}
-"
-        message += f"   👤 {username}
-"
-        message += f"   👥 الإحالات: 
-"
-        message += f"   💰 الرصيد: 
-
-"
+        message += f"{i}. {name}\n"
+        message += f"   👤 {username}\n"
+        message += f"   👥 الإحالات: {referral_count}\n"
+        message += f"   💰 الرصيد: {balance:.2f}$\n\n"
     
     await update.message.reply_text(message, parse_mode='Markdown')
 
@@ -2652,10 +2657,7 @@ def main() -> None:
             ENTER_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
             ENTER_THANK_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
             CUSTOM_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input)],
-            USER_LOOKUP: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_lookup),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_balance_reset)
-            ],
+            USER_LOOKUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_lookup_unified)],
             REFERRAL_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_referral_amount_update)],
             SET_PRICE_STATIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_static_price_update)],
             SET_PRICE_SOCKS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_socks_price_update)],
