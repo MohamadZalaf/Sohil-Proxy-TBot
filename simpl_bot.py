@@ -3655,6 +3655,11 @@ async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """معالجة البحث عن مستخدم"""
     search_term = update.message.text
     
+    # التحقق من زر الإلغاء
+    if search_term == "❌ إلغاء":
+        await update.message.reply_text("❌ تم إلغاء البحث عن المستخدم.", reply_markup=ReplyKeyboardRemove())
+        return ConversationHandler.END
+    
     # البحث بالمعرف أو اسم المستخدم
     if search_term.startswith('@'):
         username = search_term[1:]
@@ -3666,11 +3671,11 @@ async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE)
             query = "SELECT * FROM users WHERE user_id = ?"
             user_result = db.execute_query(query, (user_id,))
         except ValueError:
-            await update.message.reply_text("معرف المستخدم غير صحيح!")
+            await update.message.reply_text("معرف المستخدم غير صحيح!", reply_markup=ReplyKeyboardRemove())
             return ConversationHandler.END
     
     if not user_result:
-        await update.message.reply_text("المستخدم غير موجود!")
+        await update.message.reply_text("المستخدم غير موجود!", reply_markup=ReplyKeyboardRemove())
         return ConversationHandler.END
     
     user = user_result[0]
@@ -3741,7 +3746,7 @@ async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE)
 🔍 تفاصيل الطلبات بحسب الحالة:
 {chr(10).join([f"📌 {status}: {count} طلب - {amount or 0:.2f}$" for status, count, amount in orders_by_status]) if orders_by_status else "لا توجد طلبات"}"""
     
-    await update.message.reply_text(report)
+    await update.message.reply_text(report, reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 async def handle_user_lookup_unified(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -3816,8 +3821,11 @@ async def handle_admin_settings_menu(update: Update, context: ContextTypes.DEFAU
 
 async def handle_admin_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة استعلام عن مستخدم"""
+    keyboard = [[KeyboardButton("❌ إلغاء")]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
-        "🔍 استعلام عن مستخدم\n\nيرجى إرسال:\n- معرف المستخدم (رقم)\n- أو اسم المستخدم (@username)"
+        "🔍 استعلام عن مستخدم\n\nيرجى إرسال:\n- معرف المستخدم (رقم)\n- أو اسم المستخدم (@username)",
+        reply_markup=reply_markup
     )
     return USER_LOOKUP
 
@@ -4097,14 +4105,22 @@ async def manage_prices_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def set_referral_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """تحديد قيمة الإحالة"""
+    keyboard = [[KeyboardButton("❌ إلغاء")]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
         "💵 تحديد قيمة الإحالة الواحدة\n\nيرجى إرسال قيمة الإحالة بالدولار (مثال: `0.1`):",
-        parse_mode='Markdown'
+        parse_mode='Markdown',
+        reply_markup=reply_markup
     )
     return REFERRAL_AMOUNT
 
 async def handle_referral_amount_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة تحديث قيمة الإحالة"""
+    # التحقق من زر الإلغاء
+    if update.message.text == "❌ إلغاء":
+        await update.message.reply_text("❌ تم إلغاء تحديث قيمة الإحالة.", reply_markup=ReplyKeyboardRemove())
+        return ConversationHandler.END
+    
     try:
         amount = float(update.message.text)
         
@@ -4114,13 +4130,15 @@ async def handle_referral_amount_update(update: Update, context: ContextTypes.DE
             ("referral_amount", str(amount))
         )
         
-        await update.message.reply_text(f"✅ تم تحديث قيمة الإحالة إلى `{amount}$`\n\n📢 سيتم إشعار جميع المستخدمين بالتحديث...", parse_mode='Markdown')
+        await update.message.reply_text(f"✅ تم تحديث قيمة الإحالة إلى `{amount}$`\n\n📢 سيتم إشعار جميع المستخدمين بالتحديث...", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
         
         # إشعار جميع المستخدمين بالتحديث
         await broadcast_referral_update(context, amount)
         
     except ValueError:
-        await update.message.reply_text("❌ يرجى إرسال رقم صحيح!")
+        keyboard = [[KeyboardButton("❌ إلغاء")]]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text("❌ يرجى إرسال رقم صحيح!", reply_markup=reply_markup)
         return REFERRAL_AMOUNT
     
     return ConversationHandler.END
@@ -4272,9 +4290,12 @@ async def admin_signout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def admin_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """الاستعلام عن طلب"""
+    keyboard = [[KeyboardButton("❌ إلغاء")]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
         "🔍 الاستعلام عن طلب\n\nيرجى إرسال معرف الطلب (`16` خانة):",
-        parse_mode='Markdown'
+        parse_mode='Markdown',
+        reply_markup=reply_markup
     )
     return ADMIN_ORDER_INQUIRY
 
@@ -4282,9 +4303,20 @@ async def handle_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYP
     """معالجة الاستعلام عن طلب"""
     order_id = update.message.text.strip()
     
+    # التحقق من زر الإلغاء
+    if order_id == "❌ إلغاء":
+        await update.message.reply_text("❌ تم إلغاء الاستعلام عن الطلب.", reply_markup=ReplyKeyboardRemove())
+        return ConversationHandler.END
+    
     # التحقق من صحة معرف الطلب
     if len(order_id) != 16:
-        await update.message.reply_text("❌ معرف الطلب يجب أن يكون `16` خانة", parse_mode='Markdown')
+        keyboard = [[KeyboardButton("❌ إلغاء")]]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text(
+            "❌ معرف الطلب يجب أن يكون `16` خانة\n\nيرجى إعادة إدخال معرف الطلب:", 
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
         return ADMIN_ORDER_INQUIRY
     
     # البحث عن الطلب
@@ -4297,7 +4329,7 @@ async def handle_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYP
     result = db.execute_query(query, (order_id,))
     
     if not result:
-        await update.message.reply_text(f"❌ لم يتم العثور على طلب بالمعرف: `{order_id}`", parse_mode='Markdown')
+        await update.message.reply_text(f"❌ لم يتم العثور على طلب بالمعرف: `{order_id}`", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
         return ConversationHandler.END
     
     order = result[0]
@@ -4306,12 +4338,12 @@ async def handle_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYP
     if status == 'pending':
         # إعادة إرسال الطلب مع إثبات الدفع
         await resend_order_notification(update, context, order)
-        await update.message.reply_text("✅ تم إعادة إرسال الطلب مع زر المعالجة")
+        await update.message.reply_text("✅ تم إعادة إرسال الطلب مع زر المعالجة", reply_markup=ReplyKeyboardRemove())
     elif status == 'completed':
         processed_date = order[10] if order[10] else "غير محدد"
-        await update.message.reply_text(f"ℹ️ الطلب `{order_id}` تم معالجته بالفعل\n📅 تاريخ المعالجة: {processed_date}", parse_mode='Markdown')
+        await update.message.reply_text(f"ℹ️ الطلب `{order_id}` تم معالجته بالفعل\n📅 تاريخ المعالجة: {processed_date}", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
     elif status == 'failed':
-        await update.message.reply_text(f"ℹ️ الطلب `{order_id}` فشل ولم يتم معالجته", parse_mode='Markdown')
+        await update.message.reply_text(f"ℹ️ الطلب `{order_id}` فشل ولم يتم معالجته", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
     
     return ConversationHandler.END
 
@@ -4379,23 +4411,34 @@ async def resend_order_notification(update: Update, context: ContextTypes.DEFAUL
 
 async def set_static_prices(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """تحديد أسعار الستاتيك"""
+    keyboard = [[KeyboardButton("❌ إلغاء")]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
         "💰 تعديل أسعار البروكسي الستاتيك\n\nيرجى إرسال الأسعار بالتنسيق التالي:\n`ISP:3,Verizon:4,ATT:6`\n\nأو إرسال سعر واحد فقط مثل: `5`",
-        parse_mode='Markdown'
+        parse_mode='Markdown',
+        reply_markup=reply_markup
     )
     return SET_PRICE_STATIC
 
 async def set_socks_prices(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """تحديد أسعار السوكس"""
+    keyboard = [[KeyboardButton("❌ إلغاء")]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
         "💰 تعديل أسعار بروكسي السوكس\n\nيرجى إرسال الأسعار بالتنسيق التالي:\n`5proxy:0.4,10proxy:0.7`\n\nأو إرسال سعر واحد فقط مثل: `0.5`",
-        parse_mode='Markdown'
+        parse_mode='Markdown',
+        reply_markup=reply_markup
     )
     return SET_PRICE_SOCKS
 
 async def handle_static_price_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة تحديث أسعار الستاتيك"""
     prices_text = update.message.text
+    
+    # التحقق من زر الإلغاء
+    if prices_text == "❌ إلغاء":
+        await update.message.reply_text("❌ تم إلغاء تعديل أسعار الستاتيك.", reply_markup=ReplyKeyboardRemove())
+        return ConversationHandler.END
     
     try:
         # تحليل الأسعار الجديدة
@@ -4545,6 +4588,11 @@ async def broadcast_price_update(context: ContextTypes.DEFAULT_TYPE, proxy_type:
 async def handle_socks_price_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة تحديث أسعار السوكس"""
     prices_text = update.message.text
+    
+    # التحقق من زر الإلغاء
+    if prices_text == "❌ إلغاء":
+        await update.message.reply_text("❌ تم إلغاء تعديل أسعار السوكس.", reply_markup=ReplyKeyboardRemove())
+        return ConversationHandler.END
     
     try:
         # تحليل الأسعار الجديدة
