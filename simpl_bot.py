@@ -59,8 +59,9 @@ ADMIN_CHAT_ID = None  # سيتم تحديده عند أول تسجيل دخول 
     ENTER_THANK_MESSAGE, PAYMENT_PROOF, CUSTOM_MESSAGE,
     REFERRAL_AMOUNT, USER_LOOKUP, QUIET_HOURS, LANGUAGE_SELECTION,
     PAYMENT_METHOD_SELECTION, WITHDRAWAL_REQUEST, SET_PRICE_STATIC,
-    SET_PRICE_SOCKS, ADMIN_ORDER_INQUIRY
-) = range(22)
+    SET_PRICE_SOCKS, ADMIN_ORDER_INQUIRY, BROADCAST_MESSAGE,
+    BROADCAST_USERS, BROADCAST_CONFIRM
+) = range(25)
 
 # قواميس البيانات
 STATIC_COUNTRIES = {
@@ -562,7 +563,7 @@ sohilskaf123@gmail.com
         'send_payment_proof': 'يرجى إرسال إثبات الدفع (صورة أو نص):',
         'order_received': '✅ تم استلام طلبك بنجاح!\n\n📋 سيتم معالجة الطلب يدوياً من الأدمن بأقرب وقت.\n\n📧 ستصلك تحديثات الحالة تلقائياً.',
         'main_menu_buttons': ['🔒 طلب بروكسي ستاتيك', '🧦 طلب بروكسي سوكس', '👥 إحالاتي', '📋 تذكير بطلباتي', '⚙️ الإعدادات'],
-        'admin_main_buttons': ['📋 إدارة الطلبات', '💰 إدارة الأموال', '👥 الإحالات', '⚙️ الإعدادات'],
+        'admin_main_buttons': ['📋 إدارة الطلبات', '💰 إدارة الأموال', '👥 الإحالات', '📢 البث', '⚙️ الإعدادات'],
         'language_change_success': 'تم تغيير اللغة إلى العربية ✅\nيرجى استخدام الأمر /start لإعادة تحميل القوائم',
         'admin_panel': '🔧 لوحة الأدمن',
         'manage_orders': 'إدارة الطلبات',
@@ -650,7 +651,7 @@ Order ID: {}""",
         'send_payment_proof': 'Please send payment proof (image or text):',
         'order_received': '✅ Your order has been received successfully!\n\n📋 Admin will process it manually soon.\n\n📧 You will receive status updates automatically.',
         'main_menu_buttons': ['🔒 Request Static Proxy', '🧦 Request Socks Proxy', '👥 My Referrals', '📋 Order Reminder', '⚙️ Settings'],
-        'admin_main_buttons': ['📋 Manage Orders', '💰 Manage Money', '👥 Referrals', '⚙️ Settings'],
+        'admin_main_buttons': ['📋 Manage Orders', '💰 Manage Money', '👥 Referrals', '📢 Broadcast', '⚙️ Settings'],
         'language_change_success': 'Language changed to English ✅\nPlease use /start command to reload menus',
         'admin_panel': '🔧 Admin Panel',
         'manage_orders': 'Manage Orders',
@@ -1468,10 +1469,20 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_withdrawal_request(update, context)
     elif query.data in ["send_custom_message", "no_custom_message"]:
         await handle_custom_message_choice(update, context)
+    elif query.data == "send_proxy_confirm":
+        thank_message = context.user_data.get('admin_thank_message', '')
+        await send_proxy_to_user(update, context, thank_message)
+        await query.edit_message_text("✅ تم إرسال البروكسي للمستخدم بنجاح!")
+    elif query.data == "cancel_proxy_send":
+        await query.edit_message_text("❌ تم إلغاء إرسال البروكسي. يمكنك البدء من جديد إذا أردت.")
     elif query.data.startswith("quiet_"):
         await handle_quiet_hours_selection(update, context)
     elif query.data in ["confirm_clear_db", "cancel_clear_db"]:
         await handle_database_clear(update, context)
+    elif query.data in ["broadcast_all", "broadcast_custom"]:
+        return await handle_broadcast_selection(update, context)
+    elif query.data in ["confirm_broadcast", "cancel_broadcast"]:
+        return await handle_broadcast_confirmation(update, context)
     else:
         await query.answer("قيد التطوير...")
 
@@ -2171,14 +2182,15 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
         
         elif current_state == ENTER_THANK_MESSAGE:
             thank_message = text
+            context.user_data['admin_thank_message'] = thank_message
             
-            # إرسال البروكسي للمستخدم
-            await send_proxy_to_user(update, context, thank_message)
-            return ConversationHandler.END
+            # عرض المعلومات للمراجعة قبل الإرسال
+            await show_proxy_preview(update, context)
+            return ENTER_THANK_MESSAGE
     
     return current_state
 
-async def send_proxy_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE, thank_message: str) -> None:
+async def send_proxy_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE, thank_message: str = None) -> None:
     """إرسال تفاصيل البروكسي للمستخدم"""
     order_id = context.user_data['processing_order_id']
     
@@ -2636,6 +2648,8 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             await show_user_statistics(update, context)
         elif text == "🗑️ تصفير رصيد مستخدم":
             return await reset_user_balance(update, context)
+        elif text == "📢 البث" or text == "📢 Broadcast":
+            await show_broadcast_menu(update, context)
         
         # إعدادات الأدمن
         elif text == "🌐 تغيير اللغة":
@@ -3177,6 +3191,284 @@ def get_states_for_country(country_code):
     }
     return states_map.get(country_code, None)
 
+async def show_proxy_preview(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """عرض معاينة البروكسي للأدمن قبل الإرسال"""
+    order_id = context.user_data['processing_order_id']
+    
+    # الحصول على معلومات المستخدم والطلب
+    user_query = """
+        SELECT o.user_id, u.first_name, u.last_name, u.username
+        FROM orders o 
+        JOIN users u ON o.user_id = u.user_id 
+        WHERE o.id = ?
+    """
+    user_result = db.execute_query(user_query, (order_id,))
+    
+    if user_result:
+        user_id, first_name, last_name, username = user_result[0]
+        user_full_name = f"{first_name} {last_name or ''}".strip()
+        
+        # الحصول على التاريخ والوقت الحاليين
+        from datetime import datetime
+        now = datetime.now()
+        current_date = now.strftime("%Y-%m-%d")
+        current_time = now.strftime("%H:%M:%S")
+        
+        # إنشاء رسالة المعاينة
+        preview_message = f"""📋 مراجعة البروكسي قبل الإرسال
+
+👤 **المستخدم:**
+الاسم: {user_full_name}
+اسم المستخدم: @{username or 'غير محدد'}
+المعرف: `{user_id}`
+
+🔐 **تفاصيل البروكسي:**
+العنوان: `{context.user_data['admin_proxy_address']}`
+البورت: `{context.user_data['admin_proxy_port']}`
+الدولة: {context.user_data.get('admin_proxy_country', 'غير محدد')}
+الولاية: {context.user_data.get('admin_proxy_state', 'غير محدد')}
+اسم المستخدم: `{context.user_data['admin_proxy_username']}`
+كلمة المرور: `{context.user_data['admin_proxy_password']}`
+
+📅 **التاريخ والوقت:**
+التاريخ: {current_date}
+الوقت: {current_time}
+
+💬 **رسالة الشكر:**
+{context.user_data['admin_thank_message']}
+
+━━━━━━━━━━━━━━━
+🆔 معرف الطلب: `{order_id}`
+
+هل تريد إرسال هذه المعلومات للمستخدم؟"""
+
+        keyboard = [
+            [InlineKeyboardButton("✅ إرسال", callback_data="send_proxy_confirm")],
+            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_send")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(preview_message, reply_markup=reply_markup, parse_mode='Markdown')
+
+async def show_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """عرض قائمة البث"""
+    keyboard = [
+        [InlineKeyboardButton("📢 إرسال للجميع", callback_data="broadcast_all")],
+        [InlineKeyboardButton("👥 إرسال لمستخدمين مخصصين", callback_data="broadcast_custom")],
+        [InlineKeyboardButton("🔙 العودة", callback_data="back_to_admin")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "📢 **قائمة البث**\n\nاختر نوع الإرسال:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+async def handle_broadcast_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة اختيار نوع البث"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "broadcast_all":
+        context.user_data['broadcast_type'] = 'all'
+        await query.edit_message_text(
+            "📢 **إرسال إعلان للجميع**\n\nيرجى كتابة الرسالة التي تريد إرسالها لجميع المستخدمين:"
+        )
+        return BROADCAST_MESSAGE
+    
+    elif query.data == "broadcast_custom":
+        context.user_data['broadcast_type'] = 'custom'
+        await query.edit_message_text(
+            "👥 **إرسال لمستخدمين مخصصين**\n\nيرجى إدخال معرفات المستخدمين أو أسماء المستخدمين:\n\n"
+            "**الشكل المطلوب:**\n"
+            "• مستخدم واحد: `123456789` أو `@username`\n"
+            "• عدة مستخدمين: `123456789 - @user1 - 987654321`\n\n"
+            "⚠️ **ملاحظة:** استخدم ` - ` (مسافة قبل وبعد الشرطة) للفصل بين المستخدمين",
+            parse_mode='Markdown'
+        )
+        return BROADCAST_USERS
+    
+    return ConversationHandler.END
+
+async def handle_broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إدخال رسالة البث"""
+    message_text = update.message.text
+    context.user_data['broadcast_message'] = message_text
+    
+    broadcast_type = context.user_data.get('broadcast_type', 'all')
+    
+    if broadcast_type == 'all':
+        # عرض المعاينة للإرسال للجميع
+        user_count = db.execute_query("SELECT COUNT(*) FROM users")[0][0]
+        
+        preview_text = f"""📢 **معاينة الإعلان**
+
+👥 **المستقبلون:** جميع المستخدمين ({user_count} مستخدم)
+
+📝 **الرسالة:**
+{message_text}
+
+━━━━━━━━━━━━━━━
+هل تريد إرسال هذا الإعلان؟"""
+
+        keyboard = [
+            [InlineKeyboardButton("✅ إرسال", callback_data="confirm_broadcast")],
+            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_broadcast")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(preview_text, reply_markup=reply_markup, parse_mode='Markdown')
+        return BROADCAST_CONFIRM
+    
+    elif broadcast_type == 'custom':
+        # للمستخدمين المخصصين - استخدام handle_broadcast_custom_message
+        return await handle_broadcast_custom_message(update, context)
+    
+    return ConversationHandler.END
+
+async def handle_broadcast_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إدخال المستخدمين المخصصين"""
+    users_input = update.message.text
+    context.user_data['broadcast_users_input'] = users_input
+    
+    # تحليل المدخلات
+    users_list = [user.strip() for user in users_input.split(' - ')]
+    valid_users = []
+    invalid_users = []
+    
+    for user in users_list:
+        if user.startswith('@'):
+            # البحث باسم المستخدم
+            username = user[1:]
+            user_result = db.execute_query("SELECT user_id, first_name FROM users WHERE username = ?", (username,))
+            if user_result:
+                valid_users.append((user_result[0][0], user_result[0][1], user))
+            else:
+                invalid_users.append(user)
+        else:
+            try:
+                # البحث بالمعرف
+                user_id = int(user)
+                user_result = db.execute_query("SELECT first_name FROM users WHERE user_id = ?", (user_id,))
+                if user_result:
+                    valid_users.append((user_id, user_result[0][0], user))
+                else:
+                    invalid_users.append(user)
+            except ValueError:
+                invalid_users.append(user)
+    
+    context.user_data['broadcast_valid_users'] = valid_users
+    
+    if not valid_users:
+        await update.message.reply_text("❌ لم يتم العثور على أي مستخدم صحيح. يرجى المحاولة مرة أخرى.")
+        return BROADCAST_USERS
+    
+    # عرض قائمة المستخدمين الصحيحين والخاطئين
+    preview_text = f"👥 **المستخدمون المختارون:**\n\n"
+    
+    if valid_users:
+        preview_text += "✅ **مستخدمون صحيحون:**\n"
+        for user_id, name, original in valid_users:
+            preview_text += f"• {name} ({original})\n"
+    
+    if invalid_users:
+        preview_text += f"\n❌ **مستخدمون غير موجودون:**\n"
+        for user in invalid_users:
+            preview_text += f"• {user}\n"
+    
+    preview_text += f"\nيرجى كتابة الرسالة التي تريد إرسالها لـ {len(valid_users)} مستخدم:"
+    
+    await update.message.reply_text(preview_text, parse_mode='Markdown')
+    return BROADCAST_MESSAGE
+
+async def handle_broadcast_custom_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة رسالة البث للمستخدمين المخصصين"""
+    message_text = update.message.text
+    context.user_data['broadcast_message'] = message_text
+    
+    valid_users = context.user_data.get('broadcast_valid_users', [])
+    
+    # عرض المعاينة النهائية
+    preview_text = f"""📢 **معاينة الإعلان المخصص**
+
+👥 **المستقبلون:** {len(valid_users)} مستخدم
+
+📝 **الرسالة:**
+{message_text}
+
+━━━━━━━━━━━━━━━
+هل تريد إرسال هذا الإعلان؟"""
+
+    keyboard = [
+        [InlineKeyboardButton("✅ إرسال", callback_data="confirm_broadcast")],
+        [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_broadcast")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(preview_text, reply_markup=reply_markup, parse_mode='Markdown')
+    return BROADCAST_CONFIRM
+
+async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة تأكيد أو إلغاء البث"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "confirm_broadcast":
+        broadcast_type = context.user_data.get('broadcast_type', 'all')
+        message_text = context.user_data.get('broadcast_message', '')
+        
+        await query.edit_message_text("📤 جاري إرسال الإعلان...")
+        
+        success_count = 0
+        failed_count = 0
+        
+        if broadcast_type == 'all':
+            # إرسال للجميع
+            all_users = db.execute_query("SELECT user_id FROM users")
+            for user_tuple in all_users:
+                user_id = user_tuple[0]
+                try:
+                    await context.bot.send_message(user_id, f"📢 **إعلان هام**\n\n{message_text}", parse_mode='Markdown')
+                    success_count += 1
+                except Exception as e:
+                    failed_count += 1
+                    logger.error(f"Failed to send broadcast to {user_id}: {e}")
+        else:
+            # إرسال للمستخدمين المخصصين
+            valid_users = context.user_data.get('broadcast_valid_users', [])
+            for user_id, name, original in valid_users:
+                try:
+                    await context.bot.send_message(user_id, f"📢 **إعلان هام**\n\n{message_text}", parse_mode='Markdown')
+                    success_count += 1
+                except Exception as e:
+                    failed_count += 1
+                    logger.error(f"Failed to send broadcast to {user_id}: {e}")
+        
+        result_message = f"""✅ **تم إرسال الإعلان**
+
+📊 **الإحصائيات:**
+✅ نجح الإرسال: {success_count}
+❌ فشل الإرسال: {failed_count}
+📊 المجموع: {success_count + failed_count}"""
+
+        await query.edit_message_text(result_message, parse_mode='Markdown')
+        
+        # تنظيف البيانات المؤقتة
+        broadcast_keys = ['broadcast_type', 'broadcast_message', 'broadcast_users_input', 'broadcast_valid_users']
+        for key in broadcast_keys:
+            context.user_data.pop(key, None)
+            
+    elif query.data == "cancel_broadcast":
+        await query.edit_message_text("❌ تم إلغاء الإعلان.")
+        
+        # تنظيف البيانات المؤقتة
+        broadcast_keys = ['broadcast_type', 'broadcast_message', 'broadcast_users_input', 'broadcast_valid_users']
+        for key in broadcast_keys:
+            context.user_data.pop(key, None)
+    
+    return ConversationHandler.END
+
 def main() -> None:
     """الدالة الرئيسية"""
     if not TOKEN:
@@ -3219,6 +3511,9 @@ def main() -> None:
             SET_PRICE_STATIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_static_price_update)],
             SET_PRICE_SOCKS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_socks_price_update)],
             ADMIN_ORDER_INQUIRY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_order_inquiry)],
+            BROADCAST_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_message)],
+            BROADCAST_USERS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_users)],
+            BROADCAST_CONFIRM: [CallbackQueryHandler(handle_broadcast_confirmation, pattern="^(confirm_broadcast|cancel_broadcast)$")],
             QUIET_HOURS: [CallbackQueryHandler(handle_quiet_hours_selection, pattern="^quiet_")]
         },
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
