@@ -2728,6 +2728,10 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_cancel_payment_proof(update, context)
     elif query.data == "cancel_proxy_setup":
         await handle_cancel_proxy_setup(update, context)
+    elif query.data.startswith("show_more_users_"):
+        offset = int(query.data.replace("show_more_users_", ""))
+        await query.answer()
+        await show_user_statistics(update, context, offset)
 
     else:
         # معالجة الأزرار غير المعروفة - تسجيل وإعادة توجيه مناسب
@@ -3997,35 +4001,76 @@ async def return_to_user_mode(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 async def show_pending_orders_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """عرض الطلبات المعلقة للأدمن"""
+    """عرض الطلبات المعلقة للأدمن مع تقسيم الرسائل"""
     pending_orders = db.get_pending_orders()
     
     if not pending_orders:
         await update.message.reply_text("✅ لا توجد طلبات معلقة حالياً.")
         return
     
-    message = "📋 الطلبات المعلقة:\n\n"
-    for i, order in enumerate(pending_orders[:10], 1):  # عرض أول 10 طلبات
-        message += f"{i}. 🆔 `{order[0]}`\n"
-        message += f"   📦 النوع: {order[2]}\n"
-        message += f"   🌍 الدولة: {order[3]}\n"
-        message += f"   📅 التاريخ: {order[9]}\n\n"
+    total_orders = len(pending_orders)
+    batch_size = 10  # عرض 10 طلبات في كل مجموعة
     
-    if len(pending_orders) > 10:
-        message += f"... و {len(pending_orders) - 10} طلبات أخرى"
+    await update.message.reply_text(f"📋 **الطلبات المعلقة** - المجموع: {total_orders} طلب\n\n⏳ سيتم عرض الطلبات مقسمة إلى مجموعات...", parse_mode='Markdown')
     
-    await update.message.reply_text(message, parse_mode='Markdown')
+    # تقسيم الطلبات إلى مجموعات من 10
+    for batch_num, i in enumerate(range(0, total_orders, batch_size), 1):
+        batch_orders = pending_orders[i:i + batch_size]
+        
+        message = f"📦 **المجموعة {batch_num} - الطلبات {i+1} إلى {min(i+batch_size, total_orders)}:**\n\n"
+        
+        for j, order in enumerate(batch_orders, 1):
+            global_index = i + j
+            message += f"{global_index}. 🆔 `{order[0]}`\n"
+            message += f"   📦 النوع: {order[2]}\n"
+            message += f"   🌍 الدولة: {order[3]}\n"
+            message += f"   💰 المبلغ: {order[6]}$\n"
+            message += f"   📅 التاريخ: {order[9]}\n\n"
+        
+        # إنشاء أزرار للطلبات في هذه المجموعة
+        keyboard = []
+        for order in batch_orders[:5]:  # أول 5 طلبات من المجموعة
+            keyboard.append([InlineKeyboardButton(f"معالجة {order[0][:8]}...", callback_data=f"process_{order[0]}")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+        
+        # إرسال المجموعة مع فاصل زمني قصير
+        await update.message.reply_text(message, parse_mode='Markdown', reply_markup=reply_markup)
+        
+        # فاصل زمني بين المجموعات (إلا للمجموعة الأخيرة)
+        if i + batch_size < total_orders:
+            import asyncio
+            await asyncio.sleep(1)  # فاصل ثانية واحدة
+    
+    # رسالة نهاية
+    await update.message.reply_text(f"✅ **تم عرض جميع الطلبات المعلقة**\n📊 المجموع: {total_orders} طلب", parse_mode='Markdown')
 
 async def delete_failed_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """حذف الطلبات الفاشلة"""
-    # أولاً، عد الطلبات الفاشلة
-    count_result = db.execute_query("SELECT COUNT(*) FROM orders WHERE status = 'failed'")
+    """حذف الطلبات الفاشلة الأحدث من 48 ساعة"""
+    # حساب الوقت قبل 48 ساعة
+    from datetime import datetime, timedelta
+    cutoff_time = datetime.now() - timedelta(hours=48)
+    cutoff_time_str = cutoff_time.strftime('%Y-%m-%d %H:%M:%S')
+    
+    # عد الطلبات الفاشلة الأحدث من 48 ساعة
+    count_query = """
+        SELECT COUNT(*) FROM orders 
+        WHERE status = 'failed' AND created_at >= ?
+    """
+    count_result = db.execute_query(count_query, (cutoff_time_str,))
     count_before = count_result[0][0] if count_result else 0
     
-    # حذف الطلبات الفاشلة
-    db.execute_query("DELETE FROM orders WHERE status = 'failed'")
+    # حذف الطلبات الفاشلة الأحدث من 48 ساعة فقط
+    delete_query = """
+        DELETE FROM orders 
+        WHERE status = 'failed' AND created_at >= ?
+    """
+    db.execute_query(delete_query, (cutoff_time_str,))
     
-    await update.message.reply_text(f"🗑️ تم حذف {count_before} طلب فاشل.")
+    await update.message.reply_text(
+        f"🗑️ تم حذف {count_before} طلب فاشل من آخر 48 ساعة.\n\n"
+        f"⏰ الطلبات الأقدم من 48 ساعة لم يتم حذفها للاحتفاظ بالسجلات التاريخية."
+    )
 
 async def delete_completed_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """حذف الطلبات المكتملة"""
@@ -4218,7 +4263,7 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         
         # العودة للقائمة الرئيسية
         elif text == "🔙 العودة للقائمة الرئيسية":
-            await return_to_admin_main(update, context)
+            await restore_admin_keyboard(context, update.effective_chat.id, "🔧 لوحة الأدمن الرئيسية\nاختر الخدمة المطلوبة:")
         
         return
     
@@ -5368,8 +5413,15 @@ async def handle_cancel_proxy_setup(update: Update, context: ContextTypes.DEFAUL
     return ConversationHandler.END
 
 
-async def show_user_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """عرض إحصائيات المستخدمين مرتبة حسب عدد الإحالات"""
+async def show_user_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE, offset: int = 0) -> None:
+    """عرض إحصائيات المستخدمين مرتبة حسب عدد الإحالات مع دعم التصفح"""
+    # الحصول على العدد الإجمالي للمستخدمين
+    total_count_query = "SELECT COUNT(*) FROM users"
+    total_users = db.execute_query(total_count_query)[0][0]
+    
+    # حجم الصفحة الواحدة
+    page_size = 20
+    
     stats_query = """
         SELECT u.first_name, u.last_name, u.username, u.user_id,
                COUNT(r.id) as referral_count, u.referral_balance
@@ -5377,29 +5429,45 @@ async def show_user_statistics(update: Update, context: ContextTypes.DEFAULT_TYP
         LEFT JOIN referrals r ON u.user_id = r.referrer_id
         GROUP BY u.user_id
         ORDER BY referral_count DESC
-        LIMIT 20
+        LIMIT ? OFFSET ?
     """
     
-    users_stats = db.execute_query(stats_query)
+    users_stats = db.execute_query(stats_query, (page_size, offset))
     
     if not users_stats:
-        await update.message.reply_text("لا توجد إحصائيات متاحة")
+        if offset == 0:
+            await update.message.reply_text("لا توجد إحصائيات متاحة")
+        else:
+            await update.message.reply_text("📊 **هذا كل شيء!**\n\n✅ تم عرض جميع المستخدمين في قاعدة البيانات", parse_mode='Markdown')
         return
     
-    message = "📊 إحصائيات المستخدمين (مرتبة حسب الإحالات)\n\n"
+    # تحديد رقم الصفحة الحالية
+    current_page = (offset // page_size) + 1
+    total_pages = (total_users + page_size - 1) // page_size
+    
+    message = f"📊 **إحصائيات المستخدمين** (الصفحة {current_page} من {total_pages})\n"
+    message += f"👥 المستخدمون {offset + 1} إلى {min(offset + page_size, total_users)} من أصل {total_users}\n\n"
     
     for i, user_stat in enumerate(users_stats, 1):
+        global_index = offset + i
         name = f"{user_stat[0]} {user_stat[1] or ''}"
         username = f"@{user_stat[2]}" if user_stat[2] else "بدون معرف"
         referral_count = user_stat[4]
         balance = user_stat[5]
         
-        message += f"{i}. {name}\n"
+        message += f"{global_index}. {name}\n"
         message += f"   👤 {username}\n"
         message += f"   👥 الإحالات: {referral_count}\n"
         message += f"   💰 الرصيد: {balance:.2f}$\n\n"
     
-    await update.message.reply_text(message, parse_mode='Markdown')
+    # إضافة زر "عرض المزيد" إذا كان هناك مستخدمون أكثر
+    keyboard = []
+    if offset + page_size < total_users:
+        keyboard.append([InlineKeyboardButton("📄 عرض المزيد", callback_data=f"show_more_users_{offset + page_size}")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+    
+    await update.message.reply_text(message, parse_mode='Markdown', reply_markup=reply_markup)
 
 # وظائف التقسيم والتنقل
 def paginate_items(items, page=0, items_per_page=8):
