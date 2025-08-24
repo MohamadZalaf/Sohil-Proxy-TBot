@@ -2482,9 +2482,40 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     elif query.data == "send_proxy_confirm":
         thank_message = context.user_data.get('admin_thank_message', '')
         await send_proxy_to_user(update, context, thank_message)
-        await query.edit_message_text("✅ تم إرسال البروكسي للمستخدم بنجاح!")
+        
+        # إنشاء زر "تم إنهاء الطلب بنجاح"
+        keyboard = [[InlineKeyboardButton("✅ تم إنهاء الطلب بنجاح", callback_data="order_completed_success")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "✅ تم إرسال البروكسي للمستخدم بنجاح!",
+            reply_markup=reply_markup
+        )
     elif query.data == "cancel_proxy_send":
-        await query.edit_message_text("❌ تم إلغاء إرسال البروكسي. يمكنك البدء من جديد إذا أردت.")
+        # إلغاء إرسال البروكسي وتنظيف البيانات
+        order_id = context.user_data.get('processing_order_id')
+        if order_id:
+            # تنظيف البيانات المؤقتة
+            admin_keys = [k for k in context.user_data.keys() if k.startswith('admin_')]
+            for key in admin_keys:
+                context.user_data.pop(key, None)
+            context.user_data.pop('processing_order_id', None)
+        
+        await query.edit_message_text(
+            f"❌ تم إلغاء إرسال البروكسي\n\n🆔 معرف الطلب: `{order_id}`\n\n📋 الطلب لا يزال في حالة معلق ويمكن معالجته لاحقاً.",
+            parse_mode='Markdown'
+        )
+    elif query.data == "order_completed_success":
+        # إنهاء الطلب نهائياً وتنظيف البيانات
+        order_id = context.user_data.get('processing_order_id')
+        if order_id:
+            # تنظيف البيانات المؤقتة
+            context.user_data.clear()
+        
+        await query.edit_message_text(
+            f"✅ تم إنهاء الطلب بنجاح!\n\n🆔 معرف الطلب: `{order_id}`\n\n📋 تم نقل الطلب إلى الطلبات المكتملة.",
+            parse_mode='Markdown'
+        )
     elif query.data.startswith("quiet_"):
         await handle_quiet_hours_selection(update, context)
     elif query.data in ["confirm_clear_db", "cancel_clear_db"]:
