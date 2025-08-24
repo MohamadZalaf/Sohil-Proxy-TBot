@@ -1068,7 +1068,7 @@ sohilskaf123@gmail.com
         'payment_methods': 'اختر طريقة الدفع:',
         'send_payment_proof': 'يرجى إرسال إثبات الدفع (صورة أو نص):',
         'order_received': '✅ تم استلام طلبك بنجاح!\n\n📋 سيتم معالجة الطلب يدوياً من الأدمن بأقرب وقت.\n\n📧 ستصلك تحديثات الحالة تلقائياً.',
-        'main_menu_buttons': ['🔒 طلب بروكسي ستاتيك', '🧦 طلب بروكسي سوكس', '👥 إحالاتي', '📋 تذكير بطلباتي', '⚙️ الإعدادات'],
+        'main_menu_buttons': ['🔒 طلب بروكسي ستاتيك', '📡 طلب بروكسي سوكس', '👥 إحالاتي', '📋 تذكير بطلباتي', '⚙️ الإعدادات'],
         'admin_main_buttons': ['📋 إدارة الطلبات', '💰 إدارة الأموال', '👥 الإحالات', '📢 البث', '⚙️ الإعدادات'],
         'language_change_success': 'تم تغيير اللغة إلى العربية ✅\nيرجى استخدام الأمر /start لإعادة تحميل القوائم',
         'admin_panel': '🔧 لوحة الأدمن',
@@ -1156,7 +1156,7 @@ Order ID: {}""",
         'payment_methods': 'Choose payment method:',
         'send_payment_proof': 'Please send payment proof (image or text):',
         'order_received': '✅ Your order has been received successfully!\n\n📋 Admin will process it manually soon.\n\n📧 You will receive status updates automatically.',
-        'main_menu_buttons': ['🔒 Request Static Proxy', '🧦 Request Socks Proxy', '👥 My Referrals', '📋 Order Reminder', '⚙️ Settings'],
+        'main_menu_buttons': ['🔒 Request Static Proxy', '📡 Request Socks Proxy', '👥 My Referrals', '📋 Order Reminder', '⚙️ Settings'],
         'admin_main_buttons': ['📋 Manage Orders', '💰 Manage Money', '👥 Referrals', '📢 Broadcast', '⚙️ Settings'],
         'language_change_success': 'Language changed to English ✅\nPlease use /start command to reload menus',
         'admin_panel': '🔧 Admin Panel',
@@ -1400,7 +1400,8 @@ async def handle_admin_password(update: Update, context: ContextTypes.DEFAULT_TY
             [KeyboardButton("📋 إدارة الطلبات")],
             [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
             [KeyboardButton("📢 البث"), KeyboardButton("⚙️ الإعدادات")],
-            [KeyboardButton("🔍 استعلام عن مستخدم"), KeyboardButton("🔙 عودة للمستخدم")]
+            [KeyboardButton("🔍 استعلام عن مستخدم")],
+            [KeyboardButton("🚪 تسجيل الخروج")]
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         
@@ -1972,6 +1973,10 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_admin_menu_actions(update, context)
     elif query.data == "withdraw_balance":
         await handle_withdrawal_request(update, context)
+    elif query.data in ["confirm_logout", "cancel_logout"]:
+        await handle_logout_confirmation(update, context)
+    elif query.data == "back_to_admin":
+        await handle_back_to_admin(update, context)
     elif query.data in ["send_custom_message", "no_custom_message"]:
         await handle_custom_message_choice(update, context)
     elif query.data == "send_proxy_confirm":
@@ -3057,11 +3062,13 @@ async def database_export_menu(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def return_to_admin_main(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """العودة للقائمة الرئيسية للأدمن"""
+    # استخدام الكيبورد الجديد المحدث
     keyboard = [
         [KeyboardButton("📋 إدارة الطلبات")],
         [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
-        [KeyboardButton("⚙️ الإعدادات"), KeyboardButton("🔍 استعلام عن مستخدم")],
-        [KeyboardButton("🔙 عودة للمستخدم")]
+        [KeyboardButton("📢 البث"), KeyboardButton("⚙️ الإعدادات")],
+        [KeyboardButton("🔍 استعلام عن مستخدم")],
+        [KeyboardButton("🚪 تسجيل الخروج")]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
@@ -3120,8 +3127,8 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             await handle_admin_settings_menu(update, context)
         elif text == "🔍 استعلام عن مستخدم":
             return await handle_admin_user_lookup(update, context)
-        elif text == "🔙 عودة للمستخدم":
-            await return_to_user_mode(update, context)
+        elif text == "🚪 تسجيل الخروج":
+            await admin_logout_confirmation(update, context)
         
         # إدارة الطلبات
         elif text == "📋 الطلبات المعلقة":
@@ -3277,8 +3284,89 @@ async def handle_quiet_hours_selection(update: Update, context: ContextTypes.DEF
     await query.edit_message_text(message, parse_mode='Markdown')
     return ConversationHandler.END
 
+async def admin_logout_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """طلب تأكيد تسجيل خروج الأدمن"""
+    keyboard = [
+        [InlineKeyboardButton("✅ نعم، تسجيل الخروج", callback_data="confirm_logout")],
+        [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_logout")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "🚪 **تأكيد تسجيل الخروج**\n\nهل أنت متأكد من رغبتك في تسجيل الخروج من لوحة الأدمن؟",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+async def handle_logout_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة تأكيد تسجيل الخروج"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "confirm_logout":
+        # تسجيل الخروج
+        context.user_data.pop('is_admin', None)
+        
+        # إنشاء كيبورد المستخدم العادي
+        user_id = update.effective_user.id
+        language = get_user_language(user_id)
+        
+        keyboard = [
+            [KeyboardButton(MESSAGES[language]['main_menu_buttons'][0])],
+            [KeyboardButton(MESSAGES[language]['main_menu_buttons'][1])],
+            [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2])],
+            [KeyboardButton(MESSAGES[language]['main_menu_buttons'][3]), 
+             KeyboardButton(MESSAGES[language]['main_menu_buttons'][4])]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        await query.edit_message_text(
+            "✅ **تم تسجيل الخروج بنجاح**\n\n👋 مرحباً بعودتك كمستخدم عادي\nيمكنك الآن استخدام جميع خدمات البوت",
+            parse_mode='Markdown'
+        )
+        
+        await context.bot.send_message(
+            update.effective_chat.id,
+            "🎯 القائمة الرئيسية\nاختر الخدمة المطلوبة:",
+            reply_markup=reply_markup
+        )
+        
+    elif query.data == "cancel_logout":
+        await query.edit_message_text(
+            "❌ **تم إلغاء تسجيل الخروج**\n\n🔧 لا تزال في لوحة الأدمن\nيمكنك المتابعة في استخدام أدوات الإدارة",
+            parse_mode='Markdown'
+        )
+
+async def handle_back_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """العودة للقائمة الرئيسية للأدمن من الأزرار inline"""
+    query = update.callback_query
+    await query.answer()
+    
+    # التأكد من أن المستخدم أدمن
+    if not context.user_data.get('is_admin', False):
+        await query.edit_message_text("❌ هذه الخدمة مخصصة للأدمن فقط!")
+        return
+    
+    # استخدام الكيبورد الجديد المحدث
+    keyboard = [
+        [KeyboardButton("📋 إدارة الطلبات")],
+        [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
+        [KeyboardButton("📢 البث"), KeyboardButton("⚙️ الإعدادات")],
+        [KeyboardButton("🔍 استعلام عن مستخدم")],
+        [KeyboardButton("🚪 تسجيل الخروج")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    await query.edit_message_text("🔧 **تم العودة للقائمة الرئيسية**")
+    
+    await context.bot.send_message(
+        update.effective_chat.id,
+        "🔧 لوحة الأدمن الرئيسية\nاختر الخدمة المطلوبة:",
+        reply_markup=reply_markup
+    )
+
 async def admin_signout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """تسجيل خروج الأدمن"""
+    """تسجيل خروج الأدمن (أمر قديم)"""
     context.user_data['is_admin'] = False
     user_id = update.effective_user.id
     language = get_user_language(user_id)
@@ -3287,8 +3375,9 @@ async def admin_signout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     keyboard = [
         [KeyboardButton(MESSAGES[language]['main_menu_buttons'][0])],
         [KeyboardButton(MESSAGES[language]['main_menu_buttons'][1])],
-        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2]), 
-         KeyboardButton(MESSAGES[language]['main_menu_buttons'][3])]
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2])],
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][3]), 
+         KeyboardButton(MESSAGES[language]['main_menu_buttons'][4])]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
