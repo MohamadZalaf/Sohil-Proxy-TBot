@@ -2125,7 +2125,14 @@ async def handle_payment_method_selection(update: Update, context: ContextTypes.
     payment_method = query.data.replace("payment_", "")
     context.user_data['payment_method'] = payment_method
     
-    await query.edit_message_text(MESSAGES[language]['send_payment_proof'])
+    # إضافة زر الإلغاء
+    keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_payment_proof")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        MESSAGES[language]['send_payment_proof'],
+        reply_markup=reply_markup
+    )
     
     return PAYMENT_PROOF
 
@@ -2679,6 +2686,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_cancel_socks_prices(update, context)
     elif query.data == "cancel_balance_reset":
         await handle_cancel_balance_reset(update, context)
+    elif query.data == "cancel_payment_proof":
+        await handle_cancel_payment_proof(update, context)
 
     else:
         await query.answer("قيد التطوير...")
@@ -5025,6 +5034,9 @@ async def handle_cancel_user_lookup(update: Update, context: ContextTypes.DEFAUL
     query = update.callback_query
     await query.answer()
     
+    # تنظيف بيانات المستخدم
+    context.user_data.pop('lookup_action', None)
+    
     await query.edit_message_text("❌ تم إلغاء البحث عن المستخدم")
     return ConversationHandler.END
 
@@ -5032,6 +5044,9 @@ async def handle_cancel_referral_amount(update: Update, context: ContextTypes.DE
     """معالجة إلغاء تحديد قيمة الإحالة"""
     query = update.callback_query
     await query.answer()
+    
+    # تنظيف البيانات المؤقتة
+    context.user_data.clear()
     
     await query.edit_message_text("❌ تم إلغاء تحديد قيمة الإحالة")
     return ConversationHandler.END
@@ -5041,6 +5056,9 @@ async def handle_cancel_order_inquiry(update: Update, context: ContextTypes.DEFA
     query = update.callback_query
     await query.answer()
     
+    # تنظيف البيانات المؤقتة
+    context.user_data.clear()
+    
     await query.edit_message_text("❌ تم إلغاء الاستعلام عن الطلب")
     return ConversationHandler.END
 
@@ -5048,6 +5066,9 @@ async def handle_cancel_static_prices(update: Update, context: ContextTypes.DEFA
     """معالجة إلغاء تعديل أسعار الستاتيك"""
     query = update.callback_query
     await query.answer()
+    
+    # تنظيف البيانات المؤقتة
+    context.user_data.clear()
     
     await query.edit_message_text("❌ تم إلغاء تعديل أسعار الستاتيك")
     return ConversationHandler.END
@@ -5057,6 +5078,9 @@ async def handle_cancel_socks_prices(update: Update, context: ContextTypes.DEFAU
     query = update.callback_query
     await query.answer()
     
+    # تنظيف البيانات المؤقتة
+    context.user_data.clear()
+    
     await query.edit_message_text("❌ تم إلغاء تعديل أسعار السوكس")
     return ConversationHandler.END
 
@@ -5065,7 +5089,40 @@ async def handle_cancel_balance_reset(update: Update, context: ContextTypes.DEFA
     query = update.callback_query
     await query.answer()
     
+    # تنظيف البيانات المؤقتة
+    context.user_data.clear()
+    
     await query.edit_message_text("❌ تم إلغاء تصفير رصيد المستخدم")
+    return ConversationHandler.END
+
+async def handle_cancel_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إلغاء إرسال إثبات الدفع"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    language = get_user_language(user_id)
+    
+    # تنظيف البيانات المؤقتة
+    context.user_data.clear()
+    
+    if language == 'ar':
+        message = "❌ تم إلغاء إرسال إثبات الدفع"
+    else:
+        message = "❌ Payment proof submission cancelled"
+    
+    await query.edit_message_text(message)
+    return ConversationHandler.END
+
+async def handle_cancel_custom_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إلغاء إرسال الرسالة المخصصة"""
+    query = update.callback_query
+    await query.answer()
+    
+    # تنظيف البيانات المؤقتة
+    context.user_data.clear()
+    
+    await query.edit_message_text("❌ تم إلغاء إرسال الرسالة المخصصة")
     return ConversationHandler.END
 
 
@@ -5506,7 +5563,11 @@ def main() -> None:
             ENTER_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
             ENTER_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
             ENTER_THANK_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
-            CUSTOM_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input)]
+            CUSTOM_MESSAGE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input),
+                CallbackQueryHandler(handle_custom_message_choice, pattern="^(send_custom_message|no_custom_message)$"),
+                CallbackQueryHandler(handle_cancel_custom_message, pattern="^cancel_custom_message$")
+            ]
         },
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
         per_message=False,
@@ -5575,7 +5636,10 @@ def main() -> None:
     payment_conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(handle_payment_method_selection, pattern="^payment_")],
         states={
-            PAYMENT_PROOF: [MessageHandler(filters.ALL & ~filters.COMMAND, handle_payment_proof)],
+            PAYMENT_PROOF: [
+                MessageHandler(filters.ALL & ~filters.COMMAND, handle_payment_proof),
+                CallbackQueryHandler(handle_cancel_payment_proof, pattern="^cancel_payment_proof$")
+            ],
         },
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
         per_message=False,
