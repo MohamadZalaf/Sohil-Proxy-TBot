@@ -2216,6 +2216,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_quiet_hours_selection(update, context)
     elif query.data in ["confirm_clear_db", "cancel_clear_db"]:
         await handle_database_clear(update, context)
+    elif query.data == "cancel_processing":
+        await handle_cancel_processing(update, context)
 
     else:
         await query.answer("قيد التطوير...")
@@ -2679,7 +2681,8 @@ async def handle_process_order(update: Update, context: ContextTypes.DEFAULT_TYP
     
     keyboard = [
         [InlineKeyboardButton("نعم", callback_data="payment_success")],
-        [InlineKeyboardButton("لا", callback_data="payment_failed")]
+        [InlineKeyboardButton("لا", callback_data="payment_failed")],
+        [InlineKeyboardButton("⏸️ إلغاء المعالجة مؤقتاً", callback_data="cancel_processing")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -2717,16 +2720,24 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
             await handle_withdrawal_approval(query, context, order_id, user_id)
             return ConversationHandler.END
     
-    # بدء جمع معلومات البروكسي للطلبات العادية
+    # إنشاء رسالة جديدة بدلاً من تعديل الرسالة الأصلية
     keyboard = [
         [InlineKeyboardButton("ستاتيك", callback_data="proxy_type_static")],
         [InlineKeyboardButton("سوكس", callback_data="proxy_type_socks")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await query.edit_message_text(
+    # إرسال رسالة جديدة بدلاً من تعديل الرسالة الموجودة
+    await context.bot.send_message(
+        update.effective_chat.id,
         "1️⃣ اختر نوع البروكسي:",
         reply_markup=reply_markup
+    )
+    
+    # تحديث الرسالة الأصلية لتوضيح أنه تم البدء في المعالجة
+    await query.edit_message_text(
+        f"✅ تم تأكيد صحة الدفع للطلب `{order_id}`\n\n⚙️ جاري جمع معلومات البروكسي...",
+        parse_mode='Markdown'
     )
     
     return ENTER_PROXY_TYPE
@@ -2868,12 +2879,34 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
         current_state = context.user_data.get('admin_input_state', ENTER_PROXY_ADDRESS)
         
         if current_state == ENTER_PROXY_ADDRESS:
+            # التحقق من صحة عنوان IP
+            if not validate_ip_address(text):
+                await update.message.reply_text(
+                    "❌ عنوان IP غير صحيح!\n\n"
+                    "✅ الشكل المطلوب: xxx.xxx.xxx.xxx\n"
+                    "✅ مثال صحيح: 192.168.1.1 أو 62.1.2.1\n"
+                    "✅ يُقبل من 1-3 أرقام لكل جزء\n\n"
+                    "يرجى إعادة إدخال عنوان IP:"
+                )
+                return ENTER_PROXY_ADDRESS
+            
             context.user_data['admin_proxy_address'] = text
             context.user_data['admin_input_state'] = ENTER_PROXY_PORT
             await update.message.reply_text("3️⃣ يرجى إدخال البورت:")
             return ENTER_PROXY_PORT
         
         elif current_state == ENTER_PROXY_PORT:
+            # التحقق من صحة البورت
+            if not validate_port(text):
+                await update.message.reply_text(
+                    "❌ رقم البورت غير صحيح!\n\n"
+                    "✅ يجب أن يكون رقماً فقط\n"
+                    "✅ حد أقصى 6 أرقام\n"
+                    "✅ مثال صحيح: 80, 8080, 123456\n\n"
+                    "يرجى إعادة إدخال رقم البورت:"
+                )
+                return ENTER_PROXY_PORT
+            
             context.user_data['admin_proxy_port'] = text
             
             # تحديد نوع البروكسي المختار لعرض الدول المناسبة
@@ -3452,7 +3485,10 @@ async def handle_referral_amount_update(update: Update, context: ContextTypes.DE
             ("referral_amount", str(amount))
         )
         
-        await update.message.reply_text(f"✅ تم تحديث قيمة الإحالة إلى `{amount}$`", parse_mode='Markdown')
+        await update.message.reply_text(f"✅ تم تحديث قيمة الإحالة إلى `{amount}$`\n\n📢 سيتم إشعار جميع المستخدمين بالتحديث...", parse_mode='Markdown')
+        
+        # إشعار جميع المستخدمين بالتحديث
+        await broadcast_referral_update(context, amount)
         
     except ValueError:
         await update.message.reply_text("❌ يرجى إرسال رقم صحيح!")
@@ -3821,9 +3857,8 @@ sohilskaf123@gmail.com
 
 Order ID: {{}}"""
 
-        # تحديث الرسائل في الكود
-        MESSAGES['ar']['static_package'] = new_static_message_ar
-        MESSAGES['en']['static_package'] = new_static_message_en
+        # تحديث رسائل الحزم باستخدام الدالة المساعدة
+        update_static_messages(static_prices)
         
         # حفظ الأسعار في قاعدة البيانات
         db.execute_query(
@@ -3969,9 +4004,8 @@ sohilskaf123@gmail.com
 
 Order ID: {{}}"""
 
-        # تحديث الرسائل في الكود
-        MESSAGES['ar']['socks_package'] = new_socks_message_ar
-        MESSAGES['en']['socks_package'] = new_socks_message_en
+        # تحديث رسائل الحزم باستخدام الدالة المساعدة
+        update_socks_messages(socks_prices)
         
         # حفظ الأسعار في قاعدة البيانات
         db.execute_query(
@@ -4140,6 +4174,41 @@ async def handle_database_clear(update: Update, context: ContextTypes.DEFAULT_TY
     
     elif query.data == "cancel_clear_db":
         await query.edit_message_text("❌ تم إلغاء عملية تفريغ قاعدة البيانات")
+
+async def handle_cancel_processing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة إلغاء معالجة الطلب مؤقتاً"""
+    query = update.callback_query
+    await query.answer()
+    
+    order_id = context.user_data.get('processing_order_id')
+    if order_id:
+        # الحصول على بيانات المستخدم
+        user_query = "SELECT user_id FROM orders WHERE id = ?"
+        user_result = db.execute_query(user_query, (order_id,))
+        
+        if user_result:
+            user_id = user_result[0][0]
+            user_language = get_user_language(user_id)
+            
+            # إرسال رسالة للمستخدم
+            if user_language == 'ar':
+                message = f"⏸️ تم توقيف معالجة طلبك مؤقتاً رقم `{order_id}`\n\nسيتم استئناف المعالجة لاحقاً من قبل الأدمن."
+            else:
+                message = f"⏸️ Processing of your order `{order_id}` has been temporarily stopped\n\nProcessing will resume later by admin."
+            
+            await context.bot.send_message(user_id, message, parse_mode='Markdown')
+        
+        # رسالة للأدمن
+        await query.edit_message_text(
+            f"⏸️ تم إلغاء معالجة الطلب مؤقتاً\n\n🆔 معرف الطلب: `{order_id}`\n\n📋 الطلب لا يزال في حالة معلق ويمكن استئناف معالجته لاحقاً",
+            parse_mode='Markdown'
+        )
+        
+        # تنظيف البيانات المؤقتة
+        context.user_data.pop('processing_order_id', None)
+        
+    else:
+        await query.edit_message_text("❌ لم يتم العثور على طلب لإلغاء معالجته")
 
 
 async def show_user_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -4542,6 +4611,9 @@ def main() -> None:
         print("2. أنشئ بوت جديد وانسخ التوكن")
         print("3. ضع التوكن في متغير TOKEN في بداية الملف")
         return
+    
+    # تحميل الأسعار المحفوظة عند بدء التشغيل
+    load_saved_prices()
     
     # إنشاء ملفات المساعدة
     create_requirements_file()
