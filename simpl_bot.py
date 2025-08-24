@@ -1399,8 +1399,8 @@ async def handle_admin_password(update: Update, context: ContextTypes.DEFAULT_TY
         keyboard = [
             [KeyboardButton("📋 إدارة الطلبات")],
             [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
-            [KeyboardButton("📢 البث"), KeyboardButton("⚙️ الإعدادات")],
-            [KeyboardButton("🔍 استعلام عن مستخدم")],
+            [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+            [KeyboardButton("⚙️ الإعدادات")],
             [KeyboardButton("🚪 تسجيل الخروج")]
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -1426,7 +1426,7 @@ async def handle_static_proxy_request(update: Update, context: ContextTypes.DEFA
     
     # عرض رسالة الحزمة بدون معرف الطلب
     package_message = MESSAGES[language]['static_package'].replace('معرف الطلب: `{}`', 'سيتم إنشاء معرف الطلب بعد إرسال إثبات الدفع')
-    await update.message.reply_text(package_message)
+    await update.message.reply_text(package_message, parse_mode='Markdown')
     
     # عرض قائمة الدول للستاتيك
     keyboard = []
@@ -1452,7 +1452,7 @@ async def handle_socks_proxy_request(update: Update, context: ContextTypes.DEFAU
     
     # عرض رسالة الحزمة بدون معرف الطلب
     package_message = MESSAGES[language]['socks_package'].replace('معرف الطلب: `{}`', 'سيتم إنشاء معرف الطلب بعد إرسال إثبات الدفع')
-    await update.message.reply_text(package_message)
+    await update.message.reply_text(package_message, parse_mode='Markdown')
     
     # عرض قائمة الدول للسوكس (مع دول إضافية)
     keyboard = []
@@ -1488,7 +1488,14 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
     
     elif query.data.startswith("country_"):
         country_code = query.data.replace("country_", "")
-        context.user_data['selected_country'] = country_code
+        # حفظ اسم الدولة الكامل مع العلم بدلاً من الرمز فقط
+        proxy_type = context.user_data.get('proxy_type', 'static')
+        if proxy_type == 'socks':
+            country_name = SOCKS_COUNTRIES[language].get(country_code, country_code)
+        else:
+            country_name = STATIC_COUNTRIES[language].get(country_code, country_code)
+        context.user_data['selected_country'] = country_name
+        context.user_data['selected_country_code'] = country_code
         
         # عرض قائمة الولايات بناء على الدولة
         states_data = get_states_for_country(country_code)
@@ -1512,7 +1519,14 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
     
     elif query.data.startswith("state_"):
         state_code = query.data.replace("state_", "")
-        context.user_data['selected_state'] = state_code
+        # حفظ اسم الولاية الكامل بدلاً من الرمز فقط
+        country_code = context.user_data.get('selected_country_code', '')
+        states_data = get_states_for_country(country_code)
+        if states_data:
+            state_name = states_data[language].get(state_code, state_code)
+        else:
+            state_name = state_code
+        context.user_data['selected_state'] = state_name
         await show_payment_methods(query, context, language)
 
 async def show_payment_methods(query, context: ContextTypes.DEFAULT_TYPE, language: str) -> None:
@@ -1952,7 +1966,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     """معالجة الاستعلامات المرسلة"""
     query = update.callback_query
     
-    if query.data.startswith("country_") or query.data.startswith("state_"):
+    if query.data.startswith("country_") or query.data.startswith("state_") or query.data in ["manual_country", "manual_state"]:
         await handle_country_selection(update, context)
     elif query.data.startswith("payment_"):
         await handle_payment_method_selection(update, context)
@@ -3059,8 +3073,8 @@ async def return_to_admin_main(update: Update, context: ContextTypes.DEFAULT_TYP
     keyboard = [
         [KeyboardButton("📋 إدارة الطلبات")],
         [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
-        [KeyboardButton("📢 البث"), KeyboardButton("⚙️ الإعدادات")],
-        [KeyboardButton("🔍 استعلام عن مستخدم")],
+        [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+        [KeyboardButton("⚙️ الإعدادات")],
         [KeyboardButton("🚪 تسجيل الخروج")]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -3344,8 +3358,8 @@ async def handle_back_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     keyboard = [
         [KeyboardButton("📋 إدارة الطلبات")],
         [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
-        [KeyboardButton("📢 البث"), KeyboardButton("⚙️ الإعدادات")],
-        [KeyboardButton("🔍 استعلام عن مستخدم")],
+        [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
+        [KeyboardButton("⚙️ الإعدادات")],
         [KeyboardButton("🚪 تسجيل الخروج")]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
