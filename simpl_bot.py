@@ -3132,16 +3132,14 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             await handle_admin_referrals_menu(update, context)
         elif text == "⚙️ الإعدادات":
             await handle_admin_settings_menu(update, context)
-        elif text == "🔍 استعلام عن مستخدم":
-            return await handle_admin_user_lookup(update, context)
+        # تم نقل معالجة الاستعلام عن مستخدم إلى admin_functions_conv_handler
         elif text == "🚪 تسجيل الخروج":
             await admin_logout_confirmation(update, context)
         
         # إدارة الطلبات
         elif text == "📋 الطلبات المعلقة":
             await show_pending_orders_admin(update, context)
-        elif text == "🔍 الاستعلام عن طلب":
-            return await admin_order_inquiry(update, context)
+        # تم نقل معالجة الاستعلام عن طلب إلى admin_functions_conv_handler
         elif text == "🗑️ حذف الطلبات الفاشلة":
             await delete_failed_orders(update, context)
         elif text == "🗑️ حذف الطلبات المكتملة":
@@ -3152,24 +3150,18 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             await show_sales_statistics(update, context)
         elif text == "💲 إدارة الأسعار":
             await manage_prices_menu(update, context)
-        elif text == "💰 تعديل أسعار ستاتيك":
-            return await set_static_prices(update, context)
-        elif text == "💰 تعديل أسعار سوكس":
-            return await set_socks_prices(update, context)
+        # تم نقل معالجة تعديل الأسعار إلى admin_functions_conv_handler
         
         # إدارة الإحالات
-        elif text == "💵 تحديد قيمة الإحالة":
-            return await set_referral_amount(update, context)
+        # تم نقل معالجة تحديد قيمة الإحالة إلى admin_functions_conv_handler
         elif text == "📊 إحصائيات المستخدمين":
             await show_user_statistics(update, context)
-        elif text == "🗑️ تصفير رصيد مستخدم":
-            return await reset_user_balance(update, context)
+        # تم نقل معالجة تصفير رصيد مستخدم إلى admin_functions_conv_handler
         
         # إعدادات الأدمن
         elif text == "🌐 تغيير اللغة":
             await handle_settings(update, context)
-        elif text == "🔕 ساعات الهدوء":
-            return await set_quiet_hours(update, context)
+        # تم نقل معالجة ساعات الهدوء إلى admin_functions_conv_handler
         elif text == "🗃️ إدارة قاعدة البيانات":
             await database_management_menu(update, context)
         
@@ -3521,31 +3513,256 @@ async def handle_static_price_update(update: Update, context: ContextTypes.DEFAU
     prices_text = update.message.text
     
     try:
+        # تحليل الأسعار الجديدة
+        if "," in prices_text:
+            # أسعار متعددة مثل: ISP:3,Verizon:4,ATT:6
+            price_parts = prices_text.split(",")
+            static_prices = {}
+            for part in price_parts:
+                if ":" in part:
+                    key, value = part.split(":", 1)
+                    static_prices[key.strip()] = value.strip()
+        else:
+            # سعر واحد لجميع الأنواع
+            static_prices = {
+                "ISP": prices_text.strip(),
+                "Verizon": prices_text.strip(), 
+                "ATT": prices_text.strip()
+            }
+        
+        # تحديث رسائل الحزم
+        new_static_message_ar = f"""📦 Static Package
+
+🔹 الأسعار:
+- Static ISP Risk0: `{static_prices.get('ISP', '3')}$`
+- Static Residential Verizon: `{static_prices.get('Verizon', '4')}$`  
+- Static Residential AT&T: `{static_prices.get('ATT', '6')}$`
+
+━━━━━━━━━━━━━━━
+💳 طرق الدفع المحلية:
+
+- شام كاش:
+`cc849f22d5117db0b8fe5667e6d4b758`
+
+- سيرياتيل كاش:
+`55973911`
+`14227865`
+
+━━━━━━━━━━━━━━━
+🪙 طرق الدفع بالعملات الرقمية:
+
+- Coinex:
+sohilskaf123@gmail.com
+
+- Binance:
+`1121540155`
+
+- Payeer:
+`P1114452356`
+
+━━━━━━━━━━━━━━━
+📩 الرجاء إرسال إثبات الدفع للبوت مع تفاصيل الطلب
+⏱️ يرجى الانتظار حتى تتم معالجة العملية من قبل الأدمن
+
+معرف الطلب: `{{}}`"""
+
+        new_static_message_en = f"""📦 Static Package
+
+🔹 Prices:
+- Static ISP Risk0: {static_prices.get('ISP', '3')}$
+- Static Residential Verizon: {static_prices.get('Verizon', '4')}$
+- Static Residential AT&T: {static_prices.get('ATT', '6')}$
+
+━━━━━━━━━━━━━━━
+💳 Local Payment Methods:
+
+- Sham Cash:
+  cc849f22d5117db0b8fe5667e6d4b758
+
+- Syriatel Cash:
+  55973911
+  14227865
+
+━━━━━━━━━━━━━━━
+🪙 Cryptocurrency Payment Methods:
+
+- Coinex:
+  sohilskaf123@gmail.com
+
+- Binance:
+  1121540155
+
+- Payeer:
+  P1114452356
+
+━━━━━━━━━━━━━━━
+📩 Please send payment proof to the bot with order details
+⏱️ Please wait for admin to process manually
+
+Order ID: {{}}"""
+
+        # تحديث الرسائل في الكود
+        MESSAGES['ar']['static_package'] = new_static_message_ar
+        MESSAGES['en']['static_package'] = new_static_message_en
+        
         # حفظ الأسعار في قاعدة البيانات
         db.execute_query(
             "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
             ("static_prices", prices_text)
         )
         
-        await update.message.reply_text(f"✅ تم تحديث أسعار البروكسي الستاتيك بنجاح!\n💰 الأسعار الجديدة: `{prices_text}`", parse_mode='Markdown')
+        await update.message.reply_text(f"✅ تم تحديث أسعار البروكسي الستاتيك بنجاح!\n💰 الأسعار الجديدة: `{prices_text}`\n\n📢 سيتم إشعار جميع المستخدمين بالأسعار الجديدة...", parse_mode='Markdown')
+        
+        # إشعار جميع المستخدمين بالأسعار الجديدة
+        await broadcast_price_update(context, "static", static_prices)
         
     except Exception as e:
         await update.message.reply_text(f"❌ خطأ في تحديث الأسعار: {str(e)}")
     
     return ConversationHandler.END
 
+async def broadcast_price_update(context: ContextTypes.DEFAULT_TYPE, proxy_type: str, prices: dict) -> None:
+    """إشعار المستخدمين بتحديث الأسعار"""
+    try:
+        all_users = db.execute_query("SELECT user_id FROM users")
+        success_count = 0
+        
+        if proxy_type == "static":
+            message = f"""📢 **تحديث أسعار البروكسي الستاتيك**
+
+🔹 الأسعار الجديدة:
+- Static ISP Risk0: `{prices.get('ISP', '3')}$`
+- Static Residential Verizon: `{prices.get('Verizon', '4')}$`
+- Static Residential AT&T: `{prices.get('ATT', '6')}$`
+
+📦 يمكنك الآن طلب البروكسي بالأسعار الجديدة!"""
+        else:
+            message = f"""📢 **تحديث أسعار بروكسي السوكس**
+
+🔹 الأسعار الجديدة:
+- باكج 5 بروكسيات مؤقتة: `{prices.get('5proxy', '0.4')}$`
+- باكج 10 بروكسيات مؤقتة: `{prices.get('10proxy', '0.7')}$`
+
+📦 يمكنك الآن طلب البروكسي بالأسعار الجديدة!"""
+        
+        for user_tuple in all_users:
+            user_id = user_tuple[0]
+            try:
+                await context.bot.send_message(user_id, message, parse_mode='Markdown')
+                success_count += 1
+            except Exception as e:
+                logger.error(f"Failed to send price update to {user_id}: {e}")
+        
+        logger.info(f"Price update sent to {success_count} users")
+        
+    except Exception as e:
+        logger.error(f"Error in broadcast_price_update: {e}")
+
 async def handle_socks_price_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة تحديث أسعار السوكس"""
     prices_text = update.message.text
     
     try:
+        # تحليل الأسعار الجديدة
+        if "," in prices_text:
+            # أسعار متعددة مثل: 5proxy:0.4,10proxy:0.7
+            price_parts = prices_text.split(",")
+            socks_prices = {}
+            for part in price_parts:
+                if ":" in part:
+                    key, value = part.split(":", 1)
+                    socks_prices[key.strip()] = value.strip()
+        else:
+            # سعر واحد لجميع الأنواع
+            socks_prices = {
+                "5proxy": prices_text.strip(),
+                "10proxy": str(float(prices_text.strip()) * 1.75)  # 10 بروكسيات أغلى
+            }
+        
+        # تحديث رسائل الحزم
+        new_socks_message_ar = f"""📦 Socks Package
+كافة دول العالم مع ميزة اختيار الولاية والمزود للبكج
+
+🔹 الأسعار:
+- باكج 5 بروكسيات مؤقتة: `{socks_prices.get('5proxy', '0.4')}$`
+- باكج 10 بروكسيات مؤقتة: `{socks_prices.get('10proxy', '0.7')}$`
+
+━━━━━━━━━━━━━━━
+💳 طرق الدفع المحلية:
+
+- شام كاش:
+`cc849f22d5117db0b8fe5667e6d4b758`
+
+- سيرياتيل كاش:
+`55973911`
+`14227865`
+
+━━━━━━━━━━━━━━━
+🪙 طرق الدفع بالعملات الرقمية:
+
+- Coinex:
+sohilskaf123@gmail.com
+
+- Binance:
+`1121540155`
+
+- Payeer:
+`P1114452356`
+
+━━━━━━━━━━━━━━━
+📩 الرجاء إرسال إثبات الدفع للبوت مع تفاصيل الطلب
+⏱️ يرجى الانتظار حتى تتم معالجة العملية من قبل الأدمن
+
+معرف الطلب: `{{}}`"""
+
+        new_socks_message_en = f"""📦 Socks Package
+
+🔹 Prices:
+- 5 Temporary Proxies Package: {socks_prices.get('5proxy', '0.4')}$
+- 10 Temporary Proxies Package: {socks_prices.get('10proxy', '0.7')}$
+
+━━━━━━━━━━━━━━━
+💳 Local Payment Methods:
+
+- Sham Cash:
+  cc849f22d5117db0b8fe5667e6d4b758
+
+- Syriatel Cash:
+  55973911
+  14227865
+
+━━━━━━━━━━━━━━━
+🪙 Cryptocurrency Payment Methods:
+
+- Coinex:
+  sohilskaf123@gmail.com
+
+- Binance:
+  1121540155
+
+- Payeer:
+  P1114452356
+
+━━━━━━━━━━━━━━━
+📩 Please send payment proof to the bot with order details
+⏱️ Please wait for admin to process manually
+
+Order ID: {{}}"""
+
+        # تحديث الرسائل في الكود
+        MESSAGES['ar']['socks_package'] = new_socks_message_ar
+        MESSAGES['en']['socks_package'] = new_socks_message_en
+        
         # حفظ الأسعار في قاعدة البيانات
         db.execute_query(
             "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
             ("socks_prices", prices_text)
         )
         
-        await update.message.reply_text(f"✅ تم تحديث أسعار بروكسي السوكس بنجاح!\n💰 الأسعار الجديدة: `{prices_text}`", parse_mode='Markdown')
+        await update.message.reply_text(f"✅ تم تحديث أسعار بروكسي السوكس بنجاح!\n💰 الأسعار الجديدة: `{prices_text}`\n\n📢 سيتم إشعار جميع المستخدمين بالأسعار الجديدة...", parse_mode='Markdown')
+        
+        # إشعار جميع المستخدمين بالأسعار الجديدة
+        await broadcast_price_update(context, "socks", socks_prices)
         
     except Exception as e:
         await update.message.reply_text(f"❌ خطأ في تحديث الأسعار: {str(e)}")
@@ -4141,17 +4358,33 @@ def main() -> None:
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
     )
 
-    admin_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("admin_login", admin_login)],
+    # معالج شامل لجميع وظائف الأدمن
+    admin_functions_conv_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex("^🔍 استعلام عن مستخدم$"), handle_admin_user_lookup),
+            MessageHandler(filters.Regex("^🗑️ تصفير رصيد مستخدم$"), reset_user_balance),
+            MessageHandler(filters.Regex("^💵 تحديد قيمة الإحالة$"), set_referral_amount),
+            MessageHandler(filters.Regex("^💰 تعديل أسعار ستاتيك$"), set_static_prices),
+            MessageHandler(filters.Regex("^💰 تعديل أسعار سوكس$"), set_socks_prices),
+            MessageHandler(filters.Regex("^🔍 الاستعلام عن طلب$"), admin_order_inquiry),
+            MessageHandler(filters.Regex("^🔕 ساعات الهدوء$"), set_quiet_hours)
+        ],
         states={
-            ADMIN_LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_password)],
-            ADMIN_MENU: [CallbackQueryHandler(handle_admin_menu_actions)],
             USER_LOOKUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_lookup_unified)],
             REFERRAL_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_referral_amount_update)],
             SET_PRICE_STATIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_static_price_update)],
             SET_PRICE_SOCKS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_socks_price_update)],
             ADMIN_ORDER_INQUIRY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_order_inquiry)],
             QUIET_HOURS: [CallbackQueryHandler(handle_quiet_hours_selection, pattern="^quiet_")]
+        },
+        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+    )
+
+    admin_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("admin_login", admin_login)],
+        states={
+            ADMIN_LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_password)],
+            ADMIN_MENU: [CallbackQueryHandler(handle_admin_menu_actions)]
         },
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
     )
@@ -4168,7 +4401,8 @@ def main() -> None:
     # معالج البث
     broadcast_conv_handler = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex("^📢 البث$") | filters.Regex("^📢 Broadcast$"), handle_broadcast_start)
+            MessageHandler(filters.Regex("^📢 البث$"), handle_broadcast_start),
+            CallbackQueryHandler(handle_broadcast_selection, pattern="^(broadcast_all|broadcast_custom)$")
         ],
         states={
             BROADCAST_MESSAGE: [
@@ -4185,6 +4419,7 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("admin_signout", admin_signout))
     application.add_handler(admin_conv_handler)
+    application.add_handler(admin_functions_conv_handler)
     application.add_handler(process_order_conv_handler)
     application.add_handler(broadcast_conv_handler)
     application.add_handler(payment_conv_handler)
