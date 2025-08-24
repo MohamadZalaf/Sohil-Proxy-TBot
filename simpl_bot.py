@@ -1303,13 +1303,13 @@ class DatabaseManager:
         query = "UPDATE users SET language = ? WHERE user_id = ?"
         self.execute_query(query, (language, user_id))
     
-    def create_order(self, order_id: str, user_id: int, proxy_type: str, country: str, state: str, payment_method: str):
+    def create_order(self, order_id: str, user_id: int, proxy_type: str, country: str, state: str, payment_method: str, payment_amount: float = 0.0):
         """إنشاء طلب جديد"""
         query = '''
-            INSERT INTO orders (id, user_id, proxy_type, country, state, payment_method)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO orders (id, user_id, proxy_type, country, state, payment_method, payment_amount)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         '''
-        self.execute_query(query, (order_id, user_id, proxy_type, country, state, payment_method))
+        self.execute_query(query, (order_id, user_id, proxy_type, country, state, payment_method, payment_amount))
     
     def update_order_payment_proof(self, order_id: str, payment_proof: str):
         """تحديث إثبات الدفع للطلب"""
@@ -1328,6 +1328,54 @@ class DatabaseManager:
 
 # إنشاء مدير قاعدة البيانات
 db = DatabaseManager(DATABASE_FILE)
+
+def get_proxy_price(proxy_type: str, country: str = "", state: str = "") -> float:
+    """حساب سعر البروكسي بناءً على النوع والدولة"""
+    try:
+        if proxy_type == 'static':
+            # تحميل أسعار الستاتيك من قاعدة البيانات
+            static_prices_result = db.execute_query("SELECT value FROM settings WHERE key = 'static_prices'")
+            if static_prices_result:
+                static_prices_text = static_prices_result[0][0]
+                if "," in static_prices_text:
+                    price_parts = static_prices_text.split(",")
+                    static_prices = {}
+                    for part in price_parts:
+                        if ":" in part:
+                            key, value = part.split(":", 1)
+                            static_prices[key.strip()] = float(value.strip())
+                    # تحديد السعر بناءً على نوع الستاتيك
+                    if "Verizon" in state or "verizon" in state.lower():
+                        return static_prices.get('Verizon', 4.0)
+                    elif "AT&T" in state or "att" in state.lower():
+                        return static_prices.get('ATT', 6.0)
+                    else:
+                        return static_prices.get('ISP', 3.0)  # ISP Risk0 افتراضي
+                else:
+                    return float(static_prices_text.strip())
+            return 3.0  # سعر افتراضي للستاتيك
+        
+        elif proxy_type == 'socks':
+            # تحميل أسعار السوكس من قاعدة البيانات
+            socks_prices_result = db.execute_query("SELECT value FROM settings WHERE key = 'socks_prices'")
+            if socks_prices_result:
+                socks_prices_text = socks_prices_result[0][0]
+                if "," in socks_prices_text:
+                    price_parts = socks_prices_text.split(",")
+                    socks_prices = {}
+                    for part in price_parts:
+                        if ":" in part:
+                            key, value = part.split(":", 1)
+                            socks_prices[key.strip()] = float(value.strip())
+                    return socks_prices.get('5proxy', 0.4)  # افتراضي 5 بروكسيات
+                else:
+                    return float(socks_prices_text.strip())
+            return 0.4  # سعر افتراضي للسوكس
+        
+        return 0.0
+    except Exception as e:
+        print(f"خطأ في حساب سعر البروكسي: {e}")
+        return 3.0 if proxy_type == 'static' else 0.4
 
 def load_saved_prices():
     """تحميل الأسعار المحفوظة من قاعدة البيانات عند بدء تشغيل البوت"""
@@ -2068,7 +2116,10 @@ async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYP
     state = context.user_data.get('selected_state', 'manual')
     payment_method = context.user_data.get('payment_method', 'unknown')
     
-    db.create_order(order_id, user_id, proxy_type, country, state, payment_method)
+    # حساب سعر البروكسي
+    payment_amount = get_proxy_price(proxy_type, country, state)
+    
+    db.create_order(order_id, user_id, proxy_type, country, state, payment_method, payment_amount)
     
     # حفظ إثبات الدفع
     if update.message.photo:
@@ -2228,6 +2279,7 @@ async def send_order_copy_to_user(update: Update, context: ContextTypes.DEFAULT_
 ━━━━━━━━━━━━━━━
 💳 تفاصيل الدفع:
 💰 طريقة الدفع: {payment_method}
+💵 قيمة الطلب: `{order[6]}$`
 
 ━━━━━━━━━━━━━━━
 🔗 معرف الطلب: `{order[0]}`
@@ -2250,6 +2302,7 @@ async def send_order_copy_to_user(update: Update, context: ContextTypes.DEFAULT_
 ━━━━━━━━━━━━━━━
 💳 Payment Details:
 💰 Payment Method: {payment_method}
+💵 Order Value: `{order[6]}$`
 
 ━━━━━━━━━━━━━━━
 🔗 Order ID: `{order[0]}`
@@ -3023,6 +3076,10 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
         order_type = order_result[0][1]
         user_language = get_user_language(user_id)
         
+        # الحصول على تفاصيل الطلب لإضافة السعر
+        order_details = db.execute_query("SELECT payment_amount FROM orders WHERE id = ?", (order_id,))
+        payment_amount = order_details[0][0] if order_details and order_details[0][0] else 0.0
+        
         # رسالة للمستخدم مع رقم المعاملة
         if user_language == 'ar':
             user_message = f"""✅ تم قبول دفعتك بنجاح!
@@ -3030,6 +3087,7 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
 🆔 معرف الطلب: `{order_id}`
 💳 رقم المعاملة: `{transaction_number}`
 📦 نوع الباكج: {order_type}
+💰 قيمة الطلب: `{payment_amount}$`
 
 🔄 سيتم معالجة طلبك وإرسال البيانات قريباً."""
         else:
@@ -3038,6 +3096,7 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
 🆔 Order ID: `{order_id}`
 💳 Transaction Number: `{transaction_number}`
 📦 Package Type: {order_type}
+💰 Order Value: `{payment_amount}$`
 
 🔄 Your order will be processed and data sent soon."""
         
@@ -3058,6 +3117,7 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
 💳 رقم المعاملة: `{transaction_number}`
 👤 معرف المستخدم: `{user_id}`
 📝 الطلب: {proxy_type_ar}
+💰 قيمة الطلب: `{payment_amount}$`
 
 📋 الطلب جاهز للمعالجة والإرسال للمستخدم."""
     
@@ -3470,6 +3530,18 @@ async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE)
         (user_id,)
     )[0][0]
     
+    # إحصائيات إضافية للتشخيص
+    all_orders = db.execute_query(
+        "SELECT COUNT(*) FROM orders WHERE user_id = ?",
+        (user_id,)
+    )[0][0]
+    
+    # فحص الطلبات بحسب الحالة (للتشخيص)
+    orders_by_status = db.execute_query(
+        "SELECT status, COUNT(*), SUM(payment_amount) FROM orders WHERE user_id = ? GROUP BY status",
+        (user_id,)
+    )
+    
     referral_count = db.execute_query(
         "SELECT COUNT(*) FROM referrals WHERE referrer_id = ?",
         (user_id,)
@@ -3488,6 +3560,7 @@ async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 ━━━━━━━━━━━━━━━
 📈 إحصائيات الشراء:
+📊 إجمالي الطلبات: {all_orders}
 ✅ الشراءات الناجحة: {successful_orders[0]}
 💰 قيمة الشراءات: {successful_orders[1] or 0:.2f}$
 ❌ الشراءات الفاشلة: {failed_orders}
@@ -3500,7 +3573,11 @@ async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 ━━━━━━━━━━━━━━━
 📅 آخر شراء ناجح: {last_successful_order[0][0] if last_successful_order else 'لا يوجد'}
-📅 تاريخ الانضمام: {user[7]}"""
+📅 تاريخ الانضمام: {user[7]}
+
+━━━━━━━━━━━━━━━
+🔍 تفاصيل الطلبات بحسب الحالة:
+{chr(10).join([f"📌 {status}: {count} طلب - {amount or 0:.2f}$" for status, count, amount in orders_by_status]) if orders_by_status else "لا توجد طلبات"}"""
     
     await update.message.reply_text(report)
     return ConversationHandler.END
@@ -3624,17 +3701,25 @@ async def show_pending_orders_admin(update: Update, context: ContextTypes.DEFAUL
 
 async def delete_failed_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """حذف الطلبات الفاشلة"""
-    result = db.execute_query("DELETE FROM orders WHERE status = 'failed'")
-    deleted_count = db.execute_query("SELECT changes()")[0][0]
+    # أولاً، عد الطلبات الفاشلة
+    count_result = db.execute_query("SELECT COUNT(*) FROM orders WHERE status = 'failed'")
+    count_before = count_result[0][0] if count_result else 0
     
-    await update.message.reply_text(f"🗑️ تم حذف {deleted_count} طلب فاشل.")
+    # حذف الطلبات الفاشلة
+    db.execute_query("DELETE FROM orders WHERE status = 'failed'")
+    
+    await update.message.reply_text(f"🗑️ تم حذف {count_before} طلب فاشل.")
 
 async def delete_completed_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """حذف الطلبات المكتملة"""
-    result = db.execute_query("DELETE FROM orders WHERE status = 'completed'")
-    deleted_count = db.execute_query("SELECT changes()")[0][0]
+    # أولاً، عد الطلبات المكتملة
+    count_result = db.execute_query("SELECT COUNT(*) FROM orders WHERE status = 'completed'")
+    count_before = count_result[0][0] if count_result else 0
     
-    await update.message.reply_text(f"🗑️ تم حذف {deleted_count} طلب مكتمل.")
+    # حذف الطلبات المكتملة
+    db.execute_query("DELETE FROM orders WHERE status = 'completed'")
+    
+    await update.message.reply_text(f"🗑️ تم حذف {count_before} طلب مكتمل.")
 
 async def show_sales_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """عرض إحصائيات المبيعات"""
