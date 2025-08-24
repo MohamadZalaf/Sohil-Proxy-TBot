@@ -4626,6 +4626,51 @@ async def handle_static_price_update(update: Update, context: ContextTypes.DEFAU
         await update.message.reply_text("❌ تم إلغاء تعديل أسعار الستاتيك.", reply_markup=reply_markup)
         return ConversationHandler.END
     
+    def validate_price(price_str):
+        """التحقق من صحة السعر (يجب أن يكون رقم صحيح أو عشري)"""
+        try:
+            price = float(price_str.strip())
+            return price >= 0
+        except ValueError:
+            return False
+    
+    # التحقق من صحة المدخلات قبل المعالجة
+    if "," in prices_text:
+        # أسعار متعددة مثل: ISP:3,Verizon:4,ATT:6
+        price_parts = prices_text.split(",")
+        for part in price_parts:
+            if ":" in part:
+                key, value = part.split(":", 1)
+                if not validate_price(value):
+                    keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_static_prices")]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    await update.message.reply_text(
+                        f"❌ قيمة السعر غير صحيحة: `{value.strip()}`\n\n✅ يُسمح فقط بالأرقام الصحيحة أو العشرية\n✅ أمثلة صحيحة: `3`, `4.5`, `10.99`\n\nيرجى إعادة إدخال الأسعار:",
+                        parse_mode='Markdown',
+                        reply_markup=reply_markup
+                    )
+                    return SET_PRICE_STATIC
+            else:
+                keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_static_prices")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    "❌ تنسيق غير صحيح!\n\n✅ للأسعار المتعددة استخدم: `ISP:3,Verizon:4,ATT:6`\n✅ للسعر الواحد استخدم: `5`\n\nيرجى إعادة إدخال الأسعار:",
+                    parse_mode='Markdown',
+                    reply_markup=reply_markup
+                )
+                return SET_PRICE_STATIC
+    else:
+        # سعر واحد لجميع الأنواع
+        if not validate_price(prices_text):
+            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_static_prices")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                f"❌ قيمة السعر غير صحيحة: `{prices_text.strip()}`\n\n✅ يُسمح فقط بالأرقام الصحيحة أو العشرية\n✅ أمثلة صحيحة: `3`, `4.5`, `10.99`\n\nيرجى إعادة إدخال السعر:",
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+            return SET_PRICE_STATIC
+
     try:
         # تحليل الأسعار الجديدة
         if "," in prices_text:
@@ -4729,8 +4774,14 @@ Order ID: {{}}"""
         # إشعار جميع المستخدمين بالأسعار الجديدة
         await broadcast_price_update(context, "static", static_prices)
         
+        # إعادة تفعيل كيبورد الأدمن الرئيسي
+        await restore_admin_keyboard(context, update.effective_chat.id)
+        
     except Exception as e:
         await update.message.reply_text(f"❌ خطأ في تحديث الأسعار: {str(e)}")
+        
+        # إعادة تفعيل كيبورد الأدمن الرئيسي حتى في حالة الخطأ
+        await restore_admin_keyboard(context, update.effective_chat.id)
     
     return ConversationHandler.END
 
@@ -4789,6 +4840,51 @@ async def handle_socks_price_update(update: Update, context: ContextTypes.DEFAUL
         await update.message.reply_text("❌ تم إلغاء تعديل أسعار السوكس.", reply_markup=reply_markup)
         return ConversationHandler.END
     
+    def validate_price(price_str):
+        """التحقق من صحة السعر (يجب أن يكون رقم صحيح أو عشري)"""
+        try:
+            price = float(price_str.strip())
+            return price >= 0
+        except ValueError:
+            return False
+    
+    # التحقق من صحة المدخلات قبل المعالجة
+    if "," in prices_text:
+        # أسعار متعددة مثل: 5proxy:0.4,10proxy:0.7
+        price_parts = prices_text.split(",")
+        for part in price_parts:
+            if ":" in part:
+                key, value = part.split(":", 1)
+                if not validate_price(value):
+                    keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_socks_prices")]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    await update.message.reply_text(
+                        f"❌ قيمة السعر غير صحيحة: `{value.strip()}`\n\n✅ يُسمح فقط بالأرقام الصحيحة أو العشرية\n✅ أمثلة صحيحة: `0.4`, `1.5`, `2.99`\n\nيرجى إعادة إدخال الأسعار:",
+                        parse_mode='Markdown',
+                        reply_markup=reply_markup
+                    )
+                    return SET_PRICE_SOCKS
+            else:
+                keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_socks_prices")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    "❌ تنسيق غير صحيح!\n\n✅ للأسعار المتعددة استخدم: `5proxy:0.4,10proxy:0.7`\n✅ للسعر الواحد استخدم: `0.5`\n\nيرجى إعادة إدخال الأسعار:",
+                    parse_mode='Markdown',
+                    reply_markup=reply_markup
+                )
+                return SET_PRICE_SOCKS
+    else:
+        # سعر واحد لجميع الأنواع
+        if not validate_price(prices_text):
+            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_socks_prices")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                f"❌ قيمة السعر غير صحيحة: `{prices_text.strip()}`\n\n✅ يُسمح فقط بالأرقام الصحيحة أو العشرية\n✅ أمثلة صحيحة: `0.4`, `1.5`, `2.99`\n\nيرجى إعادة إدخال السعر:",
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+            return SET_PRICE_SOCKS
+
     try:
         # تحليل الأسعار الجديدة
         if "," in prices_text:
@@ -4890,8 +4986,14 @@ Order ID: {{}}"""
         # إشعار جميع المستخدمين بالأسعار الجديدة
         await broadcast_price_update(context, "socks", socks_prices)
         
+        # إعادة تفعيل كيبورد الأدمن الرئيسي
+        await restore_admin_keyboard(context, update.effective_chat.id)
+        
     except Exception as e:
         await update.message.reply_text(f"❌ خطأ في تحديث الأسعار: {str(e)}")
+        
+        # إعادة تفعيل كيبورد الأدمن الرئيسي حتى في حالة الخطأ
+        await restore_admin_keyboard(context, update.effective_chat.id)
     
     return ConversationHandler.END
 
