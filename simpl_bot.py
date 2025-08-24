@@ -65,54 +65,208 @@ ADMIN_CHAT_ID = None  # سيتم تحديده عند أول تسجيل دخول 
 # قواميس البيانات
 STATIC_COUNTRIES = {
     'ar': {
-        'US': '🇺🇸 أميركا',
-        'UK': '🇬🇧 بريطانيا', 
         'DE': '🇩🇪 ألمانيا',
+        'US': '🇺🇸 أميركا',
+        'UK': '🇬🇧 بريطانيا',
         'FR': '🇫🇷 فرنسا'
     },
     'en': {
-        'US': '🇺🇸 United States',
+        'FR': '🇫🇷 France',
+        'DE': '🇩🇪 Germany',
         'UK': '🇬🇧 United Kingdom',
-        'DE': '🇩🇪 Germany', 
-        'FR': '🇫🇷 France'
+        'US': '🇺🇸 United States'
     }
 }
 
 SOCKS_COUNTRIES = {
     'ar': {
-        'US': '🇺🇸 أميركا',
-        'UK': '🇬🇧 بريطانيا', 
-        'DE': '🇩🇪 ألمانيا',
+        'AL': '🇦🇱 ألبانيا',
+        'DE': '🇩🇪 ألمانيا', 
+        'UA': '🇺🇦 أوكرانيا',
+        'IE': '🇮🇪 أيرلندا',
+        'IS': '🇮🇸 أيسلندا',
+        'EE': '🇪🇪 إستونيا',
+        'ES': '🇪🇸 إسبانيا',
+        'IT': '🇮🇹 إيطاليا',
+        'AE': '🇦🇪 الإمارات العربية المتحدة',
+        'BA': '🇧🇦 البوسنة والهرسك',
+        'PT': '🇵🇹 البرتغال',
+        'BG': '🇧🇬 بلغاريا',
+        'BE': '🇧🇪 بلجيكا',
+        'BY': '🇧🇾 بيلاروسيا',
+        'CZ': '🇨🇿 التشيك',
+        'DK': '🇩🇰 الدنمارك',
+        'SE': '🇸🇪 السويد',
+        'CH': '🇨🇭 سويسرا',
+        'RS': '🇷🇸 صربيا',
+        'SY': '🇸🇾 سوريا',
+        'SK': '🇸🇰 سلوفاكيا',
         'FR': '🇫🇷 فرنسا',
+        'FI': '🇫🇮 فنلندا',
+        'CY': '🇨🇾 قبرص',
         'CA': '🇨🇦 كندا',
-        'AU': '🇦🇺 أستراليا',
-        'AT': '🇦🇹 النمسا'
+        'LU': '🇱🇺 لوكسمبورغ',
+        'LT': '🇱🇹 ليتوانيا',
+        'HU': '🇭🇺 المجر',
+        'UK': '🇬🇧 المملكة المتحدة',
+        'MK': '🇲🇰 مقدونيا الشمالية',
+        'MD': '🇲🇩 مولدوفا',
+        'MT': '🇲🇹 مالطا',
+        'NO': '🇳🇴 النرويج',
+        'AT': '🇦🇹 النمسا',
+        'NL': '🇳🇱 هولندا',
+        'US': '🇺🇸 الولايات المتحدة',
+        'GR': '🇬🇷 اليونان',
+        'PL': '🇵🇱 بولندا',
+        'RO': '🇷🇴 رومانيا'
     },
     'en': {
-        'US': '🇺🇸 United States',
-        'UK': '🇬🇧 United Kingdom',
-        'DE': '🇩🇪 Germany', 
-        'FR': '🇫🇷 France',
+        'AL': '🇦🇱 Albania',
+        'AT': '🇦🇹 Austria',
+        'BE': '🇧🇪 Belgium',
+        'BY': '🇧🇾 Belarus',
+        'BG': '🇧🇬 Bulgaria',
+        'BA': '🇧🇦 Bosnia and Herzegovina',
         'CA': '🇨🇦 Canada',
-        'AU': '🇦🇺 Australia',
-        'AT': '🇦🇹 Austria'
+        'CY': '🇨🇾 Cyprus',
+        'CZ': '🇨🇿 Czechia',
+        'DK': '🇩🇰 Denmark',
+        'EE': '🇪🇪 Estonia',
+        'FI': '🇫🇮 Finland',
+        'FR': '🇫🇷 France',
+        'DE': '🇩🇪 Germany',
+        'GR': '🇬🇷 Greece',
+        'HU': '🇭🇺 Hungary',
+        'IS': '🇮🇸 Iceland',
+        'IE': '🇮🇪 Ireland',
+        'IT': '🇮🇹 Italy',
+        'LT': '🇱🇹 Lithuania',
+        'LU': '🇱🇺 Luxembourg',
+        'MT': '🇲🇹 Malta',
+        'MD': '🇲🇩 Moldova',
+        'NL': '🇳🇱 Netherlands',
+        'MK': '🇲🇰 North Macedonia',
+        'NO': '🇳🇴 Norway',
+        'PL': '🇵🇱 Poland',
+        'PT': '🇵🇹 Portugal',
+        'RO': '🇷🇴 Romania',
+        'RS': '🇷🇸 Serbia',
+        'SK': '🇸🇰 Slovakia',
+        'ES': '🇪🇸 Spain',
+        'SE': '🇸🇪 Sweden',
+        'CH': '🇨🇭 Switzerland',
+        'SY': '🇸🇾 Syria',
+        'UA': '🇺🇦 Ukraine',
+        'AE': '🇦🇪 United Arab Emirates',
+        'UK': '🇬🇧 United Kingdom',
+        'US': '🇺🇸 United States'
     }
 }
 
 US_STATES = {
     'ar': {
+        'AL': 'ألاباما',
+        'AK': 'ألاسكا', 
+        'AZ': 'أريزونا',
+        'AR': 'أركنساس',
         'CA': 'كاليفورنيا',
-        'NY': 'نيويورك',
-        'TX': 'تكساس',
+        'CO': 'كولورادو',
+        'CT': 'كونيتيكت',
+        'DE': 'ديلاوير',
         'FL': 'فلوريدا',
-        'IL': 'إلينوي'
+        'GA': 'جورجيا',
+        'HI': 'هاواي',
+        'ID': 'أيداهو',
+        'IL': 'إلينوي',
+        'IN': 'إنديانا',
+        'IA': 'أيوا',
+        'KS': 'كانساس',
+        'KY': 'كنتاكي',
+        'LA': 'لويزيانا',
+        'ME': 'مين',
+        'MD': 'ماريلاند',
+        'MA': 'ماساتشوستس',
+        'MI': 'ميشيغان',
+        'MN': 'مينيسوتا',
+        'MS': 'ميسيسيبي',
+        'MO': 'ميزوري',
+        'MT': 'مونتانا',
+        'NE': 'نبراسكا',
+        'NV': 'نيفادا',
+        'NH': 'نيو هامبشير',
+        'NJ': 'نيو جيرسي',
+        'NM': 'نيو مكسيكو',
+        'NY': 'نيويورك',
+        'NC': 'كارولينا الشمالية',
+        'ND': 'داكوتا الشمالية',
+        'OH': 'أوهايو',
+        'OK': 'أوكلاهوما',
+        'OR': 'أوريغون',
+        'PA': 'بنسلفانيا',
+        'RI': 'رود آيلاند',
+        'SC': 'كارولينا الجنوبية',
+        'SD': 'داكوتا الجنوبية',
+        'TN': 'تينيسي',
+        'TX': 'تكساس',
+        'UT': 'يوتا',
+        'VT': 'فيرمونت',
+        'VA': 'فيرجينيا',
+        'WA': 'واشنطن',
+        'WV': 'فيرجينيا الغربية',
+        'WI': 'ويسكونسن',
+        'WY': 'وايومنغ'
     },
     'en': {
+        'AL': 'Alabama',
+        'AK': 'Alaska',
+        'AZ': 'Arizona',
+        'AR': 'Arkansas',
         'CA': 'California',
-        'NY': 'New York', 
-        'TX': 'Texas',
+        'CO': 'Colorado',
+        'CT': 'Connecticut',
+        'DE': 'Delaware',
         'FL': 'Florida',
-        'IL': 'Illinois'
+        'GA': 'Georgia',
+        'HI': 'Hawaii',
+        'ID': 'Idaho',
+        'IL': 'Illinois',
+        'IN': 'Indiana',
+        'IA': 'Iowa',
+        'KS': 'Kansas',
+        'KY': 'Kentucky',
+        'LA': 'Louisiana',
+        'ME': 'Maine',
+        'MD': 'Maryland',
+        'MA': 'Massachusetts',
+        'MI': 'Michigan',
+        'MN': 'Minnesota',
+        'MS': 'Mississippi',
+        'MO': 'Missouri',
+        'MT': 'Montana',
+        'NE': 'Nebraska',
+        'NV': 'Nevada',
+        'NH': 'New Hampshire',
+        'NJ': 'New Jersey',
+        'NM': 'New Mexico',
+        'NY': 'New York',
+        'NC': 'North Carolina',
+        'ND': 'North Dakota',
+        'OH': 'Ohio',
+        'OK': 'Oklahoma',
+        'OR': 'Oregon',
+        'PA': 'Pennsylvania',
+        'RI': 'Rhode Island',
+        'SC': 'South Carolina',
+        'SD': 'South Dakota',
+        'TN': 'Tennessee',
+        'TX': 'Texas',
+        'UT': 'Utah',
+        'VT': 'Vermont',
+        'VA': 'Virginia',
+        'WA': 'Washington',
+        'WV': 'West Virginia',
+        'WI': 'Wisconsin',
+        'WY': 'Wyoming'
     }
 }
 
@@ -128,6 +282,202 @@ UK_STATES = {
         'SCT': 'Scotland',
         'WAL': 'Wales', 
         'NIR': 'Northern Ireland'
+    }
+}
+
+# مناطق ألمانيا
+DE_STATES = {
+    'ar': {
+        'BW': 'بادن فورتمبيرغ',
+        'BY': 'بافاريا',
+        'BE': 'برلين',
+        'BB': 'براندنبورغ',
+        'HB': 'بريمن',
+        'HH': 'هامبورغ',
+        'HE': 'هيسن',
+        'NI': 'ساكسونيا السفلى',
+        'NW': 'شمال الراين وستفاليا',
+        'RP': 'راينلاند بالاتينات',
+        'SL': 'سارلاند',
+        'SN': 'ساكسونيا',
+        'ST': 'ساكسونيا أنهالت',
+        'SH': 'شليسفيغ هولشتاين',
+        'TH': 'تورينغن'
+    },
+    'en': {
+        'BW': 'Baden-Württemberg',
+        'BY': 'Bavaria',
+        'BE': 'Berlin',
+        'BB': 'Brandenburg',
+        'HB': 'Bremen',
+        'HH': 'Hamburg',
+        'HE': 'Hesse',
+        'NI': 'Lower Saxony',
+        'NW': 'North Rhine-Westphalia',
+        'RP': 'Rhineland-Palatinate',
+        'SL': 'Saarland',
+        'SN': 'Saxony',
+        'ST': 'Saxony-Anhalt',
+        'SH': 'Schleswig-Holstein',
+        'TH': 'Thuringia'
+    }
+}
+
+# مناطق فرنسا
+FR_STATES = {
+    'ar': {
+        'ARA': 'أوفيرن رون ألب',
+        'BFC': 'بورغونيا فرانش كونته',
+        'BRE': 'بريتاني',
+        'CVL': 'وسط وادي اللوار',
+        'COR': 'كورسيكا',
+        'GES': 'الألزاس الشرقي',
+        'HDF': 'هو دو فرانس',
+        'IDF': 'إيل دو فرانس',
+        'NOR': 'نورماندي',
+        'NAQ': 'آكيتين الجديدة',
+        'OCC': 'أوكسيتانيا',
+        'PDL': 'باي دو لا لوار',
+        'PAC': 'بروفانس ألب كوت دازور'
+    },
+    'en': {
+        'ARA': 'Auvergne-Rhône-Alpes',
+        'BFC': 'Burgundy-Franche-Comté',
+        'BRE': 'Brittany',
+        'CVL': 'Centre-Val de Loire',
+        'COR': 'Corsica',
+        'GES': 'Grand Est',
+        'HDF': 'Hauts-de-France',
+        'IDF': 'Île-de-France',
+        'NOR': 'Normandy',
+        'NAQ': 'Nouvelle-Aquitaine',
+        'OCC': 'Occitania',
+        'PDL': 'Pays de la Loire',
+        'PAC': 'Provence-Alpes-Côte d\'Azur'
+    }
+}
+
+# مناطق إيطاليا
+IT_STATES = {
+    'ar': {
+        'ABR': 'أبروتسو',
+        'BAS': 'باسيليكاتا',
+        'CAL': 'كالابريا',
+        'CAM': 'كامبانيا',
+        'EMR': 'إميليا رومانيا',
+        'FVG': 'فريولي فينيتسيا جوليا',
+        'LAZ': 'لاتسيو',
+        'LIG': 'ليغوريا',
+        'LOM': 'لومبارديا',
+        'MAR': 'ماركي',
+        'MOL': 'موليسي',
+        'PIE': 'بيدمونت',
+        'PUG': 'بوليا',
+        'SAR': 'سردينيا',
+        'SIC': 'صقلية',
+        'TOS': 'توسكانا',
+        'TRE': 'ترينتينو ألتو أديجي',
+        'UMB': 'أومبريا',
+        'VDA': 'وادي أوستا',
+        'VEN': 'فينيتو'
+    },
+    'en': {
+        'ABR': 'Abruzzo',
+        'BAS': 'Basilicata',
+        'CAL': 'Calabria',
+        'CAM': 'Campania',
+        'EMR': 'Emilia-Romagna',
+        'FVG': 'Friuli-Venezia Giulia',
+        'LAZ': 'Lazio',
+        'LIG': 'Liguria',
+        'LOM': 'Lombardy',
+        'MAR': 'Marche',
+        'MOL': 'Molise',
+        'PIE': 'Piedmont',
+        'PUG': 'Puglia',
+        'SAR': 'Sardinia',
+        'SIC': 'Sicily',
+        'TOS': 'Tuscany',
+        'TRE': 'Trentino-Alto Adige',
+        'UMB': 'Umbria',
+        'VDA': 'Aosta Valley',
+        'VEN': 'Veneto'
+    }
+}
+
+# مناطق إسبانيا
+ES_STATES = {
+    'ar': {
+        'AND': 'الأندلس',
+        'ARA': 'أراغون',
+        'AST': 'أستورياس',
+        'BAL': 'جزر البليار',
+        'PV': 'الباسك',
+        'CAN': 'جزر الكناري',
+        'CAB': 'كانتابريا',
+        'CLM': 'قشتالة لا مانتشا',
+        'CYL': 'قشتالة وليون',
+        'CAT': 'كاتالونيا',
+        'EXT': 'إكستريمادورا',
+        'GAL': 'غاليسيا',
+        'MAD': 'مدريد',
+        'MUR': 'مورسيا',
+        'NAV': 'نافارا',
+        'RIO': 'لا ريوخا',
+        'VAL': 'فالنسيا'
+    },
+    'en': {
+        'AND': 'Andalusia',
+        'ARA': 'Aragon',
+        'AST': 'Asturias',
+        'BAL': 'Balearic Islands',
+        'PV': 'Basque Country',
+        'CAN': 'Canary Islands',
+        'CAB': 'Cantabria',
+        'CLM': 'Castile-La Mancha',
+        'CYL': 'Castile and León',
+        'CAT': 'Catalonia',
+        'EXT': 'Extremadura',
+        'GAL': 'Galicia',
+        'MAD': 'Madrid',
+        'MUR': 'Murcia',
+        'NAV': 'Navarre',
+        'RIO': 'La Rioja',
+        'VAL': 'Valencia'
+    }
+}
+
+# مناطق كندا
+CA_STATES = {
+    'ar': {
+        'AB': 'ألبرتا',
+        'BC': 'كولومبيا البريطانية',
+        'MB': 'مانيتوبا',
+        'NB': 'نيو برونزويك',
+        'NL': 'نيوفاوندلاند ولابرادور',
+        'NS': 'نوفا سكوتيا',
+        'ON': 'أونتاريو',
+        'PE': 'جزيرة الأمير إدوارد',
+        'QC': 'كيبيك',
+        'SK': 'ساسكاتشوان',
+        'NT': 'الأقاليم الشمالية الغربية',
+        'NU': 'نونافوت',
+        'YT': 'يوكون'
+    },
+    'en': {
+        'AB': 'Alberta',
+        'BC': 'British Columbia',
+        'MB': 'Manitoba',
+        'NB': 'New Brunswick',
+        'NL': 'Newfoundland and Labrador',
+        'NS': 'Nova Scotia',
+        'ON': 'Ontario',
+        'PE': 'Prince Edward Island',
+        'QC': 'Quebec',
+        'SK': 'Saskatchewan',
+        'NT': 'Northwest Territories',
+        'NU': 'Nunavut',
+        'YT': 'Yukon'
     }
 }
 
@@ -1110,7 +1460,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             return await handle_payment_failed(update, context)
     elif query.data.startswith("proxy_type_"):
         return await handle_proxy_details_input(update, context)
-    elif query.data.startswith("admin_country_"):
+    elif query.data.startswith("admin_country_") or query.data.startswith("admin_state_"):
         return await handle_admin_country_selection(update, context)
     elif query.data in ["manage_orders", "show_pending_orders", "admin_referrals", "user_lookup", "manage_money", "admin_settings", "reset_balance"]:
         await handle_admin_menu_actions(update, context)
@@ -1130,43 +1480,74 @@ async def handle_admin_country_selection(update: Update, context: ContextTypes.D
     query = update.callback_query
     await query.answer()
     
-    if query.data == "admin_other_country":
+    # معالجة التنقل بين الصفحات
+    if query.data.startswith("admin_country_page_"):
+        page = int(query.data.replace("admin_country_page_", ""))
+        proxy_type = context.user_data.get('admin_proxy_type', 'static')
+        countries = SOCKS_COUNTRIES['ar'] if proxy_type == 'socks' else STATIC_COUNTRIES['ar']
+        
+        reply_markup = create_paginated_keyboard(countries, "admin_country_", page, 8, 'ar')
+        await query.edit_message_text("4️⃣ اختر الدولة:", reply_markup=reply_markup)
+        return ENTER_COUNTRY
+    
+    # معالجة التنقل بين صفحات الولايات
+    elif query.data.startswith("admin_state_page_"):
+        page = int(query.data.replace("admin_state_page_", ""))
+        country_code = context.user_data.get('current_country_code', '')
+        states = get_states_for_country(country_code)
+        
+        if states:
+            reply_markup = create_paginated_keyboard(states['ar'], "admin_state_", page, 8, 'ar')
+            await query.edit_message_text("5️⃣ اختر الولاية:", reply_markup=reply_markup)
+        return ENTER_STATE
+    
+    elif query.data == "admin_country_other":
         context.user_data['admin_input_state'] = ENTER_COUNTRY
         await query.edit_message_text("4️⃣ يرجى إدخال اسم الدولة:")
         return ENTER_COUNTRY
+    
     elif query.data.startswith("admin_state_"):
-        state_code = query.data.replace("admin_state_", "")
-        context.user_data['admin_proxy_state'] = US_STATES['ar'].get(state_code, state_code)
-        context.user_data['admin_input_state'] = ENTER_USERNAME
-        await query.edit_message_text("6️⃣ يرجى إدخال اسم المستخدم للبروكسي:")
-        return ENTER_USERNAME
-    elif query.data == "admin_other_state":
-        context.user_data['admin_input_state'] = ENTER_STATE
-        await query.edit_message_text("5️⃣ يرجى إدخال اسم الولاية:")
-        return ENTER_STATE
+        if query.data == "admin_state_other":
+            context.user_data['admin_input_state'] = ENTER_STATE
+            await query.edit_message_text("5️⃣ يرجى إدخال اسم الولاية:")
+            return ENTER_STATE
+        else:
+            state_code = query.data.replace("admin_state_", "")
+            country_code = context.user_data.get('current_country_code', '')
+            states = get_states_for_country(country_code)
+            
+            if states:
+                context.user_data['admin_proxy_state'] = states['ar'].get(state_code, state_code)
+            else:
+                context.user_data['admin_proxy_state'] = state_code
+                
+            context.user_data['admin_input_state'] = ENTER_USERNAME
+            await query.edit_message_text("6️⃣ يرجى إدخال اسم المستخدم للبروكسي:")
+            return ENTER_USERNAME
+    
     else:
         country_code = query.data.replace("admin_country_", "")
-        context.user_data['admin_proxy_country'] = STATIC_COUNTRIES['ar'][country_code]
+        context.user_data['current_country_code'] = country_code
+        
+        # تحديد قائمة الدول المناسبة
+        proxy_type = context.user_data.get('admin_proxy_type', 'static')
+        if proxy_type == 'socks':
+            context.user_data['admin_proxy_country'] = SOCKS_COUNTRIES['ar'].get(country_code, country_code)
+        else:
+            context.user_data['admin_proxy_country'] = STATIC_COUNTRIES['ar'].get(country_code, country_code)
         
         # عرض قائمة الولايات إذا كانت متوفرة
-        if country_code == "US":
-            states = US_STATES['ar']
-        elif country_code == "UK":
-            states = UK_STATES['ar']
+        states = get_states_for_country(country_code)
+        
+        if states:
+            reply_markup = create_paginated_keyboard(states['ar'], "admin_state_", 0, 8, 'ar')
+            await query.edit_message_text("5️⃣ اختر الولاية:", reply_markup=reply_markup)
+            return ENTER_STATE
         else:
             # انتقل مباشرة لاسم المستخدم
             context.user_data['admin_input_state'] = ENTER_USERNAME
             await query.edit_message_text("6️⃣ يرجى إدخال اسم المستخدم للبروكسي:")
             return ENTER_USERNAME
-        
-        keyboard = []
-        for code, name in states.items():
-            keyboard.append([InlineKeyboardButton(name, callback_data=f"admin_state_{code}")])
-        keyboard.append([InlineKeyboardButton("غير ذلك", callback_data="admin_other_state")])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("5️⃣ اختر الولاية:", reply_markup=reply_markup)
-        return ENTER_STATE
 
 async def handle_withdrawal_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة طلب سحب الرصيد"""
@@ -1245,9 +1626,23 @@ async def handle_custom_message_choice(update: Update, context: ContextTypes.DEF
         if user_result:
             user_id = user_result[0][0]
             user_language = get_user_language(user_id)
+            
+            # إرسال رسالة فشل العملية مع معلومات الدعم
+            failure_message = {
+                'ar': f"""❌ تم رفض طلبك رقم `{order_id}`
+
+إن كان لديك استفسار، يرجى التواصل مع الدعم:
+@Static_support""",
+                'en': f"""❌ Your order `{order_id}` has been rejected
+
+If you have any questions, please contact support:
+@Static_support"""
+            }
+            
             await context.bot.send_message(
                 user_id,
-                MESSAGES[user_language]['order_failed']
+                failure_message[user_language],
+                parse_mode='Markdown'
             )
         
         # جدولة حذف الطلب بعد 48 ساعة
@@ -1267,12 +1662,39 @@ async def handle_custom_message_input(update: Update, context: ContextTypes.DEFA
     
     if user_result:
         user_id = user_result[0][0]
-        await context.bot.send_message(user_id, custom_message)
+        user_language = get_user_language(user_id)
+        
+        # إرسال الرسالة المخصصة في قالب جاهز
+        admin_message_template = f"""📩 لديك رسالة من الأدمن
+
+"{custom_message}"
+
+━━━━━━━━━━━━━━━━━"""
+        
+        await context.bot.send_message(user_id, admin_message_template)
+        
+        # إرسال رسالة فشل العملية
+        failure_message = {
+            'ar': f"""❌ تم رفض طلبك رقم `{order_id}`
+
+إن كان لديك استفسار، يرجى التواصل مع الدعم:
+@Static_support""",
+            'en': f"""❌ Your order `{order_id}` has been rejected
+
+If you have any questions, please contact support:
+@Static_support"""
+        }
+        
+        await context.bot.send_message(
+            user_id,
+            failure_message[user_language],
+            parse_mode='Markdown'
+        )
         
         # جدولة حذف الطلب بعد 48 ساعة
         await schedule_order_deletion(context, order_id, user_id)
     
-    await update.message.reply_text(f"تم إرسال الرسالة المخصصة للمستخدم.\nمعرف الطلب: {order_id}\n\n⏰ سيتم حذف الطلب تلقائياً بعد 48 ساعة")
+    await update.message.reply_text(f"تم إرسال الرسالة المخصصة ورسالة فشل العملية للمستخدم.\nمعرف الطلب: {order_id}\n\n⏰ سيتم حذف الطلب تلقائياً بعد 48 ساعة")
     return ConversationHandler.END
 
 async def schedule_order_deletion(context: ContextTypes.DEFAULT_TYPE, order_id: str, user_id: int = None) -> None:
@@ -1709,13 +2131,15 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
         elif current_state == ENTER_PROXY_PORT:
             context.user_data['admin_proxy_port'] = text
             
-            # عرض قائمة الدول
-            keyboard = []
-            for code, name in STATIC_COUNTRIES['ar'].items():
-                keyboard.append([InlineKeyboardButton(name, callback_data=f"admin_country_{code}")])
-            keyboard.append([InlineKeyboardButton("غير ذلك", callback_data="admin_other_country")])
+            # تحديد نوع البروكسي المختار لعرض الدول المناسبة
+            proxy_type = context.user_data.get('admin_proxy_type', 'static')
+            if proxy_type == 'socks':
+                countries = SOCKS_COUNTRIES['ar']
+            else:
+                countries = STATIC_COUNTRIES['ar']
             
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            # عرض قائمة الدول مقسمة
+            reply_markup = create_paginated_keyboard(countries, "admin_country_", 0, 8, 'ar')
             await update.message.reply_text("4️⃣ اختر الدولة:", reply_markup=reply_markup)
             return ENTER_COUNTRY
         
@@ -2703,6 +3127,55 @@ async def show_user_statistics(update: Update, context: ContextTypes.DEFAULT_TYP
         message += f"   💰 الرصيد: {balance:.2f}$\n\n"
     
     await update.message.reply_text(message, parse_mode='Markdown')
+
+# وظائف التقسيم والتنقل
+def paginate_items(items, page=0, items_per_page=8):
+    """تقسيم القوائم لصفحات"""
+    start = page * items_per_page
+    end = start + items_per_page
+    return list(items.items())[start:end], len(items) > end
+
+def create_paginated_keyboard(items, callback_prefix, page=0, items_per_page=8, language='ar'):
+    """إنشاء كيبورد مقسم بأزرار التنقل"""
+    keyboard = []
+    
+    # إضافة زر "غير ذلك" في المقدمة مع إيموجي مميز
+    other_text = "🔧 غير ذلك" if language == 'ar' else "🔧 Other"
+    keyboard.append([InlineKeyboardButton(other_text, callback_data=f"{callback_prefix}other")])
+    
+    # الحصول على العناصر للصفحة الحالية
+    page_items, has_more = paginate_items(items, page, items_per_page)
+    
+    # إضافة عناصر الصفحة الحالية
+    for code, name in page_items:
+        keyboard.append([InlineKeyboardButton(name, callback_data=f"{callback_prefix}{code}")])
+    
+    # إضافة أزرار التنقل
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(InlineKeyboardButton("◀️ السابق" if language == 'ar' else "◀️ Previous", 
+                                               callback_data=f"{callback_prefix}page_{page-1}"))
+    if has_more:
+        nav_buttons.append(InlineKeyboardButton("التالي ▶️" if language == 'ar' else "Next ▶️", 
+                                               callback_data=f"{callback_prefix}page_{page+1}"))
+    
+    if nav_buttons:
+        keyboard.append(nav_buttons)
+    
+    return InlineKeyboardMarkup(keyboard)
+
+def get_states_for_country(country_code):
+    """الحصول على قائمة الولايات/المناطق للدولة المحددة"""
+    states_map = {
+        'US': US_STATES,
+        'UK': UK_STATES,
+        'DE': DE_STATES,
+        'FR': FR_STATES,
+        'IT': IT_STATES,
+        'ES': ES_STATES,
+        'CA': CA_STATES
+    }
+    return states_map.get(country_code, None)
 
 def main() -> None:
     """الدالة الرئيسية"""
