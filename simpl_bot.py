@@ -1565,15 +1565,23 @@ async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
     language = get_user_language(user_id)
     
+    # التحقق من وجود البيانات المطلوبة
+    if 'proxy_type' not in context.user_data:
+        await update.message.reply_text(
+            "❌ خطأ: لم يتم العثور على نوع البروكسي. يرجى البدء من جديد بالضغط على /start",
+            parse_mode='Markdown'
+        )
+        return ConversationHandler.END
+    
     # إنشاء معرف الطلب الآن فقط عند إرسال إثبات الدفع
     order_id = generate_order_id()
     context.user_data['current_order_id'] = order_id
     
     # إنشاء الطلب في قاعدة البيانات
-    proxy_type = context.user_data['proxy_type']
+    proxy_type = context.user_data.get('proxy_type', 'static')
     country = context.user_data.get('selected_country', 'manual')
     state = context.user_data.get('selected_state', 'manual')
-    payment_method = context.user_data['payment_method']
+    payment_method = context.user_data.get('payment_method', 'unknown')
     
     db.create_order(order_id, user_id, proxy_type, country, state, payment_method)
     
@@ -4356,6 +4364,7 @@ def main() -> None:
             CUSTOM_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input)]
         },
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+        per_message=False,
     )
 
     # معالج شامل لجميع وظائف الأدمن
@@ -4378,6 +4387,7 @@ def main() -> None:
             QUIET_HOURS: [CallbackQueryHandler(handle_quiet_hours_selection, pattern="^quiet_")]
         },
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+        per_message=False,
     )
 
     admin_conv_handler = ConversationHandler(
@@ -4387,6 +4397,7 @@ def main() -> None:
             ADMIN_MENU: [CallbackQueryHandler(handle_admin_menu_actions)]
         },
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+        per_message=False,
     )
     
     # معالج إثبات الدفع
@@ -4396,6 +4407,7 @@ def main() -> None:
             PAYMENT_PROOF: [MessageHandler(filters.ALL & ~filters.COMMAND, handle_payment_proof)],
         },
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+        per_message=False,
     )
     
     # معالج البث
@@ -4413,6 +4425,7 @@ def main() -> None:
             BROADCAST_CONFIRM: [CallbackQueryHandler(handle_broadcast_confirmation, pattern="^(confirm_broadcast|cancel_broadcast)$")],
         },
         fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+        per_message=False,
     )
 
     # إضافة المعالجات
