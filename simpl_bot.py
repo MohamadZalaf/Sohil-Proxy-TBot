@@ -2659,11 +2659,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data.clear()
         await query.edit_message_text("❌ تم إلغاء إدخال الرسالة المخصصة.")
         return ConversationHandler.END
-    elif query.data == "cancel_proxy_setup":
-        # إلغاء إعداد البروكسي
-        context.user_data.clear()
-        await query.edit_message_text("❌ تم إلغاء إعداد البروكسي.")
-        return ConversationHandler.END
+
     elif query.data.startswith("quiet_"):
         await handle_quiet_hours_selection(update, context)
     elif query.data in ["confirm_clear_db", "cancel_clear_db"]:
@@ -2688,6 +2684,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_cancel_balance_reset(update, context)
     elif query.data == "cancel_payment_proof":
         await handle_cancel_payment_proof(update, context)
+    elif query.data == "cancel_proxy_setup":
+        await handle_cancel_proxy_setup(update, context)
 
     else:
         await query.answer("قيد التطوير...")
@@ -3455,31 +3453,37 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
         if current_state == ENTER_PROXY_ADDRESS:
             # التحقق من صحة عنوان IP
             if not validate_ip_address(text):
+                keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
                 await update.message.reply_text(
                     "❌ عنوان IP غير صحيح!\n\n"
                     "✅ الشكل المطلوب: xxx.xxx.xxx.xxx\n"
                     "✅ مثال صحيح: 192.168.1.1 أو 62.1.2.1\n"
                     "✅ يُقبل من 1-3 أرقام لكل جزء\n\n"
-                    "يرجى إعادة إدخال عنوان IP:"
+                    "يرجى إعادة إدخال عنوان IP:",
+                    reply_markup=reply_markup
                 )
                 return ENTER_PROXY_ADDRESS
             
             context.user_data['admin_proxy_address'] = text
             context.user_data['admin_input_state'] = ENTER_PROXY_PORT
-            keyboard = [[KeyboardButton("❌ إلغاء")]]
-            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text("3️⃣ يرجى إدخال البورت:", reply_markup=reply_markup)
             return ENTER_PROXY_PORT
         
         elif current_state == ENTER_PROXY_PORT:
             # التحقق من صحة البورت
             if not validate_port(text):
+                keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
                 await update.message.reply_text(
                     "❌ رقم البورت غير صحيح!\n\n"
                     "✅ يجب أن يكون رقماً فقط\n"
                     "✅ حد أقصى 6 أرقام\n"
                     "✅ مثال صحيح: 80, 8080, 123456\n\n"
-                    "يرجى إعادة إدخال رقم البورت:"
+                    "يرجى إعادة إدخال رقم البورت:",
+                    reply_markup=reply_markup
                 )
                 return ENTER_PROXY_PORT
             
@@ -3501,26 +3505,34 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
             # معالجة إدخال الدولة يدوياً
             context.user_data['admin_proxy_country'] = text
             context.user_data['admin_input_state'] = ENTER_STATE
-            await update.message.reply_text("5️⃣ يرجى إدخال اسم الولاية:")
+            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("5️⃣ يرجى إدخال اسم الولاية:", reply_markup=reply_markup)
             return ENTER_STATE
         
         elif current_state == ENTER_STATE:
             # معالجة إدخال الولاية يدوياً
             context.user_data['admin_proxy_state'] = text
             context.user_data['admin_input_state'] = ENTER_USERNAME
-            await update.message.reply_text("6️⃣ يرجى إدخال اسم المستخدم للبروكسي:")
+            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("6️⃣ يرجى إدخال اسم المستخدم للبروكسي:", reply_markup=reply_markup)
             return ENTER_USERNAME
         
         elif current_state == ENTER_USERNAME:
             context.user_data['admin_proxy_username'] = text
             context.user_data['admin_input_state'] = ENTER_PASSWORD
-            await update.message.reply_text("7️⃣ يرجى إدخال كلمة المرور:")
+            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("7️⃣ يرجى إدخال كلمة المرور:", reply_markup=reply_markup)
             return ENTER_PASSWORD
         
         elif current_state == ENTER_PASSWORD:
             context.user_data['admin_proxy_password'] = text
             context.user_data['admin_input_state'] = ENTER_THANK_MESSAGE
-            await update.message.reply_text("8️⃣ يرجى إدخال رسالة شكر قصيرة:")
+            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("8️⃣ يرجى إدخال رسالة شكر قصيرة:", reply_markup=reply_markup)
             return ENTER_THANK_MESSAGE
         
         elif current_state == ENTER_THANK_MESSAGE:
@@ -5125,6 +5137,17 @@ async def handle_cancel_custom_message(update: Update, context: ContextTypes.DEF
     await query.edit_message_text("❌ تم إلغاء إرسال الرسالة المخصصة")
     return ConversationHandler.END
 
+async def handle_cancel_proxy_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إلغاء إعداد البروكسي"""
+    query = update.callback_query
+    await query.answer()
+    
+    # تنظيف البيانات المؤقتة
+    context.user_data.clear()
+    
+    await query.edit_message_text("❌ تم إلغاء إعداد البروكسي")
+    return ConversationHandler.END
+
 
 async def show_user_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """عرض إحصائيات المستخدمين مرتبة حسب عدد الإحالات"""
@@ -5550,19 +5573,36 @@ def main() -> None:
                 CallbackQueryHandler(handle_payment_failed, pattern="^payment_failed$")
             ],
             ENTER_PROXY_TYPE: [CallbackQueryHandler(handle_proxy_details_input, pattern="^proxy_type_")],
-            ENTER_PROXY_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
-            ENTER_PROXY_PORT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
+            ENTER_PROXY_ADDRESS: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
+                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
+            ],
+            ENTER_PROXY_PORT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
+                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
+            ],
             ENTER_COUNTRY: [
                 CallbackQueryHandler(handle_admin_country_selection, pattern="^admin_country_"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
+                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
             ],
             ENTER_STATE: [
                 CallbackQueryHandler(handle_admin_country_selection, pattern="^admin_state_"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
+                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
             ],
-            ENTER_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
-            ENTER_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
-            ENTER_THANK_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
+            ENTER_USERNAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
+                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
+            ],
+            ENTER_PASSWORD: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
+                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
+            ],
+            ENTER_THANK_MESSAGE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
+                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
+            ],
             CUSTOM_MESSAGE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input),
                 CallbackQueryHandler(handle_custom_message_choice, pattern="^(send_custom_message|no_custom_message)$"),
