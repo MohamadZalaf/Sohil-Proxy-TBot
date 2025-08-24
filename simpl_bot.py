@@ -1109,9 +1109,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             return await handle_payment_failed(update, context)
     elif query.data.startswith("proxy_type_"):
-        await handle_proxy_details_input(update, context)
+        return await handle_proxy_details_input(update, context)
     elif query.data.startswith("admin_country_"):
-        await handle_admin_country_selection(update, context)
+        return await handle_admin_country_selection(update, context)
     elif query.data in ["manage_orders", "show_pending_orders", "admin_referrals", "user_lookup", "manage_money", "admin_settings", "reset_balance"]:
         await handle_admin_menu_actions(update, context)
     elif query.data == "withdraw_balance":
@@ -1681,6 +1681,20 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text("4️⃣ اختر الدولة:", reply_markup=reply_markup)
             return ENTER_COUNTRY
+        
+        elif current_state == ENTER_COUNTRY:
+            # معالجة إدخال الدولة يدوياً
+            context.user_data['admin_proxy_country'] = text
+            context.user_data['admin_input_state'] = ENTER_STATE
+            await update.message.reply_text("5️⃣ يرجى إدخال اسم الولاية:")
+            return ENTER_STATE
+        
+        elif current_state == ENTER_STATE:
+            # معالجة إدخال الولاية يدوياً
+            context.user_data['admin_proxy_state'] = text
+            context.user_data['admin_input_state'] = ENTER_USERNAME
+            await update.message.reply_text("6️⃣ يرجى إدخال اسم المستخدم للبروكسي:")
+            return ENTER_USERNAME
         
         elif current_state == ENTER_USERNAME:
             context.user_data['admin_proxy_username'] = text
