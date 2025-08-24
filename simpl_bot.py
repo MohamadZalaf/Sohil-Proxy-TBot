@@ -2041,13 +2041,17 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
     
     if query.data == "manual_country":
         # الإدخال اليدوي للدولة
-        await query.edit_message_text("يرجى إدخال اسم الدولة يدوياً:")
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("يرجى إدخال اسم الدولة يدوياً:", reply_markup=reply_markup)
         context.user_data['waiting_for'] = 'manual_country'
         return
     
     elif query.data == "manual_state":
         # الإدخال اليدوي للولاية
-        await query.edit_message_text("يرجى إدخال اسم الولاية/المنطقة يدوياً:")
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("يرجى إدخال اسم الولاية/المنطقة يدوياً:", reply_markup=reply_markup)
         context.user_data['waiting_for'] = 'manual_state'
         return
     
@@ -2385,6 +2389,7 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
 ━━━━━━━━━━━━━━━
 💳 تفاصيل الدفع:
 💰 طريقة الدفع: {payment_method_ar}
+💵 قيمة الطلب: `{order[6]}$`
 📄 إثبات الدفع: {"✅ مرفق" if order[7] else "❌ غير مرفق"}
 
 ━━━━━━━━━━━━━━━
@@ -2634,6 +2639,24 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         # إظهار نافذة منبثقة مع معلومات المطور
         popup_text = context.user_data.get('popup_text', "🧑‍💻 Developed by Mohamad Zalaf")
         await query.answer(text=popup_text, show_alert=True)
+    elif query.data == "cancel_manual_input":
+        # إلغاء الإدخال اليدوي والعودة للقائمة
+        context.user_data.pop('waiting_for', None)
+        user_id = update.effective_user.id
+        language = get_user_language(user_id)
+        await query.edit_message_text("❌ تم إلغاء العملية. يمكنك البدء من جديد.")
+        # إرسال القائمة الرئيسية مرة أخرى
+        await start(update, context)
+    elif query.data == "cancel_custom_message":
+        # إلغاء إدخال الرسالة المخصصة والعودة لقائمة الأدمن
+        context.user_data.clear()
+        await query.edit_message_text("❌ تم إلغاء إدخال الرسالة المخصصة.")
+        return ConversationHandler.END
+    elif query.data == "cancel_proxy_setup":
+        # إلغاء إعداد البروكسي
+        context.user_data.clear()
+        await query.edit_message_text("❌ تم إلغاء إعداد البروكسي.")
+        return ConversationHandler.END
     elif query.data.startswith("quiet_"):
         await handle_quiet_hours_selection(update, context)
     elif query.data in ["confirm_clear_db", "cancel_clear_db"]:
@@ -2789,7 +2812,9 @@ async def handle_custom_message_choice(update: Update, context: ContextTypes.DEF
     order_id = context.user_data['processing_order_id']
     
     if query.data == "send_custom_message":
-        await query.edit_message_text("يرجى إدخال الرسالة المخصصة للمستخدم:")
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_custom_message")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("يرجى إدخال الرسالة المخصصة للمستخدم:", reply_markup=reply_markup)
         return CUSTOM_MESSAGE
     else:
         # عدم إرسال رسالة مخصصة
@@ -2820,6 +2845,9 @@ If you have any questions, please contact support:
         
         # جدولة حذف الطلب بعد 48 ساعة
         await schedule_order_deletion(context, order_id, user_id if user_result else None)
+        
+        # تنظيف البيانات المؤقتة
+        context.user_data.clear()
         
         await query.edit_message_text(f"تم إشعار المستخدم برفض الطلب.\nمعرف الطلب: `{order_id}`\n\n⏰ سيتم حذف الطلب تلقائياً بعد 48 ساعة", parse_mode='Markdown')
         return ConversationHandler.END
@@ -2866,6 +2894,9 @@ If you have any questions, please contact support:
         
         # جدولة حذف الطلب بعد 48 ساعة
         await schedule_order_deletion(context, order_id, user_id)
+    
+    # تنظيف البيانات المؤقتة
+    context.user_data.clear()
     
     await update.message.reply_text(f"تم إرسال الرسالة المخصصة ورسالة فشل العملية للمستخدم.\nمعرف الطلب: {order_id}\n\n⏰ سيتم حذف الطلب تلقائياً بعد 48 ساعة")
     return ConversationHandler.END
@@ -3374,12 +3405,21 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
             context.user_data['admin_proxy_type'] = proxy_type
             context.user_data['admin_input_state'] = ENTER_PROXY_ADDRESS
             
-            await query.edit_message_text("2️⃣ يرجى إدخال عنوان البروكسي:")
+            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("2️⃣ يرجى إدخال عنوان البروكسي:", reply_markup=reply_markup)
             return ENTER_PROXY_ADDRESS
     
     else:
         # معالجة النص المدخل
         text = update.message.text
+        
+        # التحقق من زر الإلغاء
+        if text == "❌ إلغاء":
+            context.user_data.clear()
+            await update.message.reply_text("❌ تم إلغاء العملية.", reply_markup=ReplyKeyboardRemove())
+            return ConversationHandler.END
+        
         current_state = context.user_data.get('admin_input_state', ENTER_PROXY_ADDRESS)
         
         if current_state == ENTER_PROXY_ADDRESS:
@@ -3396,7 +3436,9 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
             
             context.user_data['admin_proxy_address'] = text
             context.user_data['admin_input_state'] = ENTER_PROXY_PORT
-            await update.message.reply_text("3️⃣ يرجى إدخال البورت:")
+            keyboard = [[KeyboardButton("❌ إلغاء")]]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            await update.message.reply_text("3️⃣ يرجى إدخال البورت:", reply_markup=reply_markup)
             return ENTER_PROXY_PORT
         
         elif current_state == ENTER_PROXY_PORT:
@@ -3506,12 +3548,7 @@ async def send_proxy_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE,
         # إرسال البروكسي للمستخدم
         await context.bot.send_message(user_id, proxy_message, parse_mode='Markdown')
         
-        # إرسال إشعار نجاح الطلب
-        user_language = get_user_language(user_id)
-        await context.bot.send_message(
-            user_id,
-            MESSAGES[user_language]['order_success']
-        )
+        # تم حذف إرسال الرسالة المكررة - الرسالة ترسل مع البروكسي
         
         # تحديث حالة الطلب
         proxy_details = {
@@ -3553,6 +3590,66 @@ async def send_proxy_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE,
         admin_keys = [k for k in context.user_data.keys() if k.startswith('admin_')]
         for key in admin_keys:
             del context.user_data[key]
+
+async def send_proxy_to_user_direct(update: Update, context: ContextTypes.DEFAULT_TYPE, thank_message: str = None) -> None:
+    """إرسال تفاصيل البروكسي للمستخدم مباشرة"""
+    order_id = context.user_data['processing_order_id']
+    
+    # الحصول على معلومات المستخدم والطلب
+    user_query = """
+        SELECT o.user_id, u.first_name, u.last_name 
+        FROM orders o 
+        JOIN users u ON o.user_id = u.user_id 
+        WHERE o.id = ?
+    """
+    user_result = db.execute_query(user_query, (order_id,))
+    
+    if user_result:
+        user_id, first_name, last_name = user_result[0]
+        user_full_name = f"{first_name} {last_name or ''}".strip()
+        
+        # الحصول على التاريخ والوقت الحاليين
+        from datetime import datetime
+        now = datetime.now()
+        current_date = now.strftime("%Y-%m-%d")
+        current_time = now.strftime("%H:%M:%S")
+        
+        # إنشاء رسالة البروكسي للمستخدم
+        proxy_message = f"""✅ تم معالجة طلب {user_full_name}
+
+🔐 تفاصيل البروكسي:
+📡 العنوان: `{context.user_data['admin_proxy_address']}`
+🔌 البورت: `{context.user_data['admin_proxy_port']}`
+🌍 الدولة: {context.user_data.get('admin_proxy_country', 'غير محدد')}
+🏠 الولاية: {context.user_data.get('admin_proxy_state', 'غير محدد')}
+👤 اسم المستخدم: `{context.user_data['admin_proxy_username']}`
+🔑 كلمة المرور: `{context.user_data['admin_proxy_password']}`
+
+━━━━━━━━━━━━━━━
+🆔 معرف الطلب: `{order_id}`
+📅 التاريخ: {current_date}
+🕐 الوقت: {current_time}
+
+━━━━━━━━━━━━━━━
+💬 {thank_message}"""
+        
+        # إرسال البروكسي للمستخدم
+        await context.bot.send_message(user_id, proxy_message, parse_mode='Markdown')
+        
+        # تحديث حالة الطلب
+        proxy_details = {
+            'address': context.user_data['admin_proxy_address'],
+            'port': context.user_data['admin_proxy_port'],
+            'country': context.user_data.get('admin_proxy_country', ''),
+            'state': context.user_data.get('admin_proxy_state', ''),
+            'username': context.user_data['admin_proxy_username'],
+            'password': context.user_data['admin_proxy_password']
+        }
+        
+        db.execute_query(
+            "UPDATE orders SET status = 'completed', processed_at = CURRENT_TIMESTAMP, proxy_details = ? WHERE id = ?",
+            (json.dumps(proxy_details), order_id)
+        )
 
 async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة البحث عن مستخدم"""
@@ -4884,11 +4981,14 @@ async def show_proxy_preview(update: Update, context: ContextTypes.DEFAULT_TYPE)
 ━━━━━━━━━━━━━━━
 🆔 معرف الطلب: `{order_id}`
 
-هل تريد إرسال هذه المعلومات للمستخدم؟"""
+تم إرسال البروكسي للمستخدم تلقائياً."""
 
+        # إرسال البروكسي للمستخدم مباشرة
+        await send_proxy_to_user_direct(update, context, context.user_data.get('admin_thank_message', ''))
+        
+        # زر واحد لإنهاء الطلب
         keyboard = [
-            [InlineKeyboardButton("✅ إرسال", callback_data="send_proxy_confirm")],
-            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_send")]
+            [InlineKeyboardButton("✅ تم إنجاز الطلب بنجاح!", callback_data="order_completed_success")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
