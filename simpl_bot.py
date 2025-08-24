@@ -1070,6 +1070,12 @@ sohilskaf123@gmail.com
         'order_received': '✅ تم استلام طلبك بنجاح!\n\n📋 سيتم معالجة الطلب يدوياً من الأدمن بأقرب وقت.\n\n📧 ستصلك تحديثات الحالة تلقائياً.',
         'main_menu_buttons': ['🔒 طلب بروكسي ستاتيك', '📡 طلب بروكسي سوكس', '👥 إحالاتي', '📋 تذكير بطلباتي', '⚙️ الإعدادات'],
         'admin_main_buttons': ['📋 إدارة الطلبات', '💰 إدارة الأموال', '👥 الإحالات', '📢 البث', '⚙️ الإعدادات'],
+        'change_password': 'تغيير كلمة المرور',
+        'password_changed': 'تم تغيير كلمة المرور بنجاح ✅',
+        'invalid_password': 'كلمة المرور غير صحيحة!',
+        'enter_new_password': 'يرجى إدخال كلمة المرور الجديدة:',
+        'withdrawal_processing': 'جاري معالجة طلب سحب رصيدك من قبل الأدمن...',
+        'admin_contact': 'ستتواصل الإدارة معك قريباً لتسليمك مكافأتك.',
         'language_change_success': 'تم تغيير اللغة إلى العربية ✅\nيرجى استخدام الأمر /start لإعادة تحميل القوائم',
         'admin_panel': '🔧 لوحة الأدمن',
         'manage_orders': 'إدارة الطلبات',
@@ -1086,70 +1092,70 @@ Choose the required service from the buttons below:""",
         'static_package': """📦 Static Package
 
 🔹 Prices:
-- Static ISP Risk0: 3$
-- Static Residential Verizon: 4$
-- Static Residential AT&T: 6$
+- Static ISP Risk0: `3$`
+- Static Residential Verizon: `4$`
+- Static Residential AT&T: `6$`
 
 ━━━━━━━━━━━━━━━
 💳 Local Payment Methods:
 
 - Sham Cash:
-  cc849f22d5117db0b8fe5667e6d4b758
+`cc849f22d5117db0b8fe5667e6d4b758`
 
 - Syriatel Cash:
-  55973911
-  14227865
+`55973911`
+`14227865`
 
 ━━━━━━━━━━━━━━━
 🪙 Cryptocurrency Payment Methods:
 
 - Coinex:
-  sohilskaf123@gmail.com
+sohilskaf123@gmail.com
 
 - Binance:
-  1121540155
+`1121540155`
 
 - Payeer:
-  P1114452356
+`P1114452356`
 
 ━━━━━━━━━━━━━━━
 📩 Please send payment proof to the bot with order details
 ⏱️ Please wait for admin to process manually
 
-Order ID: {}""",
+Order ID: `{}`""",
         'socks_package': """📦 Socks Package
 
 🔹 Prices:
-- 5 Temporary Proxies Package: 0.4$
-- 10 Temporary Proxies Package: 0.7$
+- 5 Temporary Proxies Package: `0.4$`
+- 10 Temporary Proxies Package: `0.7$`
 
 ━━━━━━━━━━━━━━━
 💳 Local Payment Methods:
 
 - Sham Cash:
-  cc849f22d5117db0b8fe5667e6d4b758
+`cc849f22d5117db0b8fe5667e6d4b758`
 
 - Syriatel Cash:
-  55973911
-  14227865
+`55973911`
+`14227865`
 
 ━━━━━━━━━━━━━━━
 🪙 Cryptocurrency Payment Methods:
 
 - Coinex:
-  sohilskaf123@gmail.com
+sohilskaf123@gmail.com
 
 - Binance:
-  1121540155
+`1121540155`
 
 - Payeer:
-  P1114452356
+`P1114452356`
 
 ━━━━━━━━━━━━━━━
 📩 Please send payment proof to the bot with order details
 ⏱️ Please wait for admin to process manually
 
-Order ID: {}""",
+Order ID: `{}`""",
         'select_country': 'Select Country:',
         'select_state': 'Select State:',
         'manual_input': 'Manual Input',
@@ -1158,6 +1164,12 @@ Order ID: {}""",
         'order_received': '✅ Your order has been received successfully!\n\n📋 Admin will process it manually soon.\n\n📧 You will receive status updates automatically.',
         'main_menu_buttons': ['🔒 Request Static Proxy', '📡 Request Socks Proxy', '👥 My Referrals', '📋 Order Reminder', '⚙️ Settings'],
         'admin_main_buttons': ['📋 Manage Orders', '💰 Manage Money', '👥 Referrals', '📢 Broadcast', '⚙️ Settings'],
+        'change_password': 'Change Password',
+        'password_changed': 'Password changed successfully ✅',
+        'invalid_password': 'Invalid password!',
+        'enter_new_password': 'Please enter new password:',
+        'withdrawal_processing': 'Your withdrawal request is being processed by admin...',
+        'admin_contact': 'Admin will contact you soon to deliver your reward.',
         'language_change_success': 'Language changed to English ✅\nPlease use /start command to reload menus',
         'admin_panel': '🔧 Admin Panel',
         'manage_orders': 'Manage Orders',
