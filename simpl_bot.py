@@ -2696,6 +2696,10 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         # إلغاء إدخال الرسالة المخصصة والعودة لقائمة الأدمن
         context.user_data.clear()
         await query.edit_message_text("❌ تم إلغاء إدخال الرسالة المخصصة.")
+        
+        # إعادة تفعيل كيبورد الأدمن الرئيسي
+        await restore_admin_keyboard(context, update.effective_chat.id)
+        
         return ConversationHandler.END
 
     elif query.data.startswith("quiet_"):
@@ -4390,6 +4394,9 @@ async def handle_logout_confirmation(update: Update, context: ContextTypes.DEFAU
             "❌ **تم إلغاء تسجيل الخروج**\n\n🔧 لا تزال في لوحة الأدمن\nيمكنك المتابعة في استخدام أدوات الإدارة",
             parse_mode='Markdown'
         )
+        
+        # إعادة تفعيل كيبورد الأدمن الرئيسي
+        await restore_admin_keyboard(context, update.effective_chat.id)
 
 async def handle_back_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """العودة للقائمة الرئيسية للأدمن من الأزرار inline"""
@@ -5070,6 +5077,9 @@ async def handle_database_clear(update: Update, context: ContextTypes.DEFAULT_TY
     
     elif query.data == "cancel_clear_db":
         await query.edit_message_text("❌ تم إلغاء عملية تفريغ قاعدة البيانات")
+        
+        # إعادة تفعيل كيبورد الأدمن الرئيسي
+        await restore_admin_keyboard(context, update.effective_chat.id)
 
 async def handle_cancel_processing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة إلغاء معالجة الطلب مؤقتاً"""
@@ -5121,6 +5131,10 @@ async def handle_cancel_user_lookup(update: Update, context: ContextTypes.DEFAUL
     context.user_data.pop('lookup_action', None)
     
     await query.edit_message_text("❌ تم إلغاء البحث عن المستخدم")
+    
+    # إعادة تفعيل كيبورد الأدمن الرئيسي
+    await restore_admin_keyboard(context, update.effective_chat.id)
+    
     return ConversationHandler.END
 
 async def handle_cancel_referral_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -5132,6 +5146,10 @@ async def handle_cancel_referral_amount(update: Update, context: ContextTypes.DE
     context.user_data.clear()
     
     await query.edit_message_text("❌ تم إلغاء تحديد قيمة الإحالة")
+    
+    # إعادة تفعيل كيبورد الأدمن الرئيسي
+    await restore_admin_keyboard(context, update.effective_chat.id)
+    
     return ConversationHandler.END
 
 async def handle_cancel_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -5143,6 +5161,10 @@ async def handle_cancel_order_inquiry(update: Update, context: ContextTypes.DEFA
     context.user_data.clear()
     
     await query.edit_message_text("❌ تم إلغاء الاستعلام عن الطلب")
+    
+    # إعادة تفعيل كيبورد الأدمن الرئيسي
+    await restore_admin_keyboard(context, update.effective_chat.id)
+    
     return ConversationHandler.END
 
 async def handle_cancel_static_prices(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -5154,6 +5176,10 @@ async def handle_cancel_static_prices(update: Update, context: ContextTypes.DEFA
     context.user_data.clear()
     
     await query.edit_message_text("❌ تم إلغاء تعديل أسعار الستاتيك")
+    
+    # إعادة تفعيل كيبورد الأدمن الرئيسي
+    await restore_admin_keyboard(context, update.effective_chat.id)
+    
     return ConversationHandler.END
 
 async def handle_cancel_socks_prices(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -5165,6 +5191,10 @@ async def handle_cancel_socks_prices(update: Update, context: ContextTypes.DEFAU
     context.user_data.clear()
     
     await query.edit_message_text("❌ تم إلغاء تعديل أسعار السوكس")
+    
+    # إعادة تفعيل كيبورد الأدمن الرئيسي
+    await restore_admin_keyboard(context, update.effective_chat.id)
+    
     return ConversationHandler.END
 
 async def handle_cancel_balance_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -5176,6 +5206,10 @@ async def handle_cancel_balance_reset(update: Update, context: ContextTypes.DEFA
     context.user_data.clear()
     
     await query.edit_message_text("❌ تم إلغاء تصفير رصيد المستخدم")
+    
+    # إعادة تفعيل كيبورد الأدمن الرئيسي
+    await restore_admin_keyboard(context, update.effective_chat.id)
+    
     return ConversationHandler.END
 
 async def handle_cancel_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -5195,6 +5229,10 @@ async def handle_cancel_payment_proof(update: Update, context: ContextTypes.DEFA
         message = "❌ Payment proof submission cancelled"
     
     await query.edit_message_text(message)
+    
+    # للمستخدم العادي - إعادة توجيه للقائمة الرئيسية
+    await start(update, context)
+    
     return ConversationHandler.END
 
 async def handle_cancel_custom_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
