@@ -1958,17 +1958,10 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_payment_method_selection(update, context)
     elif query.data.startswith("lang_"):
         await handle_language_change(update, context)
-    elif query.data.startswith("process_"):
-        return await handle_process_order(update, context)
-    elif query.data in ["payment_success", "payment_failed"]:
-        if query.data == "payment_success":
-            return await handle_payment_success(update, context)
-        else:
-            return await handle_payment_failed(update, context)
-    elif query.data.startswith("proxy_type_"):
-        return await handle_proxy_details_input(update, context)
-    elif query.data.startswith("admin_country_") or query.data.startswith("admin_state_"):
-        return await handle_admin_country_selection(update, context)
+    # تم نقل معالجة process_ إلى process_order_conv_handler
+    # تم نقل معالجة payment_success و payment_failed إلى process_order_conv_handler
+    # تم نقل معالجة proxy_type_ إلى process_order_conv_handler
+    # تم نقل معالجة admin_country_ و admin_state_ إلى process_order_conv_handler
     elif query.data in ["manage_orders", "show_pending_orders", "admin_referrals", "user_lookup", "manage_money", "admin_settings", "reset_balance"]:
         await handle_admin_menu_actions(update, context)
     elif query.data == "withdraw_balance":
@@ -4107,12 +4100,15 @@ def main() -> None:
     application = Application.builder().token(TOKEN).build()
     
     # معالج تسجيل دخول الأدمن
-    admin_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("admin_login", admin_login)],
+    # معالج معالجة الطلبات للأدمن
+    process_order_conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(handle_process_order, pattern="^process_")],
         states={
-            ADMIN_LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_password)],
-            ADMIN_MENU: [CallbackQueryHandler(handle_admin_menu_actions)],
-            ENTER_PROXY_TYPE: [CallbackQueryHandler(handle_proxy_details_input)],
+            PROCESS_ORDER: [
+                CallbackQueryHandler(handle_payment_success, pattern="^payment_success$"),
+                CallbackQueryHandler(handle_payment_failed, pattern="^payment_failed$")
+            ],
+            ENTER_PROXY_TYPE: [CallbackQueryHandler(handle_proxy_details_input, pattern="^proxy_type_")],
             ENTER_PROXY_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
             ENTER_PROXY_PORT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
             ENTER_COUNTRY: [
@@ -4126,7 +4122,16 @@ def main() -> None:
             ENTER_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
             ENTER_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
             ENTER_THANK_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input)],
-            CUSTOM_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input)],
+            CUSTOM_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input)]
+        },
+        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+    )
+
+    admin_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("admin_login", admin_login)],
+        states={
+            ADMIN_LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_password)],
+            ADMIN_MENU: [CallbackQueryHandler(handle_admin_menu_actions)],
             USER_LOOKUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_lookup_unified)],
             REFERRAL_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_referral_amount_update)],
             SET_PRICE_STATIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_static_price_update)],
@@ -4166,6 +4171,7 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("admin_signout", admin_signout))
     application.add_handler(admin_conv_handler)
+    application.add_handler(process_order_conv_handler)
     application.add_handler(broadcast_conv_handler)
     application.add_handler(payment_conv_handler)
     application.add_handler(CallbackQueryHandler(handle_callback_query))
