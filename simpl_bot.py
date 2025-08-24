@@ -81,86 +81,22 @@ STATIC_COUNTRIES = {
 
 SOCKS_COUNTRIES = {
     'ar': {
-        'AL': '🇦🇱 ألبانيا',
-        'DE': '🇩🇪 ألمانيا', 
-        'UA': '🇺🇦 أوكرانيا',
-        'IE': '🇮🇪 أيرلندا',
-        'IS': '🇮🇸 أيسلندا',
-        'EE': '🇪🇪 إستونيا',
-        'ES': '🇪🇸 إسبانيا',
-        'IT': '🇮🇹 إيطاليا',
-        'AE': '🇦🇪 الإمارات العربية المتحدة',
-        'BA': '🇧🇦 البوسنة والهرسك',
-        'PT': '🇵🇹 البرتغال',
-        'BG': '🇧🇬 بلغاريا',
-        'BE': '🇧🇪 بلجيكا',
-        'BY': '🇧🇾 بيلاروسيا',
-        'CZ': '🇨🇿 التشيك',
-        'DK': '🇩🇰 الدنمارك',
-        'SE': '🇸🇪 السويد',
-        'CH': '🇨🇭 سويسرا',
-        'RS': '🇷🇸 صربيا',
-        'SY': '🇸🇾 سوريا',
-        'SK': '🇸🇰 سلوفاكيا',
+        'US': '🇺🇸 أميركا',
+        'UK': '🇬🇧 بريطانيا',
+        'DE': '🇩🇪 ألمانيا',
         'FR': '🇫🇷 فرنسا',
-        'FI': '🇫🇮 فنلندا',
-        'CY': '🇨🇾 قبرص',
         'CA': '🇨🇦 كندا',
-        'LU': '🇱🇺 لوكسمبورغ',
-        'LT': '🇱🇹 ليتوانيا',
-        'HU': '🇭🇺 المجر',
-        'UK': '🇬🇧 المملكة المتحدة',
-        'MK': '🇲🇰 مقدونيا الشمالية',
-        'MD': '🇲🇩 مولدوفا',
-        'MT': '🇲🇹 مالطا',
-        'NO': '🇳🇴 النرويج',
-        'AT': '🇦🇹 النمسا',
-        'NL': '🇳🇱 هولندا',
-        'US': '🇺🇸 الولايات المتحدة',
-        'GR': '🇬🇷 اليونان',
-        'PL': '🇵🇱 بولندا',
-        'RO': '🇷🇴 رومانيا'
+        'AU': '🇦🇺 أستراليا',
+        'AT': '🇦🇹 النمسا'
     },
     'en': {
-        'AL': '🇦🇱 Albania',
-        'AT': '🇦🇹 Austria',
-        'BE': '🇧🇪 Belgium',
-        'BY': '🇧🇾 Belarus',
-        'BG': '🇧🇬 Bulgaria',
-        'BA': '🇧🇦 Bosnia and Herzegovina',
-        'CA': '🇨🇦 Canada',
-        'CY': '🇨🇾 Cyprus',
-        'CZ': '🇨🇿 Czechia',
-        'DK': '🇩🇰 Denmark',
-        'EE': '🇪🇪 Estonia',
-        'FI': '🇫🇮 Finland',
-        'FR': '🇫🇷 France',
-        'DE': '🇩🇪 Germany',
-        'GR': '🇬🇷 Greece',
-        'HU': '🇭🇺 Hungary',
-        'IS': '🇮🇸 Iceland',
-        'IE': '🇮🇪 Ireland',
-        'IT': '🇮🇹 Italy',
-        'LT': '🇱🇹 Lithuania',
-        'LU': '🇱🇺 Luxembourg',
-        'MT': '🇲🇹 Malta',
-        'MD': '🇲🇩 Moldova',
-        'NL': '🇳🇱 Netherlands',
-        'MK': '🇲🇰 North Macedonia',
-        'NO': '🇳🇴 Norway',
-        'PL': '🇵🇱 Poland',
-        'PT': '🇵🇹 Portugal',
-        'RO': '🇷🇴 Romania',
-        'RS': '🇷🇸 Serbia',
-        'SK': '🇸🇰 Slovakia',
-        'ES': '🇪🇸 Spain',
-        'SE': '🇸🇪 Sweden',
-        'CH': '🇨🇭 Switzerland',
-        'SY': '🇸🇾 Syria',
-        'UA': '🇺🇦 Ukraine',
-        'AE': '🇦🇪 United Arab Emirates',
+        'US': '🇺🇸 United States',
         'UK': '🇬🇧 United Kingdom',
-        'US': '🇺🇸 United States'
+        'DE': '🇩🇪 Germany',
+        'FR': '🇫🇷 France',
+        'CA': '🇨🇦 Canada',
+        'AU': '🇦🇺 Australia',
+        'AT': '🇦🇹 Austria'
     }
 }
 
@@ -479,6 +415,56 @@ CA_STATES = {
         'NT': 'Northwest Territories',
         'NU': 'Nunavut',
         'YT': 'Yukon'
+    }
+}
+
+# ولايات أستراليا
+AU_STATES = {
+    'ar': {
+        'NSW': 'نيو ساوث ويلز',
+        'VIC': 'فيكتوريا',
+        'QLD': 'كوينزلاند',
+        'SA': 'جنوب أستراليا',
+        'WA': 'غرب أستراليا',
+        'TAS': 'تاسمانيا',
+        'NT': 'الإقليم الشمالي',
+        'ACT': 'إقليم العاصمة الأسترالية'
+    },
+    'en': {
+        'NSW': 'New South Wales',
+        'VIC': 'Victoria',
+        'QLD': 'Queensland',
+        'SA': 'South Australia',
+        'WA': 'Western Australia',
+        'TAS': 'Tasmania',
+        'NT': 'Northern Territory',
+        'ACT': 'Australian Capital Territory'
+    }
+}
+
+# ولايات النمسا
+AT_STATES = {
+    'ar': {
+        'WIEN': 'فيينا',
+        'NOE': 'النمسا السفلى',
+        'OOE': 'النمسا العليا',
+        'STMK': 'شتايرمارك',
+        'KTN': 'كارينثيا',
+        'SBG': 'سالزبورغ',
+        'TIROL': 'تيرول',
+        'VBG': 'فورآرلبرغ',
+        'BGLD': 'بورغنلاند'
+    },
+    'en': {
+        'WIEN': 'Vienna',
+        'NOE': 'Lower Austria',
+        'OOE': 'Upper Austria',
+        'STMK': 'Styria',
+        'KTN': 'Carinthia',
+        'SBG': 'Salzburg',
+        'TIROL': 'Tyrol',
+        'VBG': 'Vorarlberg',
+        'BGLD': 'Burgenland'
     }
 }
 
@@ -984,10 +970,9 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
         context.user_data['selected_country'] = country_code
         
         # عرض قائمة الولايات بناء على الدولة
-        if country_code == "US":
-            states = US_STATES[language]
-        elif country_code == "UK":
-            states = UK_STATES[language]
+        states_data = get_states_for_country(country_code)
+        if states_data:
+            states = states_data[language]
         else:
             # للدول الأخرى، انتقل مباشرة لطرق الدفع
             await show_payment_methods(query, context, language)
@@ -1203,7 +1188,7 @@ async def send_order_copy_to_user(update: Update, context: ContextTypes.DEFAULT_
         if language == 'ar':
             message = f"""📋 نسخة من طلبك
             
-👤 الاسم: `{order[12]} {order[12] or ''}`
+👤 الاسم: `{order[12]} {order[13] or ''}`
 🆔 معرف المستخدم: `{order[1]}`
 
 ━━━━━━━━━━━━━━━
@@ -1225,7 +1210,7 @@ async def send_order_copy_to_user(update: Update, context: ContextTypes.DEFAULT_
         else:
             message = f"""📋 Copy of Your Order
             
-👤 Name: `{order[12]} {order[12] or ''}`
+👤 Name: `{order[12]} {order[13] or ''}`
 🆔 User ID: `{order[1]}`
 
 ━━━━━━━━━━━━━━━
@@ -1274,7 +1259,7 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
         
         message = f"""🔔 طلب جديد
 
-👤 الاسم: `{order[12]} {order[12] or ''}`
+👤 الاسم: `{order[12]} {order[13] or ''}`
 📱 اسم المستخدم: @{order[14] or 'غير محدد'}
 🆔 معرف المستخدم: `{order[1]}`
 
@@ -2854,7 +2839,7 @@ async def resend_order_notification(update: Update, context: ContextTypes.DEFAUL
     
     message = f"""🔔 طلب معاد إرساله
 
-👤 الاسم: `{order[12]} {order[12] or ''}`
+👤 الاسم: `{order[12]} {order[13] or ''}`
 📱 اسم المستخدم: @{order[14] or 'غير محدد'}
 🆔 معرف المستخدم: `{order[1]}`
 
@@ -3180,9 +3165,9 @@ def get_states_for_country(country_code):
         'UK': UK_STATES,
         'DE': DE_STATES,
         'FR': FR_STATES,
-        'IT': IT_STATES,
-        'ES': ES_STATES,
-        'CA': CA_STATES
+        'CA': CA_STATES,
+        'AU': AU_STATES,
+        'AT': AT_STATES
     }
     return states_map.get(country_code, None)
 
