@@ -2663,6 +2663,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             f"❌ تم إلغاء إرسال البروكسي\n\n🆔 معرف الطلب: `{order_id}`\n\n📋 الطلب لا يزال في حالة معلق ويمكن معالجته لاحقاً.",
             parse_mode='Markdown'
         )
+        
+        # إعادة تفعيل كيبورد الأدمن الرئيسي
+        await restore_admin_keyboard(context, update.effective_chat.id)
     elif query.data == "order_completed_success":
         # إنهاء الطلب نهائياً وتنظيف البيانات
         order_id = context.user_data.get('processing_order_id')
@@ -2674,6 +2677,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             f"✅ تم إنهاء الطلب بنجاح!\n\n🆔 معرف الطلب: `{order_id}`\n\n📋 تم نقل الطلب إلى الطلبات المكتملة.",
             parse_mode='Markdown'
         )
+        
+        # إعادة تفعيل كيبورد الأدمن الرئيسي
+        await restore_admin_keyboard(context, update.effective_chat.id)
     elif query.data == "developer_info":
         # إظهار نافذة منبثقة مع معلومات المطور
         popup_text = context.user_data.get('popup_text', "🧑‍💻 Developed by Mohamad Zalaf")
@@ -2720,7 +2726,17 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_cancel_proxy_setup(update, context)
 
     else:
-        await query.answer("قيد التطوير...")
+        # معالجة الأزرار غير المعروفة - تسجيل وإعادة توجيه مناسب
+        await query.answer("❌ إجراء غير معروف")
+        
+        # التحقق من نوع المستخدم وإعادة توجيهه للقائمة المناسبة
+        user_id = update.effective_user.id
+        if context.user_data.get('is_admin') or user_id == ADMIN_CHAT_ID:
+            # للأدمن - إعادة تفعيل كيبورد الأدمن
+            await restore_admin_keyboard(context, update.effective_chat.id, "⚠️ تم اكتشاف إجراء غير معروف. عودة للقائمة الرئيسية...")
+        else:
+            # للمستخدم العادي - العودة للقائمة الرئيسية
+            await start(update, context)
 
 async def handle_admin_country_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة اختيار الدولة من قبل الأدمن"""
@@ -5087,8 +5103,14 @@ async def handle_cancel_processing(update: Update, context: ContextTypes.DEFAULT
         # تنظيف البيانات المؤقتة
         context.user_data.pop('processing_order_id', None)
         
+        # إعادة تفعيل كيبورد الأدمن الرئيسي
+        await restore_admin_keyboard(context, update.effective_chat.id)
+        
     else:
         await query.edit_message_text("❌ لم يتم العثور على طلب لإلغاء معالجته")
+        
+        # إعادة تفعيل كيبورد الأدمن الرئيسي حتى في حالة الخطأ
+        await restore_admin_keyboard(context, update.effective_chat.id)
 
 async def handle_cancel_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة إلغاء البحث عن مستخدم"""
@@ -5199,6 +5221,10 @@ async def handle_cancel_proxy_setup(update: Update, context: ContextTypes.DEFAUL
     context.user_data.clear()
     
     await query.edit_message_text("❌ تم إلغاء إعداد البروكسي")
+    
+    # إعادة تفعيل كيبورد الأدمن الرئيسي
+    await restore_admin_keyboard(context, update.effective_chat.id)
+    
     return ConversationHandler.END
 
 
