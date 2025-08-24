@@ -1083,7 +1083,23 @@ sohilskaf123@gmail.com
         'admin_login_prompt': 'يرجى إدخال كلمة المرور:',
         'order_processing': '⚙️ جاري معالجة طلبك الآن من قبل الأدمن...',
         'order_success': '✅ تم إنجاز طلبك بنجاح! تم إرسال تفاصيل البروكسي إليك.',
-        'order_failed': '❌ تم رفض طلبك. يرجى التحقق من إثبات الدفع والمحاولة مرة أخرى.'
+        'order_failed': '❌ تم رفض طلبك. يرجى التحقق من إثبات الدفع والمحاولة مرة أخرى.',
+        'about_bot': """🤖 حول البوت
+
+📦 بوت بيع البروكسي وإدارة البروكسي
+🔢 الإصدار: 1.0.0
+
+━━━━━━━━━━━━━━━
+🧑‍💻 طُور بواسطة: Mohamad Zalaf
+
+📞 معلومات الاتصال:
+📱 تليجرام: @MohamadZalaf
+📧 البريد الإلكتروني: 
+   • MohamadZalaf@outlook.com
+   • Mohamadzalaf2017@gmail.com
+
+━━━━━━━━━━━━━━━
+© Mohamad Zalaf 2025"""
     },
     'en': {
         'welcome': """🎯 Welcome to Proxy Sales Bot
@@ -1177,7 +1193,23 @@ Order ID: `{}`""",
         'admin_login_prompt': 'Please enter password:',
         'order_processing': '⚙️ Your order is now being processed by admin...',
         'order_success': '✅ Your order has been completed successfully! Proxy details have been sent to you.',
-        'order_failed': '❌ Your order has been rejected. Please check your payment proof and try again.'
+        'order_failed': '❌ Your order has been rejected. Please check your payment proof and try again.',
+        'about_bot': """🤖 About Bot
+
+📦 Proxy Sales & Management Bot
+🔢 Version: 1.0.0
+
+━━━━━━━━━━━━━━━
+🧑‍💻 Developed by: Mohamad Zalaf
+
+📞 Contact Information:
+📱 Telegram: @MohamadZalaf
+📧 Email: 
+   • MohamadZalaf@outlook.com
+   • Mohamadzalaf2017@gmail.com
+
+━━━━━━━━━━━━━━━
+© Mohamad Zalaf 2025"""
     }
 }
 
@@ -2481,6 +2513,35 @@ async def handle_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         reply_markup=reply_markup
     )
 
+async def handle_about_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة أمر /about"""
+    user_id = update.effective_user.id
+    language = get_user_language(user_id)
+    
+    # رسالة حول البوت
+    about_message = MESSAGES[language]['about_bot']
+    
+    # إنشاء زر لإظهار النافذة المنبثقة
+    if language == 'ar':
+        button_text = "🧑‍💻 معلومات المطور"
+        popup_text = "🧑‍💻 بوت بيع البروكسي\nطُور بواسطة: Mohamad Zalaf\n© 2025"
+    else:
+        button_text = "🧑‍💻 Developer Info"
+        popup_text = "🧑‍💻 Proxy Sales Bot\nDeveloped by: Mohamad Zalaf\n© 2025"
+    
+    keyboard = [[InlineKeyboardButton(button_text, callback_data="developer_info")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # إرسال الرسالة مع الزر
+    await update.message.reply_text(
+        about_message, 
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+    
+    # حفظ النص المنبثق في context للاستخدام لاحقاً
+    context.user_data['popup_text'] = popup_text
+
 async def handle_language_change(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة تغيير اللغة"""
     query = update.callback_query
@@ -2569,6 +2630,10 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             f"✅ تم إنهاء الطلب بنجاح!\n\n🆔 معرف الطلب: `{order_id}`\n\n📋 تم نقل الطلب إلى الطلبات المكتملة.",
             parse_mode='Markdown'
         )
+    elif query.data == "developer_info":
+        # إظهار نافذة منبثقة مع معلومات المطور
+        popup_text = context.user_data.get('popup_text', "🧑‍💻 Developed by Mohamad Zalaf")
+        await query.answer(text=popup_text, show_alert=True)
     elif query.data.startswith("quiet_"):
         await handle_quiet_hours_selection(update, context)
     elif query.data in ["confirm_clear_db", "cancel_clear_db"]:
@@ -5191,6 +5256,7 @@ def main() -> None:
 
     # إضافة المعالجات
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("about", handle_about_command))
     application.add_handler(CommandHandler("admin_signout", admin_signout))
     application.add_handler(admin_conv_handler)
     application.add_handler(password_change_conv_handler)
