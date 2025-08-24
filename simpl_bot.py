@@ -1781,6 +1781,23 @@ async def handle_password_change(update: Update, context: ContextTypes.DEFAULT_T
     
     return ConversationHandler.END
 
+def validate_ip_address(ip: str) -> bool:
+    """التحقق من صحة عنوان IP"""
+    import re
+    # نمط للتحقق من الهيكل: 1-3 أرقام.1-3 أرقام.1-3 أرقام.1-3 أرقام
+    pattern = r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$'
+    return bool(re.match(pattern, ip))
+
+def validate_port(port: str) -> bool:
+    """التحقق من صحة رقم البورت"""
+    # التحقق من أن المدخل رقمي وطوله 1-6 أرقام
+    if not port.isdigit():
+        return False
+    
+    port_int = int(port)
+    # التحقق من أن الرقم بين 1 و 999999 (6 أرقام كحد أقصى)
+    return 1 <= port_int <= 999999
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """أمر البداية"""
     user = update.effective_user
@@ -3000,12 +3017,15 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
             await handle_withdrawal_approval(query, context, order_id, user_id)
             return ConversationHandler.END
     
-    # رسالة للأدمن مع رقم المعاملة
+    # رسالة للأدمن مع رقم المعاملة ونوع البروكسي
+    proxy_type_ar = "بروكسي ستاتيك" if order_type == "static" else "بروكسي سوكس" if order_type == "socks" else order_type
+    
     admin_message = f"""✅ تم قبول الدفع للطلب
 
 🆔 معرف الطلب: `{order_id}`
 💳 رقم المعاملة: `{transaction_number}`
-👤 معرف المستخدم: `{user_id if 'user_id' in locals() else 'غير محدد'}`
+👤 معرف المستخدم: `{user_id}`
+📝 الطلب: {proxy_type_ar}
 
 📋 الطلب جاهز للمعالجة والإرسال للمستخدم."""
     
@@ -3088,6 +3108,20 @@ async def handle_payment_failed(update: Update, context: ContextTypes.DEFAULT_TY
 📞 Please contact admin to know the reason for rejection."""
         
         await context.bot.send_message(user_id, user_message, parse_mode='Markdown')
+        
+        # رسالة للأدمن مع رقم المعاملة ونوع البروكسي
+        proxy_type_ar = "بروكسي ستاتيك" if order_type == "static" else "بروكسي سوكس" if order_type == "socks" else order_type
+        
+        admin_message = f"""❌ تم رفض الدفع للطلب
+
+🆔 معرف الطلب: `{order_id}`
+💳 رقم المعاملة: `{transaction_number}`
+👤 معرف المستخدم: `{user_id}`
+📝 الطلب: {proxy_type_ar}
+
+📋 تم نقل الطلب إلى الطلبات الفاشلة.
+
+💬 هل تريد إرسال رسالة مخصصة للمستخدم؟"""
     
     keyboard = [
         [InlineKeyboardButton("نعم", callback_data="send_custom_message")],
@@ -3096,8 +3130,9 @@ async def handle_payment_failed(update: Update, context: ContextTypes.DEFAULT_TY
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await query.edit_message_text(
-        "هل تريد إرسال رسالة مخصصة للمستخدم؟",
-        reply_markup=reply_markup
+        admin_message,
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
     )
     
     return CUSTOM_MESSAGE
