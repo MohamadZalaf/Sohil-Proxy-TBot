@@ -1597,6 +1597,190 @@ def update_order_status(order_id: str, status: str):
             WHERE id = ?
         ''', (order_id,))
 
+async def handle_withdrawal_success(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة نجاح سحب الرصيد"""
+    query = update.callback_query
+    await query.answer()
+    
+    order_id = query.data.replace('withdrawal_success_', '')
+    
+    # توليد رقم المعاملة
+    transaction_number = generate_transaction_number('withdrawal')
+    save_transaction(order_id, transaction_number, 'withdrawal', 'completed')
+    
+    # تحديث حالة الطلب إلى مكتمل
+    update_order_status(order_id, 'completed')
+    
+    # الحصول على بيانات المستخدم
+    user_query = "SELECT user_id FROM orders WHERE id = ?"
+    user_result = db.execute_query(user_query, (order_id,))
+    
+    if user_result:
+        user_id = user_result[0][0]
+        user = db.get_user(user_id)
+        
+        if user:
+            user_language = get_user_language(user_id)
+            withdrawal_amount = user[5]
+            
+            # تصفير رصيد المستخدم
+            db.execute_query("UPDATE users SET referral_balance = 0 WHERE user_id = ?", (user_id,))
+            
+            # رسالة للمستخدم بلغته
+            if user_language == 'ar':
+                user_message = f"""✅ تم تسديد مكافأة الإحالة بنجاح!
+
+💰 المبلغ: `{withdrawal_amount:.2f}$`
+🆔 معرف الطلب: `{order_id}`
+💳 رقم المعاملة: `{transaction_number}`
+
+🎉 تم إيداع المبلغ بنجاح!"""
+            else:
+                user_message = f"""✅ Referral reward paid successfully!
+
+💰 Amount: `{withdrawal_amount:.2f}$`
+🆔 Order ID: `{order_id}`
+💳 Transaction Number: `{transaction_number}`
+
+🎉 Amount deposited successfully!"""
+            
+            await context.bot.send_message(user_id, user_message, parse_mode='Markdown')
+            
+            # إنشاء رسالة للأدمن مع زر فتح المحادثة
+            keyboard = [
+                [InlineKeyboardButton("💬 فتح محادثة مع المستخدم", url=f"tg://user?id={user_id}")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            admin_message = f"""✅ تم تسديد مكافأة الإحالة بنجاح!
+
+👤 المستخدم: {user[2]} {user[3]}
+📱 اسم المستخدم: @{user[1] or 'غير محدد'}
+🆔 معرف المستخدم: `{user_id}`
+💰 المبلغ المدفوع: `{withdrawal_amount:.2f}$`
+🔗 معرف الطلب: `{order_id}`
+💳 رقم المعاملة: `{transaction_number}`
+
+📋 تم نقل الطلب إلى الطلبات المكتملة."""
+            
+            await query.edit_message_text(admin_message, reply_markup=reply_markup, parse_mode='Markdown')
+
+async def handle_withdrawal_failed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة فشل سحب الرصيد"""
+    query = update.callback_query
+    await query.answer()
+    
+    order_id = query.data.replace('withdrawal_failed_', '')
+    
+    # توليد رقم المعاملة
+    transaction_number = generate_transaction_number('withdrawal')
+    save_transaction(order_id, transaction_number, 'withdrawal', 'failed')
+    
+    # تحديث حالة الطلب إلى فاشل
+    update_order_status(order_id, 'failed')
+    
+    # الحصول على بيانات المستخدم
+    user_query = "SELECT user_id FROM orders WHERE id = ?"
+    user_result = db.execute_query(user_query, (order_id,))
+    
+    if user_result:
+        user_id = user_result[0][0]
+        user = db.get_user(user_id)
+        
+        if user:
+            user_language = get_user_language(user_id)
+            withdrawal_amount = user[5]
+            
+            # رسالة للمستخدم
+            if user_language == 'ar':
+                user_message = f"""❌ فشلت عملية تسديد مكافأة الإحالة
+
+💰 المبلغ: `{withdrawal_amount:.2f}$`
+🆔 معرف الطلب: `{order_id}`
+💳 رقم المعاملة: `{transaction_number}`
+
+📞 يرجى التواصل مع الإدارة لمعرفة السبب."""
+            else:
+                user_message = f"""❌ Referral reward payment failed
+
+💰 Amount: `{withdrawal_amount:.2f}$`
+🆔 Order ID: `{order_id}`
+💳 Transaction Number: `{transaction_number}`
+
+📞 Please contact admin to know the reason."""
+            
+            await context.bot.send_message(user_id, user_message, parse_mode='Markdown')
+            
+            # رسالة للأدمن
+            admin_message = f"""❌ فشلت عملية تسديد مكافأة الإحالة
+
+👤 المستخدم: {user[2]} {user[3]}
+🆔 معرف المستخدم: `{user_id}`
+💰 المبلغ: `{withdrawal_amount:.2f}$`
+🔗 معرف الطلب: `{order_id}`
+💳 رقم المعاملة: `{transaction_number}`
+
+📋 تم نقل الطلب إلى الطلبات الفاشلة."""
+            
+            await query.edit_message_text(admin_message, parse_mode='Markdown')
+
+async def change_admin_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """بدء عملية تغيير كلمة مرور الأدمن"""
+    user_language = get_user_language(update.effective_user.id)
+    
+    if user_language == 'ar':
+        message = "🔐 تغيير كلمة المرور\n\nيرجى إدخال كلمة المرور الحالية أولاً:"
+    else:
+        message = "🔐 Change Password\n\nPlease enter current password first:"
+    
+    await update.message.reply_text(message)
+    context.user_data['password_change_step'] = 'current'
+    return ADMIN_LOGIN
+
+async def handle_password_change(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة تغيير كلمة المرور"""
+    step = context.user_data.get('password_change_step', 'current')
+    user_language = get_user_language(update.effective_user.id)
+    
+    if step == 'current':
+        # التحقق من كلمة المرور الحالية
+        if update.message.text == ADMIN_PASSWORD:
+            context.user_data['password_change_step'] = 'new'
+            if user_language == 'ar':
+                await update.message.reply_text("✅ كلمة المرور صحيحة\n\nيرجى إدخال كلمة المرور الجديدة:")
+            else:
+                await update.message.reply_text("✅ Password correct\n\nPlease enter new password:")
+            return ADMIN_LOGIN
+        else:
+            if user_language == 'ar':
+                await update.message.reply_text("❌ كلمة المرور غير صحيحة!")
+            else:
+                await update.message.reply_text("❌ Invalid password!")
+            context.user_data.pop('password_change_step', None)
+            return ConversationHandler.END
+    
+    elif step == 'new':
+        # تحديث كلمة المرور
+        global ADMIN_PASSWORD
+        new_password = update.message.text
+        ADMIN_PASSWORD = new_password
+        
+        # حفظ كلمة المرور الجديدة في قاعدة البيانات
+        db.execute_query(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+            ("admin_password", new_password)
+        )
+        
+        if user_language == 'ar':
+            await update.message.reply_text("✅ تم تغيير كلمة المرور بنجاح!")
+        else:
+            await update.message.reply_text("✅ Password changed successfully!")
+        
+        context.user_data.pop('password_change_step', None)
+        return ConversationHandler.END
+    
+    return ConversationHandler.END
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """أمر البداية"""
     user = update.effective_user
@@ -2289,6 +2473,10 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_database_clear(update, context)
     elif query.data == "cancel_processing":
         await handle_cancel_processing(update, context)
+    elif query.data.startswith("withdrawal_success_"):
+        await handle_withdrawal_success(update, context)
+    elif query.data.startswith("withdrawal_failed_"):
+        await handle_withdrawal_failed(update, context)
 
     else:
         await query.answer("قيد التطوير...")
@@ -2844,29 +3032,20 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
     return ENTER_PROXY_TYPE
 
 async def handle_withdrawal_approval(query, context: ContextTypes.DEFAULT_TYPE, order_id: str, user_id: int) -> None:
-    """معالجة موافقة طلب السحب"""
-    # الحصول على بيانات المستخدم
-    user = db.get_user(user_id)
+    """معالجة طلب السحب مع خيارات النجاح/الفشل"""
     
-    if user:
-        # تصفير رصيد المستخدم
-        db.execute_query("UPDATE users SET referral_balance = 0 WHERE user_id = ?", (user_id,))
-        
-        # تحديث حالة طلب السحب
-        db.execute_query("UPDATE orders SET status = 'completed', processed_at = CURRENT_TIMESTAMP WHERE id = ?", (order_id,))
-        
-        # إرسال رسالة للمستخدم
-        await context.bot.send_message(
-            user_id,
-            f"✅ تم الموافقة على طلب سحب الرصيد\n\n💰 المبلغ: `{user[5]:.2f}$`\n🆔 معرف الطلب: `{order_id}`\n\nسيتم التواصل معك قريباً لإتمام عملية التحويل.",
-            parse_mode='Markdown'
-        )
-        
-        # رسالة تأكيد للأدمن
-        await query.edit_message_text(
-            f"✅ تم الموافقة على طلب السحب بنجاح!\n\n👤 المستخدم: {user[2]} {user[3]}\n💰 المبلغ: `{user[5]:.2f}$`\n🆔 معرف الطلب: `{order_id}`\n\n⚠️ تم تصفير رصيد المستخدم تلقائياً.",
-            parse_mode='Markdown'
-        )
+    # إنشاء أزرار النجاح والفشل
+    keyboard = [
+        [InlineKeyboardButton("✅ تم التسديد", callback_data=f"withdrawal_success_{order_id}")],
+        [InlineKeyboardButton("❌ فشلت المعاملة", callback_data=f"withdrawal_failed_{order_id}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        f"💰 معالجة طلب سحب الرصيد\n\n🆔 معرف الطلب: `{order_id}`\n\nاختر حالة المعاملة:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
 
 async def handle_payment_failed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة فشل الدفع"""
@@ -3317,6 +3496,7 @@ async def handle_admin_settings_menu(update: Update, context: ContextTypes.DEFAU
     """معالجة قائمة إعدادات الأدمن"""
     keyboard = [
         [KeyboardButton("🌐 تغيير اللغة")],
+        [KeyboardButton("🔐 تغيير كلمة المرور")],
         [KeyboardButton("🔕 ساعات الهدوء")],
         [KeyboardButton("🗃️ إدارة قاعدة البيانات")],
         [KeyboardButton("🔙 العودة للقائمة الرئيسية")]
@@ -3547,6 +3727,8 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         # إعدادات الأدمن
         elif text == "🌐 تغيير اللغة":
             await handle_settings(update, context)
+        elif text == "🔐 تغيير كلمة المرور":
+            await change_admin_password(update, context)
         # تم نقل معالجة ساعات الهدوء إلى admin_functions_conv_handler
         elif text == "🗃️ إدارة قاعدة البيانات":
             await database_management_menu(update, context)
@@ -4784,6 +4966,16 @@ def main() -> None:
         per_message=False,
     )
 
+    # معالج تغيير كلمة المرور
+    password_change_conv_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex("^🔐 تغيير كلمة المرور$"), change_admin_password)],
+        states={
+            ADMIN_LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_password_change)],
+        },
+        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+        per_message=False,
+    )
+
     # معالج شامل لجميع وظائف الأدمن
     admin_functions_conv_handler = ConversationHandler(
         entry_points=[
@@ -4849,6 +5041,7 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("admin_signout", admin_signout))
     application.add_handler(admin_conv_handler)
+    application.add_handler(password_change_conv_handler)
     application.add_handler(admin_functions_conv_handler)
     application.add_handler(process_order_conv_handler)
     application.add_handler(broadcast_conv_handler)
