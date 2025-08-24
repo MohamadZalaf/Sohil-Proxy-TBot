@@ -1305,6 +1305,218 @@ class DatabaseManager:
 # إنشاء مدير قاعدة البيانات
 db = DatabaseManager(DATABASE_FILE)
 
+def load_saved_prices():
+    """تحميل الأسعار المحفوظة من قاعدة البيانات عند بدء تشغيل البوت"""
+    try:
+        # تحميل أسعار الستاتيك
+        static_prices_result = db.execute_query("SELECT value FROM settings WHERE key = 'static_prices'")
+        if static_prices_result:
+            static_prices_text = static_prices_result[0][0]
+            try:
+                if "," in static_prices_text:
+                    price_parts = static_prices_text.split(",")
+                    static_prices = {}
+                    for part in price_parts:
+                        if ":" in part:
+                            key, value = part.split(":", 1)
+                            static_prices[key.strip()] = value.strip()
+                else:
+                    static_prices = {
+                        "ISP": static_prices_text.strip(),
+                        "Verizon": static_prices_text.strip(), 
+                        "ATT": static_prices_text.strip()
+                    }
+                
+                # تحديث رسائل الستاتيك
+                update_static_messages(static_prices)
+                print(f"📊 تم تحميل أسعار الستاتيك: {static_prices}")
+            except Exception as e:
+                print(f"خطأ في تحليل أسعار الستاتيك: {e}")
+        
+        # تحميل أسعار السوكس
+        socks_prices_result = db.execute_query("SELECT value FROM settings WHERE key = 'socks_prices'")
+        if socks_prices_result:
+            socks_prices_text = socks_prices_result[0][0]
+            try:
+                if "," in socks_prices_text:
+                    price_parts = socks_prices_text.split(",")
+                    socks_prices = {}
+                    for part in price_parts:
+                        if ":" in part:
+                            key, value = part.split(":", 1)
+                            socks_prices[key.strip()] = value.strip()
+                else:
+                    socks_prices = {
+                        "5proxy": socks_prices_text.strip(),
+                        "10proxy": str(float(socks_prices_text.strip()) * 1.75)
+                    }
+                
+                # تحديث رسائل السوكس
+                update_socks_messages(socks_prices)
+                print(f"📊 تم تحميل أسعار السوكس: {socks_prices}")
+            except Exception as e:
+                print(f"خطأ في تحليل أسعار السوكس: {e}")
+        
+        # تحميل قيمة الإحالة
+        referral_amount_result = db.execute_query("SELECT value FROM settings WHERE key = 'referral_amount'")
+        if referral_amount_result:
+            referral_amount = float(referral_amount_result[0][0])
+            print(f"💰 تم تحميل قيمة الإحالة: {referral_amount}$")
+        
+    except Exception as e:
+        print(f"خطأ في تحميل الأسعار المحفوظة: {e}")
+
+def update_static_messages(static_prices):
+    """تحديث رسائل البروكسي الستاتيك"""
+    new_static_message_ar = f"""📦 Static Package
+
+🔹 الأسعار:
+- Static ISP Risk0: `{static_prices.get('ISP', '3')}$`
+- Static Residential Verizon: `{static_prices.get('Verizon', '4')}$`  
+- Static Residential AT&T: `{static_prices.get('ATT', '6')}$`
+
+━━━━━━━━━━━━━━━
+💳 طرق الدفع المحلية:
+
+- شام كاش:
+`cc849f22d5117db0b8fe5667e6d4b758`
+
+- سيرياتيل كاش:
+`55973911`
+`14227865`
+
+━━━━━━━━━━━━━━━
+🪙 طرق الدفع بالعملات الرقمية:
+
+- Coinex:
+sohilskaf123@gmail.com
+
+- Binance:
+`1121540155`
+
+- Payeer:
+`P1114452356`
+
+━━━━━━━━━━━━━━━
+📩 الرجاء إرسال إثبات الدفع للبوت مع تفاصيل الطلب
+⏱️ يرجى الانتظار حتى تتم معالجة العملية من قبل الأدمن
+
+معرف الطلب: `{{}}`"""
+
+    new_static_message_en = f"""📦 Static Package
+
+🔹 Prices:
+- Static ISP Risk0: {static_prices.get('ISP', '3')}$
+- Static Residential Verizon: {static_prices.get('Verizon', '4')}$
+- Static Residential AT&T: {static_prices.get('ATT', '6')}$
+
+━━━━━━━━━━━━━━━
+💳 Local Payment Methods:
+
+- Sham Cash:
+  cc849f22d5117db0b8fe5667e6d4b758
+
+- Syriatel Cash:
+  55973911
+  14227865
+
+━━━━━━━━━━━━━━━
+🪙 Cryptocurrency Payment Methods:
+
+- Coinex:
+  sohilskaf123@gmail.com
+
+- Binance:
+  1121540155
+
+- Payeer:
+  P1114452356
+
+━━━━━━━━━━━━━━━
+📩 Please send payment proof to the bot with order details
+⏱️ Please wait for admin to process manually
+
+Order ID: {{}}"""
+
+    # تحديث الرسائل في الكود
+    MESSAGES['ar']['static_package'] = new_static_message_ar
+    MESSAGES['en']['static_package'] = new_static_message_en
+
+def update_socks_messages(socks_prices):
+    """تحديث رسائل بروكسي السوكس"""
+    new_socks_message_ar = f"""📦 Socks Package
+كافة دول العالم مع ميزة اختيار الولاية والمزود للبكج
+
+🔹 الأسعار:
+- باكج 5 بروكسيات مؤقتة: `{socks_prices.get('5proxy', '0.4')}$`
+- باكج 10 بروكسيات مؤقتة: `{socks_prices.get('10proxy', '0.7')}$`
+
+━━━━━━━━━━━━━━━
+💳 طرق الدفع المحلية:
+
+- شام كاش:
+`cc849f22d5117db0b8fe5667e6d4b758`
+
+- سيرياتيل كاش:
+`55973911`
+`14227865`
+
+━━━━━━━━━━━━━━━
+🪙 طرق الدفع بالعملات الرقمية:
+
+- Coinex:
+sohilskaf123@gmail.com
+
+- Binance:
+`1121540155`
+
+- Payeer:
+`P1114452356`
+
+━━━━━━━━━━━━━━━
+📩 الرجاء إرسال إثبات الدفع للبوت مع تفاصيل الطلب
+⏱️ يرجى الانتظار حتى تتم معالجة العملية من قبل الأدمن
+
+معرف الطلب: `{{}}`"""
+
+    new_socks_message_en = f"""📦 Socks Package
+
+🔹 Prices:
+- 5 Temporary Proxies Package: {socks_prices.get('5proxy', '0.4')}$
+- 10 Temporary Proxies Package: {socks_prices.get('10proxy', '0.7')}$
+
+━━━━━━━━━━━━━━━
+💳 Local Payment Methods:
+
+- Sham Cash:
+  cc849f22d5117db0b8fe5667e6d4b758
+
+- Syriatel Cash:
+  55973911
+  14227865
+
+━━━━━━━━━━━━━━━
+🪙 Cryptocurrency Payment Methods:
+
+- Coinex:
+  sohilskaf123@gmail.com
+
+- Binance:
+  1121540155
+
+- Payeer:
+  P1114452356
+
+━━━━━━━━━━━━━━━
+📩 Please send payment proof to the bot with order details
+⏱️ Please wait for admin to process manually
+
+Order ID: {{}}"""
+
+    # تحديث الرسائل في الكود
+    MESSAGES['ar']['socks_package'] = new_socks_message_ar
+    MESSAGES['en']['socks_package'] = new_socks_message_en
+
 def generate_order_id() -> str:
     """إنشاء معرف طلب فريد مكون من 16 خانة"""
     return ''.join(random.choices(string.ascii_letters + string.digits, k=16))
