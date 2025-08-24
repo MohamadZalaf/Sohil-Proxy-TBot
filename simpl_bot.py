@@ -1255,6 +1255,7 @@ class DatabaseManager:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 processed_at TIMESTAMP,
                 proxy_details TEXT,
+                truly_processed BOOLEAN DEFAULT FALSE,
                 FOREIGN KEY (user_id) REFERENCES users (user_id)
             )
         ''')
@@ -1302,6 +1303,12 @@ class DatabaseManager:
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # إضافة العمود الجديد للطلبات المعالجة فعلياً إذا لم يكن موجوداً
+        try:
+            cursor.execute("SELECT truly_processed FROM orders LIMIT 1")
+        except sqlite3.OperationalError:
+            cursor.execute("ALTER TABLE orders ADD COLUMN truly_processed BOOLEAN DEFAULT FALSE")
         
         conn.commit()
         conn.close()
@@ -1357,6 +1364,14 @@ class DatabaseManager:
         """تسجيل إجراء في السجل"""
         query = "INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)"
         self.execute_query(query, (user_id, action, details))
+    
+    def get_truly_processed_orders(self) -> List[tuple]:
+        """الحصول على الطلبات المعالجة فعلياً فقط (وفقاً للشرطين المحددين)"""
+        return self.execute_query("SELECT * FROM orders WHERE truly_processed = TRUE")
+    
+    def get_unprocessed_orders(self) -> List[tuple]:
+        """الحصول على الطلبات غير المعالجة فعلياً (بغض النظر عن الحالة)"""
+        return self.execute_query("SELECT * FROM orders WHERE truly_processed = FALSE OR truly_processed IS NULL")
 
 # إنشاء مدير قاعدة البيانات
 db = DatabaseManager(DATABASE_FILE)
@@ -3285,8 +3300,14 @@ async def handle_payment_failed(update: Update, context: ContextTypes.DEFAULT_TY
     transaction_number = generate_transaction_number('proxy')
     save_transaction(order_id, transaction_number, 'proxy', 'failed')
     
-    # تحديث حالة الطلب إلى فاشل
+    # تحديث حالة الطلب إلى فاشل وتسجيله كمعالج فعلياً (الشرط الأول: ضغط زر "لا")
     update_order_status(order_id, 'failed')
+    
+    # تسجيل الطلب كمعالج فعلياً لأن الأدمن أكد أن الدفع غير حقيقي
+    db.execute_query(
+        "UPDATE orders SET truly_processed = TRUE WHERE id = ?",
+        (order_id,)
+    )
     
     # إرسال رسالة للمستخدم
     order_query = "SELECT user_id, proxy_type FROM orders WHERE id = ?"
@@ -3602,8 +3623,9 @@ async def send_proxy_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE,
             'password': context.user_data['admin_proxy_password']
         }
         
+        # تسجيل الطلب كمكتمل ومعالج فعلياً (الشرط الثاني: إرسال البيانات الكاملة للمستخدم)
         db.execute_query(
-            "UPDATE orders SET status = 'completed', processed_at = CURRENT_TIMESTAMP, proxy_details = ? WHERE id = ?",
+            "UPDATE orders SET status = 'completed', processed_at = CURRENT_TIMESTAMP, proxy_details = ?, truly_processed = TRUE WHERE id = ?",
             (json.dumps(proxy_details), order_id)
         )
         
@@ -3688,8 +3710,9 @@ async def send_proxy_to_user_direct(update: Update, context: ContextTypes.DEFAUL
             'password': context.user_data['admin_proxy_password']
         }
         
+        # تسجيل الطلب كمكتمل ومعالج فعلياً (الشرط الثاني: إرسال البيانات الكاملة للمستخدم)
         db.execute_query(
-            "UPDATE orders SET status = 'completed', processed_at = CURRENT_TIMESTAMP, proxy_details = ? WHERE id = ?",
+            "UPDATE orders SET status = 'completed', processed_at = CURRENT_TIMESTAMP, proxy_details = ?, truly_processed = TRUE WHERE id = ?",
             (json.dumps(proxy_details), order_id)
         )
 
