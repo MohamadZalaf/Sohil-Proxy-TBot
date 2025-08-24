@@ -1248,6 +1248,18 @@ class DatabaseManager:
             )
         ''')
         
+        # جدول المعاملات
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id TEXT NOT NULL,
+                transaction_number TEXT UNIQUE NOT NULL,
+                transaction_type TEXT NOT NULL,  -- 'proxy' or 'withdrawal'
+                status TEXT DEFAULT 'completed',  -- 'completed' or 'failed'
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # جدول السجلات
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS logs (
@@ -1537,6 +1549,53 @@ def get_user_language(user_id: int) -> str:
     """الحصول على لغة المستخدم"""
     user = db.get_user(user_id)
     return user[4] if user else 'ar'  # اللغة في العمود الخامس
+
+def generate_transaction_number(transaction_type: str) -> str:
+    """توليد رقم معاملة جديد"""
+    # الحصول على آخر رقم معاملة من نفس النوع
+    query = "SELECT MAX(id) FROM transactions WHERE transaction_type = ?"
+    result = db.execute_query(query, (transaction_type,))
+    
+    last_id = 0
+    if result and result[0][0]:
+        last_id = result[0][0]
+    
+    # توليد الرقم الجديد
+    new_id = last_id + 1
+    
+    if transaction_type == 'proxy':
+        prefix = 'P'
+    elif transaction_type == 'withdrawal':
+        prefix = 'M'
+    else:
+        prefix = 'T'
+    
+    # تنسيق الرقم بـ 10 خانات
+    transaction_number = f"{prefix}-{new_id:010d}"
+    
+    return transaction_number
+
+def save_transaction(order_id: str, transaction_number: str, transaction_type: str, status: str = 'completed'):
+    """حفظ بيانات المعاملة"""
+    db.execute_query('''
+        INSERT INTO transactions (order_id, transaction_number, transaction_type, status)
+        VALUES (?, ?, ?, ?)
+    ''', (order_id, transaction_number, transaction_type, status))
+
+def update_order_status(order_id: str, status: str):
+    """تحديث حالة الطلب"""
+    if status == 'completed':
+        db.execute_query('''
+            UPDATE orders 
+            SET status = 'completed', processed_at = CURRENT_TIMESTAMP 
+            WHERE id = ?
+        ''', (order_id,))
+    elif status == 'failed':
+        db.execute_query('''
+            UPDATE orders 
+            SET status = 'failed', processed_at = CURRENT_TIMESTAMP 
+            WHERE id = ?
+        ''', (order_id,))
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """أمر البداية"""
@@ -2712,6 +2771,13 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
     
     order_id = context.user_data['processing_order_id']
     
+    # توليد رقم المعاملة وحفظها
+    transaction_number = generate_transaction_number('proxy')
+    save_transaction(order_id, transaction_number, 'proxy', 'completed')
+    
+    # تحديث حالة الطلب إلى مكتمل
+    update_order_status(order_id, 'completed')
+    
     # إرسال رسالة للمستخدم أن الطلب قيد المعالجة
     order_query = "SELECT user_id, proxy_type FROM orders WHERE id = ?"
     order_result = db.execute_query(order_query, (order_id,))
@@ -2720,17 +2786,40 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
         order_type = order_result[0][1]
         user_language = get_user_language(user_id)
         
-        # إرسال إشعار بدء المعالجة
-        await context.bot.send_message(
-            user_id,
-            MESSAGES[user_language]['order_processing']
-        )
+        # رسالة للمستخدم مع رقم المعاملة
+        if user_language == 'ar':
+            user_message = f"""✅ تم قبول دفعتك بنجاح!
+
+🆔 معرف الطلب: `{order_id}`
+💳 رقم المعاملة: `{transaction_number}`
+📦 نوع الباكج: {order_type}
+
+🔄 سيتم معالجة طلبك وإرسال البيانات قريباً."""
+        else:
+            user_message = f"""✅ Your payment has been accepted successfully!
+
+🆔 Order ID: `{order_id}`
+💳 Transaction Number: `{transaction_number}`
+📦 Package Type: {order_type}
+
+🔄 Your order will be processed and data sent soon."""
+        
+        await context.bot.send_message(user_id, user_message, parse_mode='Markdown')
         
         # التحقق من نوع الطلب
         if order_type == 'withdrawal':
             # معالجة طلب السحب
             await handle_withdrawal_approval(query, context, order_id, user_id)
             return ConversationHandler.END
+    
+    # رسالة للأدمن مع رقم المعاملة
+    admin_message = f"""✅ تم قبول الدفع للطلب
+
+🆔 معرف الطلب: `{order_id}`
+💳 رقم المعاملة: `{transaction_number}`
+👤 معرف المستخدم: `{user_id if 'user_id' in locals() else 'غير محدد'}`
+
+📋 الطلب جاهز للمعالجة والإرسال للمستخدم."""
     
     # إنشاء رسالة جديدة بدلاً من تعديل الرسالة الأصلية
     keyboard = [
@@ -2748,7 +2837,7 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
     
     # تحديث الرسالة الأصلية لتوضيح أنه تم البدء في المعالجة
     await query.edit_message_text(
-        f"✅ تم تأكيد صحة الدفع للطلب `{order_id}`\n\n⚙️ جاري جمع معلومات البروكسي...",
+        admin_message,
         parse_mode='Markdown'
     )
     
@@ -2786,8 +2875,40 @@ async def handle_payment_failed(update: Update, context: ContextTypes.DEFAULT_TY
     
     order_id = context.user_data['processing_order_id']
     
-    # تحديث حالة الطلب
-    db.execute_query("UPDATE orders SET status = 'failed' WHERE id = ?", (order_id,))
+    # توليد رقم المعاملة وحفظها
+    transaction_number = generate_transaction_number('proxy')
+    save_transaction(order_id, transaction_number, 'proxy', 'failed')
+    
+    # تحديث حالة الطلب إلى فاشل
+    update_order_status(order_id, 'failed')
+    
+    # إرسال رسالة للمستخدم
+    order_query = "SELECT user_id, proxy_type FROM orders WHERE id = ?"
+    order_result = db.execute_query(order_query, (order_id,))
+    if order_result:
+        user_id = order_result[0][0]
+        order_type = order_result[0][1]
+        user_language = get_user_language(user_id)
+        
+        # رسالة للمستخدم مع رقم المعاملة
+        if user_language == 'ar':
+            user_message = f"""❌ تم رفض دفعتك
+
+🆔 معرف الطلب: `{order_id}`
+💳 رقم المعاملة: `{transaction_number}`
+📦 نوع الباكج: {order_type}
+
+📞 يرجى التواصل مع الإدارة لمعرفة سبب الرفض."""
+        else:
+            user_message = f"""❌ Your payment has been rejected
+
+🆔 Order ID: `{order_id}`
+💳 Transaction Number: `{transaction_number}`
+📦 Package Type: {order_type}
+
+📞 Please contact admin to know the reason for rejection."""
+        
+        await context.bot.send_message(user_id, user_message, parse_mode='Markdown')
     
     keyboard = [
         [InlineKeyboardButton("نعم", callback_data="send_custom_message")],
