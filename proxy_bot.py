@@ -2770,19 +2770,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         # إعادة تفعيل كيبورد الأدمن الرئيسي
         await restore_admin_keyboard(context, update.effective_chat.id)
     elif query.data == "order_completed_success":
-        # إنهاء الطلب نهائياً وتنظيف البيانات
-        order_id = context.user_data.get('processing_order_id')
-        if order_id:
-            # تنظيف البيانات المؤقتة
-            context.user_data.clear()
-        
-        await query.edit_message_text(
-            f"✅ تم إنهاء الطلب بنجاح!\n\n🆔 معرف الطلب: `{order_id}`\n\n📋 تم نقل الطلب إلى الطلبات المكتملة.",
-            parse_mode='Markdown'
-        )
-        
-        # إعادة تفعيل كيبورد الأدمن الرئيسي
-        await restore_admin_keyboard(context, update.effective_chat.id)
+        # تمت معالجة هذا الزر في ConversationHandler - تجاهل هنا
+        await query.answer("تم إنهاء الطلب بنجاح!")
     elif query.data == "developer_info":
         # إظهار نافذة منبثقة مع معلومات المطور
         popup_text = context.user_data.get('popup_text', "🧑‍💻 Developed by Mohamad Zalaf")
@@ -6239,7 +6228,8 @@ def main() -> None:
             ],
             ENTER_THANK_MESSAGE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
-                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
+                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
+                CallbackQueryHandler(handle_order_completed_success, pattern="^order_completed_success$")
             ],
             CUSTOM_MESSAGE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input),
