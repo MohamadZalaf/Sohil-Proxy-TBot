@@ -1867,7 +1867,9 @@ async def change_admin_password(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         message = "🔐 Change Password\n\nPlease enter current password first:"
     
-    await update.message.reply_text(message)
+    keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_password_change")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(message, reply_markup=reply_markup)
     context.user_data['password_change_step'] = 'current'
     return ADMIN_LOGIN
 
@@ -1882,9 +1884,13 @@ async def handle_password_change(update: Update, context: ContextTypes.DEFAULT_T
         if update.message.text == ADMIN_PASSWORD:
             context.user_data['password_change_step'] = 'new'
             if user_language == 'ar':
-                await update.message.reply_text("✅ كلمة المرور صحيحة\n\nيرجى إدخال كلمة المرور الجديدة:")
+                keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_password_change")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text("✅ كلمة المرور صحيحة\n\nيرجى إدخال كلمة المرور الجديدة:", reply_markup=reply_markup)
             else:
-                await update.message.reply_text("✅ Password correct\n\nPlease enter new password:")
+                keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_password_change")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text("✅ Password correct\n\nPlease enter new password:", reply_markup=reply_markup)
             return ADMIN_LOGIN
         else:
             if user_language == 'ar':
@@ -2050,7 +2056,8 @@ async def handle_static_proxy_request(update: Update, context: ContextTypes.DEFA
     # عرض أزرار الكمية أولاً
     keyboard = [
         [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single_static")],
-        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package_static")]
+        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package_static")],
+        [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_proxy_request")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("اختر الكمية المطلوبة:", reply_markup=reply_markup)
@@ -2084,7 +2091,18 @@ async def handle_socks_proxy_request(update: Update, context: ContextTypes.DEFAU
     package_message = MESSAGES[language]['socks_package'].replace('معرف الطلب: `{}`', 'سيتم إنشاء معرف الطلب بعد إرسال إثبات الدفع')
     await update.message.reply_text(package_message, parse_mode='Markdown')
     
-    # عرض قائمة الدول للسوكس (مع دول إضافية)
+    # عرض أزرار الكمية أولاً (مثل الستاتيك)
+    keyboard = [
+        [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single_socks")],
+        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package_socks")],
+        [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_proxy_request")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("اختر الكمية المطلوبة:", reply_markup=reply_markup)
+    context.user_data['proxy_type'] = 'socks'
+    return
+    
+    # عرض قائمة الدول للسوكس (سيتم تنفيذه بعد اختيار الكمية)
     keyboard = []
     for code, name in SOCKS_COUNTRIES[language].items():
         keyboard.append([InlineKeyboardButton(name, callback_data=f"country_{code}")])
@@ -2751,6 +2769,82 @@ Please use /start command to reload menus
     
     await query.edit_message_text(message)
 
+async def handle_user_quantity_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة اختيار الكمية من قبل المستخدم"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    language = get_user_language(user_id)
+    
+    if query.data in ["quantity_single_static", "quantity_single_socks"]:
+        context.user_data['user_quantity'] = 'single'
+        # الانتقال لاختيار الدولة
+        await show_country_selection_for_user(query, context, language)
+        
+    elif query.data in ["quantity_package_static", "quantity_package_socks"]:
+        context.user_data['user_quantity'] = 'package'
+        # الانتقال لاختيار الدولة
+        await show_country_selection_for_user(query, context, language)
+
+async def show_country_selection_for_user(query, context: ContextTypes.DEFAULT_TYPE, language: str) -> None:
+    """عرض اختيار الدولة للمستخدم مع زر إلغاء"""
+    proxy_type = context.user_data.get('proxy_type', 'static')
+    
+    if proxy_type == 'socks':
+        countries = SOCKS_COUNTRIES[language]
+    else:
+        countries = STATIC_COUNTRIES[language]
+    
+    keyboard = []
+    for code, name in countries.items():
+        keyboard.append([InlineKeyboardButton(name, callback_data=f"country_{code}")])
+    
+    # إضافة أزرار الإدخال اليدوي والإلغاء
+    keyboard.append([InlineKeyboardButton(MESSAGES[language]['manual_input'], callback_data="manual_country")])
+    keyboard.append([InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_proxy_request")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(
+        MESSAGES[language]['select_country'],
+        reply_markup=reply_markup
+    )
+
+async def handle_cancel_user_proxy_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة إلغاء طلب البروكسي من قبل المستخدم"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    language = get_user_language(user_id)
+    
+    # تنظيف البيانات المؤقتة
+    context.user_data.clear()
+    
+    # رسالة الإلغاء
+    if language == 'ar':
+        cancel_message = "❌ تم إلغاء طلب البروكسي\n\n🔙 يمكنك البدء من جديد في أي وقت"
+    else:
+        cancel_message = "❌ Proxy request cancelled\n\n🔙 You can start again anytime"
+    
+    await query.edit_message_text(cancel_message)
+    
+    # إرسال القائمة الرئيسية مرة أخرى
+    keyboard = [
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][0])],
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][1])],
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2])],
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][3]), 
+         KeyboardButton(MESSAGES[language]['main_menu_buttons'][4])]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    await context.bot.send_message(
+        user_id,
+        MESSAGES[language]['welcome'],
+        reply_markup=reply_markup
+    )
+
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة الاستعلامات المرسلة"""
     query = update.callback_query
@@ -2761,6 +2855,10 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_payment_method_selection(update, context)
     elif query.data.startswith("lang_"):
         await handle_language_change(update, context)
+    elif query.data.startswith("quantity_"):
+        await handle_user_quantity_selection(update, context)
+    elif query.data == "cancel_user_proxy_request":
+        await handle_cancel_user_proxy_request(update, context)
     # تم نقل معالجة process_ إلى process_order_conv_handler
     # تم نقل معالجة payment_success و payment_failed إلى process_order_conv_handler
     # تم نقل معالجة proxy_type_ إلى process_order_conv_handler
@@ -6025,19 +6123,26 @@ async def handle_broadcast_selection(update: Update, context: ContextTypes.DEFAU
     
     if query.data == "broadcast_all":
         context.user_data['broadcast_type'] = 'all'
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_broadcast")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
-            "📢 **إرسال إعلان للجميع**\n\nيرجى كتابة الرسالة التي تريد إرسالها لجميع المستخدمين:"
+            "📢 **إرسال إعلان للجميع**\n\nيرجى كتابة الرسالة التي تريد إرسالها لجميع المستخدمين:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
         )
         return BROADCAST_MESSAGE
     
     elif query.data == "broadcast_custom":
         context.user_data['broadcast_type'] = 'custom'
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_broadcast")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
             "👥 **إرسال لمستخدمين مخصصين**\n\nيرجى إدخال معرفات المستخدمين أو أسماء المستخدمين:\n\n"
             "**الشكل المطلوب:**\n"
             "• مستخدم واحد: `123456789` أو `@username`\n"
             "• عدة مستخدمين: `123456789 - @user1 - 987654321`\n\n"
             "⚠️ **ملاحظة:** استخدم ` - ` (مسافة قبل وبعد الشرطة) للفصل بين المستخدمين",
+            reply_markup=reply_markup,
             parse_mode='Markdown'
         )
         return BROADCAST_USERS
@@ -6133,7 +6238,9 @@ async def handle_broadcast_users(update: Update, context: ContextTypes.DEFAULT_T
     
     preview_text += f"\nيرجى كتابة الرسالة التي تريد إرسالها لـ {len(valid_users)} مستخدم:"
     
-    await update.message.reply_text(preview_text, parse_mode='Markdown')
+    keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_broadcast")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(preview_text, reply_markup=reply_markup, parse_mode='Markdown')
     return BROADCAST_MESSAGE
 
 async def handle_broadcast_custom_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -6245,6 +6352,21 @@ async def handle_broadcast_start(update: Update, context: ContextTypes.DEFAULT_T
     )
     
     return BROADCAST_MESSAGE  # الانتقال لحالة انتظار اختيار نوع البث
+
+async def handle_cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إلغاء البث"""
+    query = update.callback_query
+    await query.answer()
+    
+    # تنظيف البيانات المؤقتة
+    context.user_data.clear()
+    
+    await query.edit_message_text("❌ تم إلغاء عملية البث")
+    
+    # إعادة تفعيل كيبورد الأدمن الرئيسي
+    await restore_admin_keyboard(context, update.effective_chat.id, "🔧 لوحة الأدمن جاهزة للاستخدام")
+    
+    return ConversationHandler.END
 
 async def initialize_cleanup_scheduler(application):
     """تهيئة جدولة التنظيف التلقائي"""
@@ -6374,7 +6496,10 @@ def main() -> None:
     password_change_conv_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^🔐 تغيير كلمة المرور$"), change_admin_password)],
         states={
-            ADMIN_LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_password_change)],
+            ADMIN_LOGIN: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_password_change),
+                CallbackQueryHandler(handle_cancel_password_change, pattern="^cancel_password_change$")
+            ],
         },
         fallbacks=[
             CommandHandler("cancel", lambda u, c: ConversationHandler.END),
@@ -6471,9 +6596,13 @@ def main() -> None:
         states={
             BROADCAST_MESSAGE: [
                 CallbackQueryHandler(handle_broadcast_selection, pattern="^(broadcast_all|broadcast_custom)$"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_message)
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_message),
+                CallbackQueryHandler(handle_cancel_broadcast, pattern="^cancel_broadcast$")
             ],
-            BROADCAST_USERS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_users)],
+            BROADCAST_USERS: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_users),
+                CallbackQueryHandler(handle_cancel_broadcast, pattern="^cancel_broadcast$")
+            ],
             BROADCAST_CONFIRM: [CallbackQueryHandler(handle_broadcast_confirmation, pattern="^(confirm_broadcast|cancel_broadcast)$")],
 
         },
