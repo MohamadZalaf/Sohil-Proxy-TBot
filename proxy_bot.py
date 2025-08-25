@@ -6389,24 +6389,44 @@ async def initialize_cleanup_scheduler(application):
     except Exception as e:
         logger.error(f"Failed to initialize cleanup scheduler: {e}")
 
-def main() -> None:
+async def main() -> None:
     """الدالة الرئيسية"""
+    print("🔧 فحص إعدادات البوت...")
+    
     if not TOKEN:
+        print("❌ التوكن غير موجود!")
         print("يرجى إضافة التوكن في بداية الملف!")
         print("1. اذهب إلى @BotFather على تيليجرام")
         print("2. أنشئ بوت جديد وانسخ التوكن")
         print("3. ضع التوكن في متغير TOKEN في بداية الملف")
         return
     
+    print(f"✅ التوكن موجود: {TOKEN[:10]}...{TOKEN[-10:]}")
+    print("🔧 بدء تهيئة البوت...")
+    
     # تحميل الأسعار المحفوظة عند بدء التشغيل
     load_saved_prices()
     
     # إنشاء ملفات المساعدة
+    print("📁 إنشاء ملفات المساعدة...")
     create_requirements_file()
     create_readme_file()
+    print("✅ تم إنشاء ملفات المساعدة")
     
     # إنشاء التطبيق
-    application = Application.builder().token(TOKEN).build()
+    print("⚡ إنشاء تطبيق التيليجرام...")
+    try:
+        application = Application.builder().token(TOKEN).build()
+        print("✅ تم إنشاء التطبيق بنجاح")
+        
+        # اختبار الاتصال مع تيليجرام
+        print("🌐 اختبار الاتصال مع خوادم تيليجرام...")
+        bot_info = await application.bot.get_me()
+        print(f"✅ تم الاتصال بنجاح! اسم البوت: @{bot_info.username}")
+        
+    except Exception as e:
+        print(f"❌ خطأ في إنشاء التطبيق أو الاتصال: {e}")
+        return
     
     
 async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -6841,29 +6861,52 @@ async def handle_back_to_quantity(update: Update, context: ContextTypes.DEFAULT_
     )
 
     # إضافة المعالجات
+    print("🔧 إضافة معالجات الأوامر...")
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("about", handle_about_command))
     application.add_handler(CommandHandler("reset", handle_reset_command))
     application.add_handler(CommandHandler("cleanup", handle_cleanup_command))
     application.add_handler(CommandHandler("status", handle_status_command))
     application.add_handler(CommandHandler("admin_signout", admin_signout))
+    
+    print("🔧 إضافة معالجات المحادثات...")
     application.add_handler(admin_conv_handler)
     application.add_handler(password_change_conv_handler)
     application.add_handler(admin_functions_conv_handler)
     application.add_handler(process_order_conv_handler)
     application.add_handler(broadcast_conv_handler)
     application.add_handler(payment_conv_handler)
+    
+    print("🔧 إضافة معالجات الرسائل...")
     application.add_handler(CallbackQueryHandler(handle_callback_query))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
+    print("✅ تم إضافة جميع المعالجات")
     
     # تشغيل البوت
-    print("🚀 بدء تشغيل البوت...")
-    print("📊 قاعدة البيانات جاهزة")
-    print("⚡ البوت يعمل الآن!")
-    print("💡 تأكد من إضافة التوكن للبدء")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        print("🚀 بدء تشغيل البوت...")
+        print("📊 قاعدة البيانات جاهزة")
+        print("⚡ البوت يعمل الآن!")
+        print(f"🔑 التوكن: {TOKEN[:10]}...")
+        print("💡 في انتظار الرسائل...")
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        print(f"❌ خطأ في تشغيل البوت: {e}")
+        print(f"🔍 تفاصيل الخطأ: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == '__main__':
-    main()
+    try:
+        print("=" * 50)
+        print("🤖 تشغيل بوت البروكسي")
+        print("=" * 50)
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n⚠️ تم إيقاف البوت بواسطة المستخدم")
+    except Exception as e:
+        print(f"❌ خطأ فادح في البوت: {e}")
+        import traceback
+        traceback.print_exc()
 
 
