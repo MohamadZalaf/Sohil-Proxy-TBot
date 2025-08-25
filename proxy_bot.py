@@ -1921,6 +1921,23 @@ async def handle_password_change(update: Update, context: ContextTypes.DEFAULT_T
     
     return ConversationHandler.END
 
+async def handle_cancel_password_change(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إلغاء تغيير كلمة المرور"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_language = get_user_language(update.effective_user.id)
+    
+    if user_language == 'ar':
+        await query.edit_message_text("❌ تم إلغاء تغيير كلمة المرور")
+    else:
+        await query.edit_message_text("❌ Password change cancelled")
+    
+    # تنظيف البيانات المؤقتة
+    context.user_data.pop('password_change_step', None)
+    
+    return ConversationHandler.END
+
 def validate_ip_address(ip: str) -> bool:
     """التحقق من صحة عنوان IP"""
     import re
