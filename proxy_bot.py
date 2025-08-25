@@ -6165,8 +6165,6 @@ def main() -> None:
     # إنشاء التطبيق
     application = Application.builder().token(TOKEN).build()
     
-    # تهيئة جدولة التنظيف
-    asyncio.create_task(initialize_cleanup_scheduler(application))
     
     # معالج تسجيل دخول الأدمن
     # معالج معالجة الطلبات للأدمن
