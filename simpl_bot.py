@@ -3507,6 +3507,10 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
         # معالجة النص المدخل
         text = update.message.text
         
+        # التحقق من وجود معرف الطلب في context للتأكد من أننا في السياق الصحيح
+        if not context.user_data.get('processing_order_id'):
+            return ConversationHandler.END
+        
         # التحقق من زر الإلغاء (لم يعد مستخدماً نظراً لتحويله لـ inline)
         if text == "❌ إلغاء":
             context.user_data.clear()
@@ -4507,8 +4511,13 @@ async def admin_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ADMIN_ORDER_INQUIRY
 
 async def handle_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """معالجة الاستعلام عن طلب"""
+    """معالجة الاستعلام عن طلب - للبحث عن طلبات موجودة فقط"""
     order_id = update.message.text.strip()
+    
+    # التأكد من أننا في سياق الاستعلام وليس معالجة البروكسي
+    if context.user_data.get('processing_order_id'):
+        # إذا كان هناك طلب قيد المعالجة، فهذا ليس استعلام عن طلب
+        return ConversationHandler.END
     
     # التحقق من زر الإلغاء (لم يعد مستخدماً لأنه تم تحويله لـ inline)
     if order_id == "❌ إلغاء":
@@ -6032,14 +6041,14 @@ def main() -> None:
         per_message=False,
     )
 
-    # إضافة المعالجات
+    # إضافة المعالجات - ترتيب مهم: المعالجات الأكثر تخصصاً أولاً
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("about", handle_about_command))
     application.add_handler(CommandHandler("admin_signout", admin_signout))
     application.add_handler(admin_conv_handler)
     application.add_handler(password_change_conv_handler)
+    application.add_handler(process_order_conv_handler)  # معالج الطلبات له الأولوية
     application.add_handler(admin_functions_conv_handler)
-    application.add_handler(process_order_conv_handler)
     application.add_handler(broadcast_conv_handler)
     application.add_handler(payment_conv_handler)
     application.add_handler(CallbackQueryHandler(handle_callback_query))
