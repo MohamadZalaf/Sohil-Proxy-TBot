@@ -6428,6 +6428,42 @@ async def main() -> None:
         print(f"❌ خطأ في إنشاء التطبيق أو الاتصال: {e}")
         return
     
+    # إضافة المعالجات
+    print("🔧 إضافة معالجات الأوامر...")
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("about", handle_about_command))
+    application.add_handler(CommandHandler("reset", handle_reset_command))
+    application.add_handler(CommandHandler("cleanup", handle_cleanup_command))
+    application.add_handler(CommandHandler("status", handle_status_command))
+    application.add_handler(CommandHandler("admin_signout", admin_signout))
+    
+    print("🔧 إضافة معالجات المحادثات...")
+    application.add_handler(admin_conv_handler)
+    application.add_handler(password_change_conv_handler)
+    application.add_handler(admin_functions_conv_handler)
+    application.add_handler(process_order_conv_handler)
+    application.add_handler(broadcast_conv_handler)
+    application.add_handler(payment_conv_handler)
+    
+    print("🔧 إضافة معالجات الرسائل...")
+    application.add_handler(CallbackQueryHandler(handle_callback_query))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
+    print("✅ تم إضافة جميع المعالجات")
+    
+    # تشغيل البوت
+    try:
+        print("🚀 بدء تشغيل البوت...")
+        print("📊 قاعدة البيانات جاهزة")
+        print("⚡ البوت يعمل الآن!")
+        print(f"🔑 التوكن: {TOKEN[:10]}...")
+        print("💡 في انتظار الرسائل...")
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        print(f"❌ خطأ في تشغيل البوت: {e}")
+        print(f"🔍 تفاصيل الخطأ: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
+    
     
 async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة اختيار الكمية من قبل الأدمن"""
@@ -6655,246 +6691,210 @@ async def handle_back_to_quantity(update: Update, context: ContextTypes.DEFAULT_
     
     return PROCESS_ORDER
 
-    # معالج معالجة الطلبات للأدمن
-    process_order_conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(handle_process_order, pattern="^process_")],
-        states={
-            PROCESS_ORDER: [
-                CallbackQueryHandler(handle_payment_success, pattern="^payment_success$"),
-                CallbackQueryHandler(handle_payment_failed, pattern="^payment_failed$"),
-                CallbackQueryHandler(handle_quantity_selection, pattern="^quantity_"),
-                CallbackQueryHandler(handle_back_to_quantity, pattern="^back_to_quantity$"),
-                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
-            ],
-            ENTER_PROXY_TYPE: [
-                CallbackQueryHandler(handle_proxy_details_input, pattern="^proxy_type_"),
-                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
-            ],
-            ENTER_PROXY_ADDRESS: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
-                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
-                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
-            ],
-            ENTER_PROXY_PORT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
-                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
-                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
-            ],
-            ENTER_COUNTRY: [
-                CallbackQueryHandler(handle_admin_country_selection, pattern="^admin_country_"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
-                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
-                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
-            ],
-            ENTER_STATE: [
-                CallbackQueryHandler(handle_admin_country_selection, pattern="^admin_state_"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
-                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
-                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
-            ],
-            ENTER_USERNAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
-                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
-                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
-            ],
-            ENTER_PASSWORD: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
-                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
-                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
-            ],
-            ENTER_THANK_MESSAGE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
-                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
-                CallbackQueryHandler(handle_order_completed_success, pattern="^order_completed_success$"),
-                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
-            ],
-            CUSTOM_MESSAGE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input),
-                CallbackQueryHandler(handle_custom_message_choice, pattern="^(send_custom_message|no_custom_message)$"),
-                CallbackQueryHandler(handle_cancel_custom_message, pattern="^cancel_custom_message$"),
-                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
-            ],
-            PACKAGE_MESSAGE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_package_message),
-                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$"),
-                CallbackQueryHandler(handle_back_to_quantity, pattern="^back_to_quantity$")
-            ],
-            PACKAGE_CONFIRMATION: [
-                CallbackQueryHandler(handle_package_confirmation, pattern="^(confirm_send_package|decline_send_package)$"),
-                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
-            ],
-            PACKAGE_ACTION_CHOICE: [
-                CallbackQueryHandler(handle_package_action_choice, pattern="^(redesign_package|review_later)$"),
-                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
-            ]
-        },
-        fallbacks=[
-            CommandHandler("cancel", lambda u, c: ConversationHandler.END),
-            CommandHandler("reset", handle_reset_command),
-            CommandHandler("cleanup", handle_cleanup_command),
-            MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+# معالج معالجة الطلبات للأدمن
+process_order_conv_handler = ConversationHandler(
+    entry_points=[CallbackQueryHandler(handle_process_order, pattern="^process_")],
+    states={
+        PROCESS_ORDER: [
+            CallbackQueryHandler(handle_payment_success, pattern="^payment_success$"),
+            CallbackQueryHandler(handle_payment_failed, pattern="^payment_failed$"),
+            CallbackQueryHandler(handle_quantity_selection, pattern="^quantity_"),
+            CallbackQueryHandler(handle_back_to_quantity, pattern="^back_to_quantity$"),
+            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
         ],
-        per_message=False,
-    )
+        ENTER_PROXY_TYPE: [
+            CallbackQueryHandler(handle_proxy_details_input, pattern="^proxy_type_"),
+            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+        ],
+        ENTER_PROXY_ADDRESS: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
+            CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
+            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+        ],
+        ENTER_PROXY_PORT: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
+            CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
+            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+        ],
+        ENTER_COUNTRY: [
+            CallbackQueryHandler(handle_admin_country_selection, pattern="^admin_country_"),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
+            CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
+            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+        ],
+        ENTER_STATE: [
+            CallbackQueryHandler(handle_admin_country_selection, pattern="^admin_state_"),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
+            CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
+            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+        ],
+        ENTER_USERNAME: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
+            CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
+            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+        ],
+        ENTER_PASSWORD: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
+            CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
+            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+        ],
+        ENTER_THANK_MESSAGE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
+            CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
+            CallbackQueryHandler(handle_order_completed_success, pattern="^order_completed_success$"),
+            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+        ],
+        CUSTOM_MESSAGE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input),
+            CallbackQueryHandler(handle_custom_message_choice, pattern="^(send_custom_message|no_custom_message)$"),
+            CallbackQueryHandler(handle_cancel_custom_message, pattern="^cancel_custom_message$"),
+            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+        ],
+        PACKAGE_MESSAGE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_package_message),
+            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$"),
+            CallbackQueryHandler(handle_back_to_quantity, pattern="^back_to_quantity$")
+        ],
+        PACKAGE_CONFIRMATION: [
+            CallbackQueryHandler(handle_package_confirmation, pattern="^(confirm_send_package|decline_send_package)$"),
+            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+        ],
+        PACKAGE_ACTION_CHOICE: [
+            CallbackQueryHandler(handle_package_action_choice, pattern="^(redesign_package|review_later)$"),
+            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+        ]
+    },
+    fallbacks=[
+        CommandHandler("cancel", lambda u, c: ConversationHandler.END),
+        CommandHandler("reset", handle_reset_command),
+        CommandHandler("cleanup", handle_cleanup_command),
+        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+    ],
+    per_message=False,
+)
 
-    # معالج تغيير كلمة المرور
-    password_change_conv_handler = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^🔐 تغيير كلمة المرور$"), change_admin_password)],
-        states={
-            ADMIN_LOGIN: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_password_change),
-                CallbackQueryHandler(handle_cancel_password_change, pattern="^cancel_password_change$")
-            ],
-        },
-        fallbacks=[
-            CommandHandler("cancel", lambda u, c: ConversationHandler.END),
-            CommandHandler("reset", handle_reset_command),
-            CommandHandler("cleanup", handle_cleanup_command),
-            MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+# معالج تغيير كلمة المرور
+password_change_conv_handler = ConversationHandler(
+    entry_points=[MessageHandler(filters.Regex("^🔐 تغيير كلمة المرور$"), change_admin_password)],
+    states={
+        ADMIN_LOGIN: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_password_change),
+            CallbackQueryHandler(handle_cancel_password_change, pattern="^cancel_password_change$")
         ],
-        per_message=False,
-    )
+    },
+    fallbacks=[
+        CommandHandler("cancel", lambda u, c: ConversationHandler.END),
+        CommandHandler("reset", handle_reset_command),
+        CommandHandler("cleanup", handle_cleanup_command),
+        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+    ],
+    per_message=False,
+)
 
     # معالج شامل لجميع وظائف الأدمن
-    admin_functions_conv_handler = ConversationHandler(
-        entry_points=[
-            MessageHandler(filters.Regex("^🔍 استعلام عن مستخدم$"), handle_admin_user_lookup),
-            MessageHandler(filters.Regex("^🗑️ تصفير رصيد مستخدم$"), reset_user_balance),
-            MessageHandler(filters.Regex("^💵 تحديد قيمة الإحالة$"), set_referral_amount),
-            MessageHandler(filters.Regex("^💰 تعديل أسعار ستاتيك$"), set_static_prices),
-            MessageHandler(filters.Regex("^💰 تعديل أسعار سوكس$"), set_socks_prices),
-            MessageHandler(filters.Regex("^🔍 الاستعلام عن طلب$"), admin_order_inquiry),
-            MessageHandler(filters.Regex("^🔕 ساعات الهدوء$"), set_quiet_hours)
+admin_functions_conv_handler = ConversationHandler(
+    entry_points=[
+        MessageHandler(filters.Regex("^🔍 استعلام عن مستخدم$"), handle_admin_user_lookup),
+        MessageHandler(filters.Regex("^🗑️ تصفير رصيد مستخدم$"), reset_user_balance),
+        MessageHandler(filters.Regex("^💵 تحديد قيمة الإحالة$"), set_referral_amount),
+        MessageHandler(filters.Regex("^💰 تعديل أسعار ستاتيك$"), set_static_prices),
+        MessageHandler(filters.Regex("^💰 تعديل أسعار سوكس$"), set_socks_prices),
+        MessageHandler(filters.Regex("^🔍 الاستعلام عن طلب$"), admin_order_inquiry),
+        MessageHandler(filters.Regex("^🔕 ساعات الهدوء$"), set_quiet_hours)
+    ],
+    states={
+        USER_LOOKUP: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_lookup_unified),
+            CallbackQueryHandler(handle_cancel_user_lookup, pattern="^cancel_user_lookup$"),
+            CallbackQueryHandler(handle_cancel_balance_reset, pattern="^cancel_balance_reset$")
         ],
-        states={
-            USER_LOOKUP: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_lookup_unified),
-                CallbackQueryHandler(handle_cancel_user_lookup, pattern="^cancel_user_lookup$"),
-                CallbackQueryHandler(handle_cancel_balance_reset, pattern="^cancel_balance_reset$")
-            ],
-            REFERRAL_AMOUNT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_referral_amount_update),
-                CallbackQueryHandler(handle_cancel_referral_amount, pattern="^cancel_referral_amount$")
-            ],
-            SET_PRICE_STATIC: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_static_price_update),
-                CallbackQueryHandler(handle_cancel_static_prices, pattern="^cancel_static_prices$")
-            ],
-            SET_PRICE_SOCKS: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_socks_price_update),
-                CallbackQueryHandler(handle_cancel_socks_prices, pattern="^cancel_socks_prices$")
-            ],
-            ADMIN_ORDER_INQUIRY: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_order_inquiry),
-                CallbackQueryHandler(handle_cancel_order_inquiry, pattern="^cancel_order_inquiry$")
-            ],
-            QUIET_HOURS: [CallbackQueryHandler(handle_quiet_hours_selection, pattern="^quiet_")]
-        },
-        fallbacks=[
-            CommandHandler("cancel", lambda u, c: ConversationHandler.END),
-            CommandHandler("reset", handle_reset_command),
-            CommandHandler("cleanup", handle_cleanup_command),
-            MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+        REFERRAL_AMOUNT: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_referral_amount_update),
+            CallbackQueryHandler(handle_cancel_referral_amount, pattern="^cancel_referral_amount$")
         ],
-        per_message=False,
-    )
+        SET_PRICE_STATIC: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_static_price_update),
+            CallbackQueryHandler(handle_cancel_static_prices, pattern="^cancel_static_prices$")
+        ],
+        SET_PRICE_SOCKS: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_socks_price_update),
+            CallbackQueryHandler(handle_cancel_socks_prices, pattern="^cancel_socks_prices$")
+        ],
+        ADMIN_ORDER_INQUIRY: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_order_inquiry),
+            CallbackQueryHandler(handle_cancel_order_inquiry, pattern="^cancel_order_inquiry$")
+        ],
+        QUIET_HOURS: [CallbackQueryHandler(handle_quiet_hours_selection, pattern="^quiet_")]
+    },
+    fallbacks=[
+        CommandHandler("cancel", lambda u, c: ConversationHandler.END),
+        CommandHandler("reset", handle_reset_command),
+        CommandHandler("cleanup", handle_cleanup_command),
+        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+    ],
+    per_message=False,
+)
 
-    admin_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("admin_login", admin_login)],
-        states={
-            ADMIN_LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_password)],
-            ADMIN_MENU: [CallbackQueryHandler(handle_admin_menu_actions)]
-        },
-        fallbacks=[
-            CommandHandler("cancel", lambda u, c: ConversationHandler.END),
-            CommandHandler("reset", handle_reset_command),
-            CommandHandler("cleanup", handle_cleanup_command),
-            MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
-        ],
-        per_message=False,
-    )
+admin_conv_handler = ConversationHandler(
+    entry_points=[CommandHandler("admin_login", admin_login)],
+    states={
+        ADMIN_LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_password)],
+        ADMIN_MENU: [CallbackQueryHandler(handle_admin_menu_actions)]
+    },
+    fallbacks=[
+        CommandHandler("cancel", lambda u, c: ConversationHandler.END),
+        CommandHandler("reset", handle_reset_command),
+        CommandHandler("cleanup", handle_cleanup_command),
+        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+    ],
+    per_message=False,
+)
     
     # معالج إثبات الدفع
-    payment_conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(handle_payment_method_selection, pattern="^payment_")],
-        states={
-            PAYMENT_PROOF: [
-                MessageHandler(filters.ALL & ~filters.COMMAND, handle_payment_proof),
-                CallbackQueryHandler(handle_cancel_payment_proof, pattern="^cancel_payment_proof$")
-            ],
-        },
-        fallbacks=[
-            CommandHandler("cancel", lambda u, c: ConversationHandler.END),
-            CommandHandler("reset", handle_reset_command),
-            CommandHandler("cleanup", handle_cleanup_command),
-            MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+payment_conv_handler = ConversationHandler(
+    entry_points=[CallbackQueryHandler(handle_payment_method_selection, pattern="^payment_")],
+    states={
+        PAYMENT_PROOF: [
+            MessageHandler(filters.ALL & ~filters.COMMAND, handle_payment_proof),
+            CallbackQueryHandler(handle_cancel_payment_proof, pattern="^cancel_payment_proof$")
         ],
-        per_message=False,
-    )
+    },
+    fallbacks=[
+        CommandHandler("cancel", lambda u, c: ConversationHandler.END),
+        CommandHandler("reset", handle_reset_command),
+        CommandHandler("cleanup", handle_cleanup_command),
+        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+    ],
+    per_message=False,
+)
     
     # معالج البث
-    broadcast_conv_handler = ConversationHandler(
-        entry_points=[
-            MessageHandler(filters.Regex("^📢 البث$"), handle_broadcast_start),
-            CallbackQueryHandler(handle_broadcast_selection, pattern="^(broadcast_all|broadcast_custom)$")
+broadcast_conv_handler = ConversationHandler(
+    entry_points=[
+        MessageHandler(filters.Regex("^📢 البث$"), handle_broadcast_start),
+        CallbackQueryHandler(handle_broadcast_selection, pattern="^(broadcast_all|broadcast_custom)$")
+    ],
+    states={
+        BROADCAST_MESSAGE: [
+            CallbackQueryHandler(handle_broadcast_selection, pattern="^(broadcast_all|broadcast_custom)$"),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_message),
+            CallbackQueryHandler(handle_cancel_broadcast, pattern="^cancel_broadcast$")
         ],
-        states={
-            BROADCAST_MESSAGE: [
-                CallbackQueryHandler(handle_broadcast_selection, pattern="^(broadcast_all|broadcast_custom)$"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_message),
-                CallbackQueryHandler(handle_cancel_broadcast, pattern="^cancel_broadcast$")
-            ],
-            BROADCAST_USERS: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_users),
-                CallbackQueryHandler(handle_cancel_broadcast, pattern="^cancel_broadcast$")
-            ],
-            BROADCAST_CONFIRM: [CallbackQueryHandler(handle_broadcast_confirmation, pattern="^(confirm_broadcast|cancel_broadcast)$")],
-
-        },
-        fallbacks=[
-            CommandHandler("cancel", lambda u, c: ConversationHandler.END),
-            CommandHandler("reset", handle_reset_command),
-            CommandHandler("cleanup", handle_cleanup_command),
-            MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+        BROADCAST_USERS: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_users),
+            CallbackQueryHandler(handle_cancel_broadcast, pattern="^cancel_broadcast$")
         ],
-        per_message=False,
-    )
+        BROADCAST_CONFIRM: [CallbackQueryHandler(handle_broadcast_confirmation, pattern="^(confirm_broadcast|cancel_broadcast)$")],
 
-    # إضافة المعالجات
-    print("🔧 إضافة معالجات الأوامر...")
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("about", handle_about_command))
-    application.add_handler(CommandHandler("reset", handle_reset_command))
-    application.add_handler(CommandHandler("cleanup", handle_cleanup_command))
-    application.add_handler(CommandHandler("status", handle_status_command))
-    application.add_handler(CommandHandler("admin_signout", admin_signout))
-    
-    print("🔧 إضافة معالجات المحادثات...")
-    application.add_handler(admin_conv_handler)
-    application.add_handler(password_change_conv_handler)
-    application.add_handler(admin_functions_conv_handler)
-    application.add_handler(process_order_conv_handler)
-    application.add_handler(broadcast_conv_handler)
-    application.add_handler(payment_conv_handler)
-    
-    print("🔧 إضافة معالجات الرسائل...")
-    application.add_handler(CallbackQueryHandler(handle_callback_query))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
-    print("✅ تم إضافة جميع المعالجات")
-    
-    # تشغيل البوت
-    try:
-        print("🚀 بدء تشغيل البوت...")
-        print("📊 قاعدة البيانات جاهزة")
-        print("⚡ البوت يعمل الآن!")
-        print(f"🔑 التوكن: {TOKEN[:10]}...")
-        print("💡 في انتظار الرسائل...")
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
-    except Exception as e:
-        print(f"❌ خطأ في تشغيل البوت: {e}")
-        print(f"🔍 تفاصيل الخطأ: {type(e).__name__}")
-        import traceback
-        traceback.print_exc()
+    },
+    fallbacks=[
+        CommandHandler("cancel", lambda u, c: ConversationHandler.END),
+        CommandHandler("reset", handle_reset_command),
+        CommandHandler("cleanup", handle_cleanup_command),
+        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+    ],
+    per_message=False,
+)
 
 if __name__ == '__main__':
     try:
