@@ -3217,19 +3217,46 @@ async def handle_process_order(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     
+    # التحقق من وجود طلب قيد المعالجة
+    current_processing_order = context.user_data.get('processing_order_id')
+    if current_processing_order:
+        # إظهار مربع حوار تحذيري
+        keyboard = [
+            [InlineKeyboardButton("✅ فهمت", callback_data="understood_current_processing")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            f"⚠️ **تحذير: يوجد طلب قيد المعالجة حالياً**\n\n"
+            f"🆔 معرف الطلب الحالي: `{current_processing_order}`\n\n"
+            f"📋 **أنهِ الطلب الحالي أولاً** قبل معالجة طلب آخر:\n"
+            f"• إما إتمام الطلب بنجاح (إرسال البروكسي للمستخدم)\n"
+            f"• أو الضغط على زر الإلغاء في أي مرحلة\n\n"
+            f"💡 هذا يضمن عدم تداخل العمليات وجودة الخدمة",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        return ConversationHandler.END
+    
     order_id = query.data.replace("process_", "")
+    
+    # تسجيل بداية معالجة طلب جديد
     context.user_data['processing_order_id'] = order_id
+    context.user_data['admin_processing_active'] = True
     
     keyboard = [
         [InlineKeyboardButton("نعم", callback_data="payment_success")],
         [InlineKeyboardButton("لا", callback_data="payment_failed")],
-        [InlineKeyboardButton("⏸️ إلغاء المعالجة مؤقتاً", callback_data="cancel_processing")]
+        [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await query.edit_message_text(
-        "هل عملية الدفع ناجحة وحقيقية؟",
-        reply_markup=reply_markup
+        f"🔄 **بدء معالجة الطلب**\n\n"
+        f"🆔 معرف الطلب: `{order_id}`\n\n"
+        f"❓ **هل عملية الدفع ناجحة وحقيقية؟**",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
     )
     
     return PROCESS_ORDER
