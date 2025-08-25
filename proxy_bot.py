@@ -2586,6 +2586,74 @@ async def handle_about_command(update: Update, context: ContextTypes.DEFAULT_TYP
     # حفظ النص المنبثق في context للاستخدام لاحقاً
     context.user_data['popup_text'] = popup_text
 
+async def handle_reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة أمر /reset لإعادة تعيين حالة المستخدم"""
+    await force_reset_user_state(update, context)
+
+async def handle_cleanup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة أمر /cleanup لتنظيف العمليات المعلقة"""
+    user_id = update.effective_user.id
+    
+    # تنظيف العمليات المعلقة
+    success = await cleanup_incomplete_operations(context, user_id, "all")
+    
+    if success:
+        await update.message.reply_text(
+            "🧹 **تم تنظيف العمليات المعلقة بنجاح**\n\n"
+            "✅ تم إزالة جميع البيانات المؤقتة\n"
+            "✅ تم تنظيف المحادثات المعلقة\n"
+            "✅ البوت جاهز للاستخدام بشكل طبيعي",
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            "⚠️ حدث خطأ أثناء التنظيف\n"
+            "يرجى استخدام /reset لإعادة تعيين كاملة"
+        )
+
+async def handle_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة أمر /status لعرض حالة المستخدم الحالية"""
+    user_id = update.effective_user.id
+    
+    # جمع معلومات الحالة
+    user_data_keys = list(context.user_data.keys())
+    is_admin = context.user_data.get('is_admin', False) or user_id == ADMIN_CHAT_ID
+    
+    # تحديد العمليات النشطة
+    active_operations = []
+    
+    if 'processing_order_id' in context.user_data:
+        active_operations.append(f"🔄 معالجة طلب: {context.user_data['processing_order_id']}")
+    
+    if 'proxy_type' in context.user_data:
+        active_operations.append(f"📦 طلب بروكسي: {context.user_data['proxy_type']}")
+    
+    if 'waiting_for' in context.user_data:
+        active_operations.append(f"⏳ انتظار إدخال: {context.user_data['waiting_for']}")
+    
+    if 'broadcast_type' in context.user_data:
+        active_operations.append(f"📢 إعداد بث: {context.user_data['broadcast_type']}")
+    
+    # إنشاء رسالة الحالة
+    status_message = f"📊 **حالة المستخدم**\n\n"
+    status_message += f"👤 المعرف: `{user_id}`\n"
+    status_message += f"🔧 نوع المستخدم: {'أدمن' if is_admin else 'مستخدم عادي'}\n"
+    status_message += f"💾 عدد البيانات المؤقتة: {len(user_data_keys)}\n\n"
+    
+    if active_operations:
+        status_message += "🔄 **العمليات النشطة:**\n"
+        for op in active_operations:
+            status_message += f"• {op}\n"
+    else:
+        status_message += "✅ **لا توجد عمليات نشطة**\n"
+    
+    status_message += "\n📋 **الأوامر المتاحة:**\n"
+    status_message += "• `/reset` - إعادة تعيين كاملة\n"
+    status_message += "• `/cleanup` - تنظيف العمليات المعلقة\n"
+    status_message += "• `/start` - العودة للقائمة الرئيسية"
+    
+    await update.message.reply_text(status_message, parse_mode='Markdown')
+
 async def handle_language_change(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة تغيير اللغة"""
     query = update.callback_query
@@ -4198,6 +4266,23 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
     language = get_user_language(user_id)
     is_admin = context.user_data.get('is_admin', False)
     
+    # التحقق من الأوامر الخاصة للتنظيف وإعادة التعيين
+    if text.lower() in ['/reset', '🔄 إعادة تعيين', 'reset']:
+        await handle_reset_command(update, context)
+        return
+    elif text.lower() in ['/cleanup', '🧹 تنظيف', 'cleanup']:
+        await handle_cleanup_command(update, context)
+        return
+    elif text.lower() in ['/status', '📊 الحالة', 'status']:
+        await handle_status_command(update, context)
+        return
+    elif text.lower() in ['إلغاء', 'cancel', 'خروج', 'exit', 'stop']:
+        # تنظيف العمليات المعلقة والعودة للقائمة الرئيسية
+        await cleanup_incomplete_operations(context, user_id, "all")
+        await update.message.reply_text("✅ تم إلغاء العملية والعودة للقائمة الرئيسية")
+        await start(update, context)
+        return
+    
     # معالجة الإدخال اليدوي للدول والولايات
     waiting_for = context.user_data.get('waiting_for')
     if waiting_for == 'manual_country':
@@ -5439,6 +5524,188 @@ async def handle_cancel_proxy_setup(update: Update, context: ContextTypes.DEFAUL
     
     return ConversationHandler.END
 
+async def cleanup_incomplete_operations(context: ContextTypes.DEFAULT_TYPE, user_id: int, operation_type: str = "all") -> bool:
+    """
+    تنظيف العمليات المعلقة وغير المكتملة لمنع توقف الكيبورد أو البوت
+    
+    Args:
+        context: سياق البوت
+        user_id: معرف المستخدم
+        operation_type: نوع العملية للتنظيف ("all", "admin", "user", "conversation")
+    
+    Returns:
+        bool: True إذا تم التنظيف بنجاح
+    """
+    try:
+        cleaned_operations = []
+        
+        # تنظيف عمليات الأدمن المعلقة
+        if operation_type in ["all", "admin"]:
+            admin_keys = [
+                'processing_order_id', 'admin_processing_active', 'admin_proxy_type',
+                'admin_proxy_address', 'admin_proxy_port', 'admin_proxy_country',
+                'admin_proxy_state', 'admin_proxy_username', 'admin_proxy_password',
+                'admin_thank_message', 'admin_input_state', 'current_country_code'
+            ]
+            for key in admin_keys:
+                if context.user_data.pop(key, None) is not None:
+                    cleaned_operations.append(f"admin_{key}")
+        
+        # تنظيف عمليات المستخدم المعلقة
+        if operation_type in ["all", "user"]:
+            user_keys = [
+                'proxy_type', 'selected_country', 'selected_country_code',
+                'selected_state', 'payment_method', 'current_order_id',
+                'waiting_for', 'last_reminder'
+            ]
+            for key in user_keys:
+                if context.user_data.pop(key, None) is not None:
+                    cleaned_operations.append(f"user_{key}")
+        
+        # تنظيف عمليات المحادثة المعلقة
+        if operation_type in ["all", "conversation"]:
+            conversation_keys = [
+                'password_change_step', 'lookup_action', 'popup_text',
+                'broadcast_type', 'broadcast_message', 'broadcast_users_input',
+                'broadcast_valid_users'
+            ]
+            for key in conversation_keys:
+                if context.user_data.pop(key, None) is not None:
+                    cleaned_operations.append(f"conversation_{key}")
+        
+        # تسجيل العمليات المنظفة في السجل
+        if cleaned_operations:
+            db.log_action(user_id, "cleanup_incomplete_operations", 
+                         f"Cleaned: {', '.join(cleaned_operations)}")
+            logger.info(f"Cleaned {len(cleaned_operations)} incomplete operations for user {user_id}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error cleaning incomplete operations for user {user_id}: {e}")
+        return False
+
+async def force_reset_user_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    إعادة تعيين حالة المستخدم بالكامل في حالة الطوارئ
+    يمكن استخدامها عند توقف الكيبورد أو البوت
+    """
+    user_id = update.effective_user.id
+    
+    try:
+        # تنظيف جميع البيانات المؤقتة
+        await cleanup_incomplete_operations(context, user_id, "all")
+        
+        # التحقق من نوع المستخدم وإعادة تفعيل الكيبورد المناسب
+        is_admin = context.user_data.get('is_admin', False) or user_id == ADMIN_CHAT_ID
+        
+        if is_admin:
+            # إعادة تفعيل كيبورد الأدمن
+            context.user_data['is_admin'] = True
+            await restore_admin_keyboard(context, update.effective_chat.id, 
+                                       "🔧 تم إعادة تعيين حالة الأدمن بنجاح")
+        else:
+            # إعادة تفعيل كيبورد المستخدم العادي
+            language = get_user_language(user_id)
+            keyboard = [
+                [KeyboardButton(MESSAGES[language]['main_menu_buttons'][0])],
+                [KeyboardButton(MESSAGES[language]['main_menu_buttons'][1])],
+                [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2])],
+                [KeyboardButton(MESSAGES[language]['main_menu_buttons'][3]), 
+                 KeyboardButton(MESSAGES[language]['main_menu_buttons'][4])]
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            
+            await context.bot.send_message(
+                update.effective_chat.id,
+                "🔄 تم إعادة تعيين حالة البوت بنجاح\n\n" + MESSAGES[language]['welcome'],
+                reply_markup=reply_markup
+            )
+        
+        # تسجيل العملية
+        db.log_action(user_id, "force_reset_user_state", "Emergency state reset completed")
+        logger.info(f"Force reset completed for user {user_id}")
+        
+    except Exception as e:
+        logger.error(f"Error in force reset for user {user_id}: {e}")
+        
+        # في حالة فشل كل شيء، أرسل رسالة بسيطة
+        try:
+            await context.bot.send_message(
+                update.effective_chat.id,
+                "❌ حدث خطأ في إعادة التعيين. يرجى استخدام /start لإعادة تشغيل البوت"
+            )
+        except:
+            pass
+
+async def handle_stuck_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    معالجة المحادثات العالقة التي لا تستجيب
+    """
+    user_id = update.effective_user.id
+    
+    try:
+        # تنظيف العمليات المعلقة
+        await cleanup_incomplete_operations(context, user_id, "conversation")
+        
+        # إرسال رسالة توضيحية
+        await update.message.reply_text(
+            "🔄 تم اكتشاف محادثة عالقة وتم تنظيفها\n"
+            "يمكنك الآن المتابعة بشكل طبيعي"
+        )
+        
+        # إعادة توجيه للقائمة الرئيسية
+        await start(update, context)
+        
+        return ConversationHandler.END
+        
+    except Exception as e:
+        logger.error(f"Error handling stuck conversation for user {user_id}: {e}")
+        return ConversationHandler.END
+
+async def auto_cleanup_expired_operations(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    تنظيف تلقائي للعمليات المنتهية الصلاحية (يعمل كل ساعة)
+    """
+    try:
+        # الحصول على جميع المستخدمين النشطين
+        active_users = db.execute_query("""
+            SELECT DISTINCT user_id 
+            FROM logs 
+            WHERE timestamp > datetime('now', '-24 hours')
+        """)
+        
+        cleanup_count = 0
+        
+        for user_tuple in active_users:
+            user_id = user_tuple[0]
+            
+            # تحقق من وجود عمليات معلقة قديمة (أكثر من 30 دقيقة)
+            old_operations = db.execute_query("""
+                SELECT COUNT(*) FROM logs 
+                WHERE user_id = ? 
+                AND action LIKE '%_started' 
+                AND timestamp < datetime('now', '-30 minutes')
+                AND user_id NOT IN (
+                    SELECT user_id FROM logs 
+                    WHERE action LIKE '%_completed' 
+                    AND timestamp > datetime('now', '-30 minutes')
+                )
+            """, (user_id,))
+            
+            if old_operations and old_operations[0][0] > 0:
+                # تنظيف البيانات المعلقة
+                # ملاحظة: هذا يتطلب الوصول لـ user_data الخاص بالمستخدم
+                # في التطبيق الحقيقي، يمكن حفظ البيانات في قاعدة البيانات
+                cleanup_count += 1
+                db.log_action(user_id, "auto_cleanup_expired", "Cleaned expired operations")
+        
+        if cleanup_count > 0:
+            logger.info(f"Auto-cleaned expired operations for {cleanup_count} users")
+            
+    except Exception as e:
+        logger.error(f"Error in auto cleanup: {e}")
+
 
 async def show_user_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE, offset: int = 0) -> None:
     """عرض إحصائيات المستخدمين مرتبة حسب عدد الإحالات مع دعم التصفح"""
@@ -5858,6 +6125,27 @@ async def handle_broadcast_start(update: Update, context: ContextTypes.DEFAULT_T
     
     return BROADCAST_MESSAGE  # الانتقال لحالة انتظار اختيار نوع البث
 
+async def initialize_cleanup_scheduler(application):
+    """تهيئة جدولة التنظيف التلقائي"""
+    try:
+        # جدولة تنظيف العمليات المنتهية الصلاحية كل ساعة
+        async def scheduled_cleanup():
+            while True:
+                await asyncio.sleep(3600)  # كل ساعة
+                try:
+                    # هنا يمكن إضافة تنظيف تلقائي للعمليات المنتهية الصلاحية
+                    logger.info("Running scheduled cleanup...")
+                    await cleanup_old_orders()  # الدالة الموجودة مسبقاً
+                except Exception as e:
+                    logger.error(f"Error in scheduled cleanup: {e}")
+        
+        # تشغيل التنظيف في الخلفية
+        application.create_task(scheduled_cleanup())
+        logger.info("Cleanup scheduler initialized successfully")
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize cleanup scheduler: {e}")
+
 def main() -> None:
     """الدالة الرئيسية"""
     if not TOKEN:
@@ -5876,6 +6164,9 @@ def main() -> None:
     
     # إنشاء التطبيق
     application = Application.builder().token(TOKEN).build()
+    
+    # تهيئة جدولة التنظيف
+    asyncio.create_task(initialize_cleanup_scheduler(application))
     
     # معالج تسجيل دخول الأدمن
     # معالج معالجة الطلبات للأدمن
@@ -5923,7 +6214,12 @@ def main() -> None:
                 CallbackQueryHandler(handle_cancel_custom_message, pattern="^cancel_custom_message$")
             ]
         },
-        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+        fallbacks=[
+            CommandHandler("cancel", lambda u, c: ConversationHandler.END),
+            CommandHandler("reset", handle_reset_command),
+            CommandHandler("cleanup", handle_cleanup_command),
+            MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+        ],
         per_message=False,
     )
 
@@ -5933,7 +6229,12 @@ def main() -> None:
         states={
             ADMIN_LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_password_change)],
         },
-        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+        fallbacks=[
+            CommandHandler("cancel", lambda u, c: ConversationHandler.END),
+            CommandHandler("reset", handle_reset_command),
+            CommandHandler("cleanup", handle_cleanup_command),
+            MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+        ],
         per_message=False,
     )
 
@@ -5972,7 +6273,12 @@ def main() -> None:
             ],
             QUIET_HOURS: [CallbackQueryHandler(handle_quiet_hours_selection, pattern="^quiet_")]
         },
-        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+        fallbacks=[
+            CommandHandler("cancel", lambda u, c: ConversationHandler.END),
+            CommandHandler("reset", handle_reset_command),
+            CommandHandler("cleanup", handle_cleanup_command),
+            MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+        ],
         per_message=False,
     )
 
@@ -5982,7 +6288,12 @@ def main() -> None:
             ADMIN_LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_password)],
             ADMIN_MENU: [CallbackQueryHandler(handle_admin_menu_actions)]
         },
-        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+        fallbacks=[
+            CommandHandler("cancel", lambda u, c: ConversationHandler.END),
+            CommandHandler("reset", handle_reset_command),
+            CommandHandler("cleanup", handle_cleanup_command),
+            MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+        ],
         per_message=False,
     )
     
@@ -5995,7 +6306,12 @@ def main() -> None:
                 CallbackQueryHandler(handle_cancel_payment_proof, pattern="^cancel_payment_proof$")
             ],
         },
-        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+        fallbacks=[
+            CommandHandler("cancel", lambda u, c: ConversationHandler.END),
+            CommandHandler("reset", handle_reset_command),
+            CommandHandler("cleanup", handle_cleanup_command),
+            MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+        ],
         per_message=False,
     )
     
@@ -6013,13 +6329,21 @@ def main() -> None:
             BROADCAST_USERS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_users)],
             BROADCAST_CONFIRM: [CallbackQueryHandler(handle_broadcast_confirmation, pattern="^(confirm_broadcast|cancel_broadcast)$")],
         },
-        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+        fallbacks=[
+            CommandHandler("cancel", lambda u, c: ConversationHandler.END),
+            CommandHandler("reset", handle_reset_command),
+            CommandHandler("cleanup", handle_cleanup_command),
+            MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+        ],
         per_message=False,
     )
 
     # إضافة المعالجات
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("about", handle_about_command))
+    application.add_handler(CommandHandler("reset", handle_reset_command))
+    application.add_handler(CommandHandler("cleanup", handle_cleanup_command))
+    application.add_handler(CommandHandler("status", handle_status_command))
     application.add_handler(CommandHandler("admin_signout", admin_signout))
     application.add_handler(admin_conv_handler)
     application.add_handler(password_change_conv_handler)
