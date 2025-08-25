@@ -2224,6 +2224,8 @@ async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYP
     await send_order_copy_to_user(update, context, order_id)
     
     # إرسال إشعار للأدمن مع زر المعالجة
+    print(f"🔔 محاولة إرسال إشعار للأدمن للطلب: {order_id}")
+    print(f"   نوع إثبات الدفع: {'صورة' if payment_proof.startswith('photo:') else 'نص' if payment_proof.startswith('text:') else 'غير معروف'}")
     await send_admin_notification(context, order_id, payment_proof)
     
     await update.message.reply_text(MESSAGES[language]['order_received'], parse_mode='Markdown')
@@ -2390,6 +2392,19 @@ Please keep the order ID for future reference."""
 
 async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: str, payment_proof: str = None) -> None:
     """إرسال إشعار للأدمن بطلب جديد"""
+    print(f"🔍 فحص حالة الأدمن:")
+    print(f"   ADMIN_CHAT_ID: {ADMIN_CHAT_ID}")
+    print(f"   نوع إثبات الدفع المستلم: {payment_proof[:20] if payment_proof else 'None'}...")
+    
+    # التحقق من وجود أدمن في قاعدة البيانات
+    try:
+        admin_logs = db.execute_query("SELECT * FROM logs WHERE action = 'admin_login_success' ORDER BY timestamp DESC LIMIT 1")
+        if admin_logs:
+            print(f"   آخر تسجيل دخول أدمن: {admin_logs[0]}")
+        else:
+            print(f"   لم يتم العثور على تسجيل دخول أدمن في قاعدة البيانات")
+    except Exception as e:
+        print(f"   خطأ في فحص قاعدة البيانات: {e}")
     # الحصول على تفاصيل الطلب
     query = """
         SELECT o.*, u.first_name, u.last_name, u.username 
@@ -2472,6 +2487,7 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
                             parse_mode='Markdown',
                             reply_to_message_id=main_msg.message_id
                         )
+                        print(f"✅ تم إرسال إثبات الدفع (صورة) للأدمن - الطلب: {order_id}")
                     elif payment_proof.startswith("text:"):
                         text_proof = payment_proof.replace("text:", "")
                         await context.bot.send_message(
@@ -2480,9 +2496,28 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
                             parse_mode='Markdown',
                             reply_to_message_id=main_msg.message_id
                         )
+                        print(f"✅ تم إرسال إثبات الدفع (نص) للأدمن - الطلب: {order_id}")
+                    else:
+                        print(f"⚠️ نوع إثبات الدفع غير معروف: {payment_proof}")
+                else:
+                    print(f"⚠️ لا يوجد إثبات دفع مرفق للطلب: {order_id}")
+                
+                print(f"✅ تم إرسال إشعار الطلب للأدمن بنجاح - الطلب: {order_id}")
                 
             except Exception as e:
-                print(f"خطأ في إرسال إشعار الأدمن: {e}")
+                print(f"❌ خطأ في إرسال إشعار الأدمن للطلب {order_id}: {e}")
+                # محاولة تسجيل الخطأ في قاعدة البيانات
+                try:
+                    db.log_action(order[1], "admin_notification_failed", f"Order: {order_id}, Error: {str(e)}")
+                except:
+                    pass
+        else:
+            print(f"⚠️ لم يتم تحديد ADMIN_CHAT_ID - لا يمكن إرسال إشعار للطلب: {order_id}")
+            # محاولة تسجيل عدم وجود أدمن في قاعدة البيانات
+            try:
+                db.log_action(order[1], "admin_notification_skipped", f"Order: {order_id} - No ADMIN_CHAT_ID set")
+            except:
+                pass
         
         # حفظ تفاصيل الطلب في قاعدة البيانات
         db.log_action(order[1], "order_details_logged", f"Order: {order_id} - {order[2]} - {order[3]}")
