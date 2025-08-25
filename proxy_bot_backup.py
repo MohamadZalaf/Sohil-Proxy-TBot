@@ -1953,7 +1953,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             await context.bot.send_message(
                 referred_by,
-                f"🎉 تهانينا! انضم مستخدم جديد عبر رابط الإحالة الخاص بك.\n💰 سيتم إضافة `0.1$` إلى رصيدك عندما تقوم بإتمام عملية شراء ناجحة!",
+                f"🎉 تهانينا! انضم مستخدم جديد عبر رابط الإحالة الخاص بك.\n💰 تم إضافة `0.1$` إلى رصيدك!",
                 parse_mode='Markdown'
             )
         except:
@@ -3134,48 +3134,11 @@ async def add_referral_bonus(user_id: int, referred_user_id: int) -> None:
         "INSERT INTO referrals (referrer_id, referred_id, amount) VALUES (?, ?, ?)",
         (user_id, referred_user_id, referral_amount)
     )
-
-async def activate_referral_bonus_on_success(context, user_id: int) -> None:
-    """تفعيل مكافأة الإحالة عند أول عملية شراء ناجحة"""
-    # البحث عن إحالة غير مفعلة لهذا المستخدم
-    query = """
-        SELECT r.id, r.referrer_id, r.amount 
-        FROM referrals r
-        WHERE r.referred_id = ? 
-        AND NOT EXISTS (
-            SELECT 1 FROM orders o 
-            WHERE o.user_id = r.referred_id 
-            AND o.status = 'completed' 
-            AND o.truly_processed = TRUE 
-            AND o.created_at < (SELECT created_at FROM orders WHERE user_id = ? AND status = 'completed' AND truly_processed = TRUE ORDER BY created_at DESC LIMIT 1)
-        )
-        LIMIT 1
-    """
-    result = db.execute_query(query, (user_id, user_id))
     
-    if result:
-        referral_id, referrer_id, amount = result[0]
-        
-        # إضافة الرصيد للمحيل
-        db.execute_query(
-    #             "UPDATE users SET referral_balance = referral_balance + ? WHERE user_id = ?",
-            (amount, referrer_id)
-        )
-        
-        # إشعار المحيل
-        try:
-            await context.bot.send_message(
-                referrer_id,
-                parse_mode='Markdown'
-            )
-        except:
-            pass
-
-    
-    # تأجيل إضافة الرصيد حتى أول عملية شراء ناجحة
+    # تحديث رصيد المستخدم
     db.execute_query(
-    #         "UPDATE users SET referral_balance = referral_balance + ? WHERE user_id = ?",
-    #         (referral_amount, user_id)
+        "UPDATE users SET referral_balance = referral_balance + ? WHERE user_id = ?",
+        (referral_amount, user_id)
     )
 
 async def cleanup_old_orders() -> None:
@@ -6462,42 +6425,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-
-async def activate_referral_bonus_on_success(context, user_id: int) -> None:
-    """تفعيل مكافأة الإحالة عند أول عملية شراء ناجحة"""
-    # البحث عن إحالة لهذا المستخدم والتحقق من عدم وجود طلبات ناجحة سابقة
-    query = """
-        SELECT r.id, r.referrer_id, r.amount 
-        FROM referrals r
-        WHERE r.referred_id = ? 
-        AND NOT EXISTS (
-            SELECT 1 FROM orders o 
-            WHERE o.user_id = r.referred_id 
-            AND o.status = 'completed' 
-            AND o.truly_processed = TRUE 
-            AND o.id != (SELECT MAX(id) FROM orders WHERE user_id = ? AND status = 'completed' AND truly_processed = TRUE)
-        )
-        LIMIT 1
-    """
-    result = db.execute_query(query, (user_id, user_id))
-    
-    if result:
-        referral_id, referrer_id, amount = result[0]
-        
-        # إضافة الرصيد للمحيل
-        db.execute_query(
-    #             "UPDATE users SET referral_balance = referral_balance + ? WHERE user_id = ?",
-            (amount, referrer_id)
-        )
-        
-        # إشعار المحيل
-        try:
-            await context.bot.send_message(
-                referrer_id,
-                f"🎉 تهانينا! قام أحد المحالين بإتمام عملية شراء ناجحة.\\n💰 سيتم إضافة `0.1$` إلى رصيدك عندما تقوم بإتمام عملية شراء ناجحة!",
-                parse_mode='Markdown'
-            )
-        except:
-            pass
-
