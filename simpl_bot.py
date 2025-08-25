@@ -56,12 +56,12 @@ ADMIN_CHAT_ID = None  # سيتم تحديده عند أول تسجيل دخول 
     ADMIN_LOGIN, ADMIN_MENU, PROCESS_ORDER, 
     ENTER_PROXY_TYPE, ENTER_PROXY_ADDRESS, ENTER_PROXY_PORT,
     ENTER_COUNTRY, ENTER_STATE, ENTER_USERNAME, ENTER_PASSWORD,
-    ENTER_THANK_MESSAGE, PAYMENT_PROOF, CUSTOM_MESSAGE,
+    ENTER_THANK_MESSAGE, PROXY_PREVIEW, PAYMENT_PROOF, CUSTOM_MESSAGE,
     REFERRAL_AMOUNT, USER_LOOKUP, QUIET_HOURS, LANGUAGE_SELECTION,
     PAYMENT_METHOD_SELECTION, WITHDRAWAL_REQUEST, SET_PRICE_STATIC,
     SET_PRICE_SOCKS, ADMIN_ORDER_INQUIRY, BROADCAST_MESSAGE,
     BROADCAST_USERS, BROADCAST_CONFIRM
-) = range(25)
+) = range(26)
 
 # قواميس البيانات
 STATIC_COUNTRIES = {
@@ -2746,6 +2746,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await handle_cancel_proxy_setup(update, context)
     elif query.data == "cancel_proxy_processing":
         await handle_cancel_proxy_processing(update, context)
+    elif query.data == "confirm_send_proxy":
+        await handle_confirm_send_proxy(update, context)
     elif query.data.startswith("show_more_users_"):
         offset = int(query.data.replace("show_more_users_", ""))
         await query.answer()
@@ -3235,6 +3237,15 @@ async def handle_process_order(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     
+    # التحقق من وجود طلب قيد المعالجة
+    if context.user_data.get('processing_order_id'):
+        await query.edit_message_text(
+            "⚠️ لديك طلب قيد المعالجة حالياً!\n\n"
+            "يجب إنهاء معالجة الطلب الحالي قبل البدء بطلب جديد.\n"
+            "اختر إما إكمال الطلب الحالي أو إلغاؤه من القائمة."
+        )
+        return ConversationHandler.END
+    
     order_id = query.data.replace("process_", "")
     context.user_data['processing_order_id'] = order_id
     
@@ -3635,7 +3646,7 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
             
             # عرض المعلومات للمراجعة قبل الإرسال
             await show_proxy_preview(update, context)
-            return ENTER_THANK_MESSAGE
+            return PROXY_PREVIEW
     
     return current_state
 
@@ -3785,9 +3796,66 @@ async def send_proxy_to_user_direct(update: Update, context: ContextTypes.DEFAUL
         
         # تسجيل الطلب كمكتمل ومعالج فعلياً (الشرط الثاني: إرسال البيانات الكاملة للمستخدم)
         db.execute_query(
-            "UPDATE orders SET status = 'completed', processed_at = CURRENT_TIMESTAMP, proxy_details = ?, truly_processed = TRUE WHERE id = ?",
+            "UPDATE orders SET status = 'successful', processed_at = CURRENT_TIMESTAMP, proxy_details = ?, truly_processed = TRUE WHERE id = ?",
             (json.dumps(proxy_details), order_id)
         )
+
+async def handle_confirm_send_proxy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة تأكيد إرسال البروكسي"""
+    query = update.callback_query
+    await query.answer()
+    
+    # إرسال البروكسي للمستخدم
+    await send_proxy_to_user_direct(update, context, context.user_data.get('admin_thank_message', ''))
+    
+    order_id = context.user_data['processing_order_id']
+    
+    # الحصول على معلومات المستخدم للرسالة النهائية
+    user_query = """
+        SELECT u.first_name, u.last_name
+        FROM orders o 
+        JOIN users u ON o.user_id = u.user_id 
+        WHERE o.id = ?
+    """
+    user_result = db.execute_query(user_query, (order_id,))
+    
+    if user_result:
+        first_name, last_name = user_result[0]
+        user_full_name = f"{first_name} {last_name or ''}".strip()
+        
+        # رسالة تأكيد للأدمن
+        from datetime import datetime
+        now = datetime.now()
+        current_date = now.strftime("%Y-%m-%d")
+        current_time = now.strftime("%H:%M:%S")
+        
+        admin_message = f"""✅ تم معالجة طلب {user_full_name} بنجاح
+
+🔐 تفاصيل البروكسي المرسلة:
+📡 العنوان: `{context.user_data['admin_proxy_address']}`
+🔌 البورت: `{context.user_data['admin_proxy_port']}`
+🌍 الدولة: {context.user_data.get('admin_proxy_country', 'غير محدد')}
+🏠 الولاية: {context.user_data.get('admin_proxy_state', 'غير محدد')}
+👤 اسم المستخدم: `{context.user_data['admin_proxy_username']}`
+🔑 كلمة المرور: `{context.user_data['admin_proxy_password']}`
+
+━━━━━━━━━━━━━━━
+🆔 معرف الطلب: `{order_id}`
+📅 التاريخ: {current_date}
+🕐 الوقت: {current_time}
+
+✅ تم إرسال البروكسي للمستخدم تلقائياً
+📦 الطلب مكتمل"""
+
+        await query.edit_message_text(admin_message, parse_mode='Markdown')
+        
+        # تنظيف البيانات المؤقتة
+        context.user_data.clear()
+        
+        # إعادة تفعيل كيبورد الأدمن
+        await restore_admin_keyboard(context, update.effective_chat.id)
+        
+        return ConversationHandler.END
 
 async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة البحث عن مستخدم"""
@@ -4589,11 +4657,17 @@ async def handle_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYP
         # إعادة إرسال الطلب مع إثبات الدفع
         await resend_order_notification(update, context, order)
         await update.message.reply_text("✅ تم إعادة إرسال الطلب مع زر المعالجة", reply_markup=ReplyKeyboardRemove())
-    elif status == 'completed':
+    elif status == 'processing':
+        await update.message.reply_text(f"🔄 الطلب `{order_id}` قيد المعالجة حالياً\n⏳ انتظر قليلاً حتى يكتمل إرسال البروكسي", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
+    elif status == 'successful':
         processed_date = order[10] if order[10] else "غير محدد"
-        await update.message.reply_text(f"ℹ️ الطلب `{order_id}` تم معالجته بالفعل\n📅 تاريخ المعالجة: {processed_date}", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(f"✅ الطلب `{order_id}` تم إكماله بنجاح\n📅 تاريخ الإكمال: {processed_date}", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
+    elif status == 'completed':  # للتوافق مع الإصدارات القديمة
+        processed_date = order[10] if order[10] else "غير محدد"
+        await update.message.reply_text(f"✅ الطلب `{order_id}` تم إكماله بنجاح\n📅 تاريخ الإكمال: {processed_date}", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
     elif status == 'failed':
-        await update.message.reply_text(f"ℹ️ الطلب `{order_id}` فشل ولم يتم معالجته", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
+        processed_date = order[10] if order[10] else "غير محدد"
+        await update.message.reply_text(f"❌ الطلب `{order_id}` فشل (دفع غير حقيقي)\n📅 تاريخ المعالجة: {processed_date}", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
     
     return ConversationHandler.END
 
@@ -5586,7 +5660,7 @@ def get_states_for_country(country_code):
     return states_map.get(country_code, None)
 
 async def show_proxy_preview(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """عرض معاينة البروكسي للأدمن قبل الإرسال"""
+    """عرض معاينة البروكسي للأدمن قبل الإرسال مع تأكيد"""
     order_id = context.user_data['processing_order_id']
     
     # الحصول على معلومات المستخدم والطلب
@@ -5634,14 +5708,14 @@ async def show_proxy_preview(update: Update, context: ContextTypes.DEFAULT_TYPE)
 ━━━━━━━━━━━━━━━
 🆔 معرف الطلب: `{order_id}`
 
-تم إرسال البروكسي للمستخدم تلقائياً."""
+❓ هل تريد إرسال البروكسي للمستخدم؟"""
 
-        # إرسال البروكسي للمستخدم مباشرة
-        await send_proxy_to_user_direct(update, context, context.user_data.get('admin_thank_message', ''))
-        
-        # زر واحد لإنهاء الطلب
+        # أزرار التأكيد: نعم ولا
         keyboard = [
-            [InlineKeyboardButton("✅ تم إنجاز الطلب بنجاح!", callback_data="order_completed_success")]
+            [
+                InlineKeyboardButton("✅ نعم، إرسال البروكسي", callback_data="confirm_send_proxy"),
+                InlineKeyboardButton("❌ لا، إلغاء العملية", callback_data="cancel_proxy_processing")
+            ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -5914,7 +5988,8 @@ def main() -> None:
         states={
             PROCESS_ORDER: [
                 CallbackQueryHandler(handle_payment_success, pattern="^payment_success$"),
-                CallbackQueryHandler(handle_payment_failed, pattern="^payment_failed$")
+                CallbackQueryHandler(handle_payment_failed, pattern="^payment_failed$"),
+                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
             ],
             ENTER_PROXY_TYPE: [
                 CallbackQueryHandler(handle_proxy_details_input, pattern="^proxy_type_"),
@@ -5956,6 +6031,10 @@ def main() -> None:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
                 CallbackQueryHandler(handle_cancel_proxy_processing, pattern="^cancel_proxy_processing$"),
                 CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
+            ],
+            PROXY_PREVIEW: [
+                CallbackQueryHandler(handle_confirm_send_proxy, pattern="^confirm_send_proxy$"),
+                CallbackQueryHandler(handle_cancel_proxy_processing, pattern="^cancel_proxy_processing$")
             ],
             CUSTOM_MESSAGE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input),
