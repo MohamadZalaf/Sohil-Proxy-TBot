@@ -1696,16 +1696,32 @@ def save_transaction(order_id: str, transaction_number: str, transaction_type: s
 
 def update_order_status(order_id: str, status: str):
     """تحديث حالة الطلب"""
-    if status == 'completed':
+    if status == 'processing':
+        # قيد المعالجة بعد قبول الدفع
         db.execute_query('''
             UPDATE orders 
-            SET status = 'completed', processed_at = CURRENT_TIMESTAMP 
+            SET status = 'processing', processed_at = CURRENT_TIMESTAMP 
+            WHERE id = ?
+        ''', (order_id,))
+    elif status == 'successful':
+        # تم بنجاح - تم إرسال البروكسي
+        db.execute_query('''
+            UPDATE orders 
+            SET status = 'successful', processed_at = CURRENT_TIMESTAMP 
             WHERE id = ?
         ''', (order_id,))
     elif status == 'failed':
+        # فاشل - دفع غير حقيقي
         db.execute_query('''
             UPDATE orders 
             SET status = 'failed', processed_at = CURRENT_TIMESTAMP 
+            WHERE id = ?
+        ''', (order_id,))
+    elif status == 'completed':
+        # للتوافق مع الإصدارات القديمة
+        db.execute_query('''
+            UPDATE orders 
+            SET status = 'completed', processed_at = CURRENT_TIMESTAMP 
             WHERE id = ?
         ''', (order_id,))
 
@@ -1720,8 +1736,8 @@ async def handle_withdrawal_success(update: Update, context: ContextTypes.DEFAUL
     transaction_number = generate_transaction_number('withdrawal')
     save_transaction(order_id, transaction_number, 'withdrawal', 'completed')
     
-    # تحديث حالة الطلب إلى مكتمل
-    update_order_status(order_id, 'completed')
+    # تحديث حالة الطلب إلى قيد المعالجة (وليس مكتمل بعد)
+    update_order_status(order_id, 'processing')
     
     # الحصول على بيانات المستخدم
     user_query = "SELECT user_id FROM orders WHERE id = ?"
@@ -3245,10 +3261,10 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
     
     # توليد رقم المعاملة وحفظها
     transaction_number = generate_transaction_number('proxy')
-    save_transaction(order_id, transaction_number, 'proxy', 'completed')
+    save_transaction(order_id, transaction_number, 'proxy', 'processing')
     
-    # تحديث حالة الطلب إلى مكتمل
-    update_order_status(order_id, 'completed')
+    # تحديث حالة الطلب إلى قيد المعالجة (وليس مكتمل بعد)
+    update_order_status(order_id, 'processing')
     
     # إرسال رسالة للمستخدم أن الطلب قيد المعالجة
     order_query = "SELECT user_id, proxy_type FROM orders WHERE id = ?"
