@@ -6468,18 +6468,30 @@ async def main() -> None:
     print("✅ تم إضافة جميع المعالجات")
     
     # تشغيل البوت
+    print("🚀 بدء تشغيل البوت...")
+    print("📊 قاعدة البيانات جاهزة")
+    print("⚡ البوت يعمل الآن!")
+    print(f"🔑 التوكن: {TOKEN[:10]}...")
+    print("💡 في انتظار الرسائل...")
+    
+    # بدء التطبيق بشكل آمن
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+    
+    # تشغيل البوت حتى يتم إيقافه
     try:
-        print("🚀 بدء تشغيل البوت...")
-        print("📊 قاعدة البيانات جاهزة")
-        print("⚡ البوت يعمل الآن!")
-        print(f"🔑 التوكن: {TOKEN[:10]}...")
-        print("💡 في انتظار الرسائل...")
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
-    except Exception as e:
-        print(f"❌ خطأ في تشغيل البوت: {e}")
-        print(f"🔍 تفاصيل الخطأ: {type(e).__name__}")
-        import traceback
-        traceback.print_exc()
+        # تشغيل مستمر
+        await asyncio.Event().wait()  # ينتظر إلى ما لا نهاية
+    except KeyboardInterrupt:
+        print("\n⚠️ تم إيقاف البوت بواسطة المستخدم")
+    finally:
+        # إيقاف البوت بشكل آمن
+        print("🛑 إيقاف البوت...")
+        await application.updater.stop()
+        await application.stop()
+        await application.shutdown()
+        print("✅ تم إيقاف البوت بنجاح")
     
     
 async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
