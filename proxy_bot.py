@@ -60,8 +60,9 @@ ADMIN_CHAT_ID = None  # سيتم تحديده عند أول تسجيل دخول 
     REFERRAL_AMOUNT, USER_LOOKUP, QUIET_HOURS, LANGUAGE_SELECTION,
     PAYMENT_METHOD_SELECTION, WITHDRAWAL_REQUEST, SET_PRICE_STATIC,
     SET_PRICE_SOCKS, ADMIN_ORDER_INQUIRY, BROADCAST_MESSAGE,
-    BROADCAST_USERS, BROADCAST_CONFIRM
-) = range(25)
+    BROADCAST_USERS, BROADCAST_CONFIRM,
+
+) = range(26)
 
 # قواميس البيانات
 STATIC_COUNTRIES = {
@@ -1251,6 +1252,7 @@ class DatabaseManager:
                 payment_method TEXT,
                 payment_amount REAL,
                 payment_proof TEXT,
+                quantity TEXT DEFAULT 'واحد',
                 status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 processed_at TIMESTAMP,
@@ -1311,6 +1313,12 @@ class DatabaseManager:
             cursor.execute("SELECT truly_processed FROM orders LIMIT 1")
         except sqlite3.OperationalError:
             cursor.execute("ALTER TABLE orders ADD COLUMN truly_processed BOOLEAN DEFAULT FALSE")
+        
+        # إضافة عمود الكمية إذا لم يكن موجوداً
+        try:
+            cursor.execute("SELECT quantity FROM orders LIMIT 1")
+        except sqlite3.OperationalError:
+            cursor.execute("ALTER TABLE orders ADD COLUMN quantity TEXT DEFAULT 'واحد'")
 
         # إضافة أعمدة الإحالة المؤجلة إذا لم تكن موجودة
         try:
@@ -2038,6 +2046,17 @@ async def handle_static_proxy_request(update: Update, context: ContextTypes.DEFA
     package_message = MESSAGES[language]['static_package'].replace('معرف الطلب: `{}`', 'سيتم إنشاء معرف الطلب بعد إرسال إثبات الدفع')
     await update.message.reply_text(package_message, parse_mode='Markdown')
     
+    # عرض أزرار الكمية أولاً
+    keyboard = [
+        [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single_static")],
+        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package_static")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("اختر الكمية المطلوبة:", reply_markup=reply_markup)
+    context.user_data['proxy_type'] = 'static'
+    return
+    
+    # عرض قائمة الدول للستاتيك (سيتم تنفيذه بعد اختيار الكمية)
     # عرض قائمة الدول للستاتيك
     keyboard = []
     for code, name in STATIC_COUNTRIES[language].items():
@@ -2207,7 +2226,7 @@ async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYP
     # حساب سعر البروكسي
     payment_amount = get_proxy_price(proxy_type, country, state)
     
-    db.create_order(order_id, user_id, proxy_type, country, state, payment_method, payment_amount)
+    db.create_order(order_id, user_id, proxy_type, country, state, payment_method, payment_amount, context.user_data.get("quantity", "واحد"))
     
     # حفظ إثبات الدفع
     if update.message.photo:
@@ -2362,6 +2381,7 @@ async def send_order_copy_to_user(update: Update, context: ContextTypes.DEFAULT_
 
 ━━━━━━━━━━━━━━━
 📦 تفاصيل الطلب:
+📊 الكمية: {order[8]}
 🔧 نوع البروكسي: {order[2]}
 🌍 الدولة: {order[3]}
 🏠 الولاية: {order[4]}
@@ -2449,6 +2469,7 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
 
 ━━━━━━━━━━━━━━━
 📦 تفاصيل الطلب:
+📊 الكمية: {order[8]}
 🔧 نوع البروكسي: {order[2]}
 🌍 الدولة: {order[3]}
 🏠 الولاية: {order[4]}
@@ -3471,22 +3492,16 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
     
     # إنشاء رسالة جديدة بدلاً من تعديل الرسالة الأصلية
     keyboard = [
-        [InlineKeyboardButton("ستاتيك", callback_data="proxy_type_static")],
-        [InlineKeyboardButton("سوكس", callback_data="proxy_type_socks")]
+        [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single")],
+        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     # إرسال رسالة جديدة بدلاً من تعديل الرسالة الموجودة
     await context.bot.send_message(
         update.effective_chat.id,
-        "1️⃣ اختر نوع البروكسي:",
+        "1️⃣ اختر الكمية المطلوبة:",
         reply_markup=reply_markup
-    )
-    
-    # تحديث الرسالة الأصلية لتوضيح أنه تم البدء في المعالجة
-    await query.edit_message_text(
-        admin_message,
-        parse_mode='Markdown'
     )
     
     return ENTER_PROXY_TYPE
@@ -4777,6 +4792,7 @@ async def resend_order_notification(update: Update, context: ContextTypes.DEFAUL
 
 ━━━━━━━━━━━━━━━
 📦 تفاصيل الطلب:
+📊 الكمية: {order[8]}
 🔧 نوع البروكسي: {order[2]}
 🌍 الدولة: {order[3]}
 🏠 الولاية: {order[4]}
@@ -6053,7 +6069,8 @@ async def handle_broadcast_message(update: Update, context: ContextTypes.DEFAULT
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(preview_text, reply_markup=reply_markup, parse_mode='Markdown')
-        return BROADCAST_CONFIRM
+        return BROADCAST_CONFIRM,
+
     
     elif broadcast_type == 'custom':
         # للمستخدمين المخصصين - استخدام handle_broadcast_custom_message
@@ -6141,7 +6158,8 @@ async def handle_broadcast_custom_message(update: Update, context: ContextTypes.
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(preview_text, reply_markup=reply_markup, parse_mode='Markdown')
-    return BROADCAST_CONFIRM
+    return BROADCAST_CONFIRM,
+
 
 async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة تأكيد أو إلغاء البث"""
@@ -6273,7 +6291,8 @@ def main() -> None:
         states={
             PROCESS_ORDER: [
                 CallbackQueryHandler(handle_payment_success, pattern="^payment_success$"),
-                CallbackQueryHandler(handle_payment_failed, pattern="^payment_failed$")
+                CallbackQueryHandler(handle_payment_failed, pattern="^payment_failed$"),
+                CallbackQueryHandler(handle_quantity_selection, pattern="^quantity_")
             ],
             ENTER_PROXY_TYPE: [CallbackQueryHandler(handle_proxy_details_input, pattern="^proxy_type_")],
             ENTER_PROXY_ADDRESS: [
@@ -6427,6 +6446,7 @@ def main() -> None:
             ],
             BROADCAST_USERS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_users)],
             BROADCAST_CONFIRM: [CallbackQueryHandler(handle_broadcast_confirmation, pattern="^(confirm_broadcast|cancel_broadcast)$")],
+
         },
         fallbacks=[
             CommandHandler("cancel", lambda u, c: ConversationHandler.END),
@@ -6500,4 +6520,107 @@ async def activate_referral_bonus_on_success(context, user_id: int) -> None:
             )
         except:
             pass
+
+
+
+# دوال جديدة لنظام الباكج والكمية
+
+async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة اختيار الكمية (واحد أو باكج)"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "quantity_single":
+        context.user_data["quantity"] = "واحد"
+        # الانتقال لاختيار نوع البروكسي العادي
+        keyboard = [
+            [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single")],
+            [InlineKeyboardButton("📦 باكج", callback_data="quantity_package")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        "1️⃣ اختر الكمية المطلوبة:",
+        await context.bot.send_message(
+            update.effective_chat.id,
+            "1️⃣ اختر الكمية المطلوبة:",
+            reply_markup=reply_markup
+        )
+        
+        return ENTER_PROXY_TYPE
+        
+    elif query.data == "quantity_package":
+        context.user_data["quantity"] = "باكج"
+        # طلب رسالة مخصصة للباكج
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_package")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            "📦 **وضع الباكج**\n\nيرجى كتابة الرسالة المخصصة التي تريد إرسالها للمستخدم بدلاً من خطوات إدخال البروكسي:\n\n💡 يمكنك تضمين جميع تفاصيل البروكسي في رسالة واحدة.",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return PACKAGE_MESSAGE
+
+async def handle_package_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة رسالة الباكج المخصصة"""
+    if update.message and update.message.text:
+        package_message = update.message.text
+        context.user_data["package_message"] = package_message
+        
+        # إرسال الباكج للمستخدم مباشرة
+        await send_package_to_user(update, context, package_message)
+        return ConversationHandler.END
+    
+    return PACKAGE_MESSAGE
+
+async def send_package_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE, package_message: str) -> None:
+    """إرسال الباكج المخصص للمستخدم"""
+    order_id = context.user_data["processing_order_id"]
+    
+    # الحصول على معلومات المستخدم والطلب
+    user_query = """
+        SELECT o.user_id, u.first_name, u.last_name 
+        FROM orders o 
+        JOIN users u ON o.user_id = u.user_id 
+        WHERE o.id = ?
+    """
+    user_result = db.execute_query(user_query, (order_id,))
+    
+    if user_result:
+        user_id, first_name, last_name = user_result[0]
+        user_full_name = f"{first_name} {last_name or ""}".strip()
+        
+        # إرسال الباكج للمستخدم
+        final_message = f"""✅ تم معالجة طلب {user_full_name}
+
+🆔 معرف الطلب: `{order_id}`
+📦 نوع الطلب: باكج
+
+━━━━━━━━━━━━━━━
+{package_message}
+━━━━━━━━━━━━━━━
+
+📅 التاريخ: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}"""
+        
+        await context.bot.send_message(user_id, final_message, parse_mode="Markdown")
+        
+        # تحديث حالة الطلب
+        db.execute_query(
+            "UPDATE orders SET status = 'completed', processed_at = CURRENT_TIMESTAMP, proxy_details = ?, truly_processed = TRUE WHERE id = ?",
+            (package_message, order_id)
+        )
+        
+        # رسالة تأكيد للأدمن
+        admin_message = f"""✅ تم إرسال الباكج المخصص للمستخدم
+
+👤 المستخدم: {user_full_name}
+🆔 معرف الطلب: `{order_id}`
+📦 نوع الطلب: باكج
+
+📝 الرسالة المرسلة:
+{package_message}"""
+
+        await update.message.reply_text(admin_message, parse_mode="Markdown")
+        
+        # تنظيف البيانات المؤقتة
+        context.user_data.clear()
+
 
