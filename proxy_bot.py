@@ -2241,66 +2241,127 @@ async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
     language = get_user_language(user_id)
     
-    # التحقق من وجود البيانات المطلوبة
-    if 'proxy_type' not in context.user_data:
-        await update.message.reply_text(
-            "❌ خطأ: لم يتم العثور على نوع البروكسي. يرجى البدء من جديد بالضغط على /start",
-            parse_mode='Markdown'
-        )
+    try:
+        # التحقق من وجود البيانات المطلوبة
+        if 'proxy_type' not in context.user_data:
+            await update.message.reply_text(
+                "❌ خطأ: لم يتم العثور على نوع البروكسي. يرجى البدء من جديد بالضغط على /start",
+                parse_mode='Markdown'
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+        
+        # إنشاء معرف الطلب الآن فقط عند إرسال إثبات الدفع
+        order_id = generate_order_id()
+        context.user_data['current_order_id'] = order_id
+        
+        # إنشاء الطلب في قاعدة البيانات
+        proxy_type = context.user_data.get('proxy_type', 'static')
+        country = context.user_data.get('selected_country', 'manual')
+        state = context.user_data.get('selected_state', 'manual')
+        payment_method = context.user_data.get('payment_method', 'unknown')
+        
+        # حساب سعر البروكسي
+        payment_amount = get_proxy_price(proxy_type, country, state)
+        
+        # إنشاء الطلب في قاعدة البيانات
+        print(f"📝 إنشاء طلب جديد: {order_id}")
+        db.create_order(order_id, user_id, proxy_type, country, state, payment_method, payment_amount, context.user_data.get("quantity", "واحد"))
+        
+        # معالجة إثبات الدفع
+        payment_proof = None
+        if update.message.photo:
+            # إذا كانت صورة
+            file_id = update.message.photo[-1].file_id
+            payment_proof = f"photo:{file_id}"
+            
+            print(f"📸 تم استلام إثبات دفع (صورة) للطلب: {order_id}")
+            
+            # إرسال نسخة للمستخدم
+            await update.message.reply_photo(
+                photo=file_id,
+                caption=f"📸 إثبات دفع للطلب بمعرف: `{order_id}`\n\n✅ تم حفظ إثبات الدفع بنجاح",
+                parse_mode='Markdown'
+            )
+        elif update.message.text:
+            # إذا كان نص
+            payment_proof = f"text:{update.message.text}"
+            
+            print(f"📝 تم استلام إثبات دفع (نص) للطلب: {order_id}")
+            
+            # إرسال نسخة للمستخدم
+            await update.message.reply_text(
+                f"📝 إثبات دفع للطلب بمعرف: `{order_id}`\n\nالتفاصيل:\n{update.message.text}\n\n✅ تم حفظ إثبات الدفع بنجاح",
+                parse_mode='Markdown'
+            )
+        else:
+            # نوع غير مدعوم
+            print(f"⚠️ تم استلام نوع غير مدعوم من إثبات الدفع للطلب: {order_id}")
+            await update.message.reply_text(
+                "❌ نوع الملف غير مدعوم. يرجى إرسال صورة أو نص فقط.",
+                parse_mode='Markdown'
+            )
+            return PAYMENT_PROOF  # البقاء في نفس الحالة
+        
+        # حفظ إثبات الدفع في قاعدة البيانات
+        if payment_proof:
+            db.update_order_payment_proof(order_id, payment_proof)
+            print(f"💾 تم حفظ إثبات الدفع في قاعدة البيانات للطلب: {order_id}")
+        
+        # إرسال نسخة من الطلب للمستخدم
+        try:
+            await send_order_copy_to_user(update, context, order_id)
+            print(f"📋 تم إرسال نسخة الطلب للمستخدم: {order_id}")
+        except Exception as e:
+            print(f"⚠️ خطأ في إرسال نسخة الطلب للمستخدم {order_id}: {e}")
+        
+        # إرسال إشعار للأدمن مع زر المعالجة
+        try:
+            print(f"🔔 محاولة إرسال إشعار للأدمن للطلب: {order_id}")
+            print(f"   نوع إثبات الدفع: {'صورة' if payment_proof and payment_proof.startswith('photo:') else 'نص' if payment_proof and payment_proof.startswith('text:') else 'غير معروف'}")
+            await send_admin_notification(context, order_id, payment_proof)
+            print(f"✅ تم إرسال إشعار الأدمن بنجاح للطلب: {order_id}")
+        except Exception as e:
+            print(f"❌ خطأ في إرسال إشعار الأدمن للطلب {order_id}: {e}")
+            # محاولة تسجيل الخطأ
+            try:
+                db.log_action(user_id, "admin_notification_failed", f"Order: {order_id}, Error: {str(e)}")
+            except:
+                pass
+        
+        # إرسال رسالة تأكيد للمستخدم
+        try:
+            await update.message.reply_text(MESSAGES[language]['order_received'], parse_mode='Markdown')
+            print(f"✅ تم إرسال رسالة التأكيد للمستخدم للطلب: {order_id}")
+        except Exception as e:
+            print(f"⚠️ خطأ في إرسال رسالة التأكيد للطلب {order_id}: {e}")
+        
+        # تسجيل العملية
+        try:
+            db.log_action(user_id, "payment_proof_submitted", order_id)
+            print(f"📊 تم تسجيل العملية في قاعدة البيانات للطلب: {order_id}")
+        except Exception as e:
+            print(f"⚠️ خطأ في تسجيل العملية للطلب {order_id}: {e}")
+        
+        # تنظيف البيانات المؤقتة وإنهاء المحادثة
+        context.user_data.clear()
+        print(f"🧹 تم تنظيف البيانات المؤقتة وإنهاء معالجة الطلب: {order_id}")
+        
         return ConversationHandler.END
-    
-    # إنشاء معرف الطلب الآن فقط عند إرسال إثبات الدفع
-    order_id = generate_order_id()
-    context.user_data['current_order_id'] = order_id
-    
-    # إنشاء الطلب في قاعدة البيانات
-    proxy_type = context.user_data.get('proxy_type', 'static')
-    country = context.user_data.get('selected_country', 'manual')
-    state = context.user_data.get('selected_state', 'manual')
-    payment_method = context.user_data.get('payment_method', 'unknown')
-    
-    # حساب سعر البروكسي
-    payment_amount = get_proxy_price(proxy_type, country, state)
-    
-    db.create_order(order_id, user_id, proxy_type, country, state, payment_method, payment_amount, context.user_data.get("quantity", "واحد"))
-    
-    # حفظ إثبات الدفع
-    if update.message.photo:
-        # إذا كانت صورة
-        file_id = update.message.photo[-1].file_id
-        payment_proof = f"photo:{file_id}"
         
-        # إرسال نسخة للمستخدم
-        await update.message.reply_photo(
-            photo=file_id,
-            caption=f"📸 إثبات دفع للطلب بمعرف: `{order_id}`\n\n✅ تم حفظ إثبات الدفع",
-            parse_mode='Markdown'
-        )
-    else:
-        # إذا كان نص
-        payment_proof = f"text:{update.message.text}"
+    except Exception as e:
+        print(f"❌ خطأ عام في معالجة إثبات الدفع للمستخدم {user_id}: {e}")
+        try:
+            await update.message.reply_text(
+                "❌ حدث خطأ أثناء معالجة إثبات الدفع. يرجى المحاولة مرة أخرى أو التواصل مع الدعم.",
+                parse_mode='Markdown'
+            )
+        except:
+            pass
         
-        # إرسال نسخة للمستخدم
-        await update.message.reply_text(
-            f"📝 إثبات دفع للطلب بمعرف: `{order_id}`\n\nالتفاصيل:\n{update.message.text}\n\n✅ تم حفظ إثبات الدفع",
-            parse_mode='Markdown'
-        )
-    
-    db.update_order_payment_proof(order_id, payment_proof)
-    
-    # إرسال نسخة من الطلب للمستخدم
-    await send_order_copy_to_user(update, context, order_id)
-    
-    # إرسال إشعار للأدمن مع زر المعالجة
-    print(f"🔔 محاولة إرسال إشعار للأدمن للطلب: {order_id}")
-    print(f"   نوع إثبات الدفع: {'صورة' if payment_proof.startswith('photo:') else 'نص' if payment_proof.startswith('text:') else 'غير معروف'}")
-    await send_admin_notification(context, order_id, payment_proof)
-    
-    await update.message.reply_text(MESSAGES[language]['order_received'], parse_mode='Markdown')
-    
-    db.log_action(user_id, "payment_proof_submitted", order_id)
-    
-    return ConversationHandler.END
+        # تنظيف البيانات في حالة الخطأ
+        context.user_data.clear()
+        return ConversationHandler.END
 
 async def send_withdrawal_notification(context: ContextTypes.DEFAULT_TYPE, withdrawal_id: str, user: tuple) -> None:
     """إرسال إشعار طلب سحب للأدمن"""
@@ -2539,36 +2600,53 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
         if ADMIN_CHAT_ID:
             try:
                 # إرسال الإشعار الرئيسي
+                print(f"📤 إرسال إشعار أساسي للأدمن للطلب: {order_id}")
                 main_msg = await context.bot.send_message(
                     ADMIN_CHAT_ID, 
                     message, 
                     reply_markup=reply_markup,
                     parse_mode='Markdown'
                 )
+                print(f"✅ تم إرسال الإشعار الأساسي بنجاح للطلب: {order_id}")
                 
                 # إرسال إثبات الدفع كرد على رسالة الطلب
                 if payment_proof:
-                    if payment_proof.startswith("photo:"):
-                        file_id = payment_proof.replace("photo:", "")
-                        await context.bot.send_photo(
-                            ADMIN_CHAT_ID,
-                            photo=file_id,
-                            caption=f"📸 إثبات دفع للطلب بمعرف: `{order_id}`",
-                            parse_mode='Markdown',
-                            reply_to_message_id=main_msg.message_id
-                        )
-                        print(f"✅ تم إرسال إثبات الدفع (صورة) للأدمن - الطلب: {order_id}")
-                    elif payment_proof.startswith("text:"):
-                        text_proof = payment_proof.replace("text:", "")
-                        await context.bot.send_message(
-                            ADMIN_CHAT_ID,
-                            f"📝 إثبات دفع للطلب بمعرف: `{order_id}`\n\nالنص:\n{text_proof}",
-                            parse_mode='Markdown',
-                            reply_to_message_id=main_msg.message_id
-                        )
-                        print(f"✅ تم إرسال إثبات الدفع (نص) للأدمن - الطلب: {order_id}")
-                    else:
-                        print(f"⚠️ نوع إثبات الدفع غير معروف: {payment_proof}")
+                    try:
+                        if payment_proof.startswith("photo:"):
+                            file_id = payment_proof.replace("photo:", "")
+                            print(f"📸 إرسال إثبات دفع (صورة) للأدمن للطلب: {order_id}")
+                            await context.bot.send_photo(
+                                ADMIN_CHAT_ID,
+                                photo=file_id,
+                                caption=f"📸 إثبات دفع للطلب بمعرف: `{order_id}`",
+                                parse_mode='Markdown',
+                                reply_to_message_id=main_msg.message_id
+                            )
+                            print(f"✅ تم إرسال إثبات الدفع (صورة) للأدمن - الطلب: {order_id}")
+                        elif payment_proof.startswith("text:"):
+                            text_proof = payment_proof.replace("text:", "")
+                            print(f"📝 إرسال إثبات دفع (نص) للأدمن للطلب: {order_id}")
+                            await context.bot.send_message(
+                                ADMIN_CHAT_ID,
+                                f"📝 إثبات دفع للطلب بمعرف: `{order_id}`\n\nالنص:\n{text_proof}",
+                                parse_mode='Markdown',
+                                reply_to_message_id=main_msg.message_id
+                            )
+                            print(f"✅ تم إرسال إثبات الدفع (نص) للأدمن - الطلب: {order_id}")
+                        else:
+                            print(f"⚠️ نوع إثبات الدفع غير معروف: {payment_proof}")
+                    except Exception as proof_error:
+                        print(f"⚠️ خطأ في إرسال إثبات الدفع للطلب {order_id}: {proof_error}")
+                        # إرسال رسالة تبديلية بدلاً من إثبات الدفع
+                        try:
+                            await context.bot.send_message(
+                                ADMIN_CHAT_ID,
+                                f"⚠️ فشل في إرسال إثبات الدفع للطلب `{order_id}`\n\nالنوع: {payment_proof[:20]}...",
+                                parse_mode='Markdown',
+                                reply_to_message_id=main_msg.message_id
+                            )
+                        except:
+                            pass
                 else:
                     print(f"⚠️ لا يوجد إثبات دفع مرفق للطلب: {order_id}")
                 
@@ -2576,10 +2654,25 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
                 
             except Exception as e:
                 print(f"❌ خطأ في إرسال إشعار الأدمن للطلب {order_id}: {e}")
+                print(f"   تفاصيل الخطأ: {type(e).__name__}")
+                import traceback
+                print(f"   Traceback: {traceback.format_exc()}")
+                
                 # محاولة تسجيل الخطأ في قاعدة البيانات
                 try:
                     db.log_action(order[1], "admin_notification_failed", f"Order: {order_id}, Error: {str(e)}")
+                except Exception as log_error:
+                    print(f"⚠️ فشل في تسجيل خطأ الإشعار: {log_error}")
+                
+                # محاولة إرسال إشعار بديل للأدمن
+                try:
+                    await context.bot.send_message(
+                        ADMIN_CHAT_ID,
+                        f"⚠️ فشل في إرسال إشعار مفصل للطلب `{order_id}`\n\nيرجى التحقق من قاعدة البيانات مباشرة.",
+                        parse_mode='Markdown'
+                    )
                 except:
+                    print(f"❌ فشل في إرسال إشعار بديل للأدمن للطلب: {order_id}")
                     pass
         else:
             print(f"⚠️ لم يتم تحديد ADMIN_CHAT_ID - لا يمكن إرسال إشعار للطلب: {order_id}")
@@ -2866,6 +2959,15 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     """معالجة الاستعلامات المرسلة"""
     query = update.callback_query
     
+    try:
+        # التأكد من إجابة الاستعلام أولاً لتجنب تعليق الأزرار
+        if not query.data.startswith("show_more_"):  # استثناء للأزرار التي تعالج الإجابة بنفسها
+            await query.answer()
+    except Exception as answer_error:
+        print(f"⚠️ خطأ في إجابة الاستعلام: {answer_error}")
+    
+    try:
+    
     if query.data.startswith("country_") or query.data.startswith("state_") or query.data in ["manual_country", "manual_state"]:
         await handle_country_selection(update, context)
     elif query.data.startswith("payment_"):
@@ -2977,7 +3079,11 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 
     else:
         # معالجة الأزرار غير المعروفة - تسجيل وإعادة توجيه مناسب
-        await query.answer("❌ إجراء غير معروف")
+        print(f"⚠️ إجراء غير معروف من المستخدم {update.effective_user.id}: {query.data}")
+        try:
+            await query.answer("❌ إجراء غير معروف")
+        except:
+            pass
         
         # التحقق من نوع المستخدم وإعادة توجيهه للقائمة المناسبة
         user_id = update.effective_user.id
@@ -2987,6 +3093,32 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             # للمستخدم العادي - العودة للقائمة الرئيسية
             await start(update, context)
+            
+    except Exception as e:
+        print(f"❌ خطأ في معالجة callback query من المستخدم {update.effective_user.id}: {e}")
+        print(f"   البيانات: {query.data}")
+        
+        # محاولة إجابة الاستعلام لتجنب تعليق الأزرار
+        try:
+            await query.answer("❌ حدث خطأ، جاري إعادة التوجيه...")
+        except:
+            pass
+        
+        # إعادة توجيه المستخدم
+        try:
+            user_id = update.effective_user.id
+            if context.user_data.get('is_admin') or user_id == ADMIN_CHAT_ID:
+                await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ. عودة للقائمة الرئيسية...")
+            else:
+                await start(update, context)
+        except Exception as redirect_error:
+            print(f"❌ فشل في إعادة التوجيه: {redirect_error}")
+        
+        # تنظيف البيانات المؤقتة في حالة الخطأ
+        try:
+            context.user_data.clear()
+        except:
+            pass
 
 async def handle_admin_country_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة اختيار الدولة من قبل الأدمن"""
@@ -5686,26 +5818,52 @@ async def handle_cancel_balance_reset(update: Update, context: ContextTypes.DEFA
 
 async def handle_cancel_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة إلغاء إرسال إثبات الدفع"""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = update.effective_user.id
-    language = get_user_language(user_id)
-    
-    # تنظيف البيانات المؤقتة
-    context.user_data.clear()
-    
-    if language == 'ar':
-        message = "❌ تم إلغاء إرسال إثبات الدفع"
-    else:
-        message = "❌ Payment proof submission cancelled"
-    
-    await query.edit_message_text(message)
-    
-    # للمستخدم العادي - إعادة توجيه للقائمة الرئيسية
-    await start(update, context)
-    
-    return ConversationHandler.END
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        user_id = update.effective_user.id
+        language = get_user_language(user_id)
+        
+        print(f"🚫 المستخدم {user_id} ألغى إرسال إثبات الدفع")
+        
+        # تسجيل العملية
+        try:
+            db.log_action(user_id, "payment_proof_cancelled", "User cancelled payment proof submission")
+        except:
+            pass
+        
+        # تنظيف البيانات المؤقتة
+        context.user_data.clear()
+        
+        if language == 'ar':
+            message = "❌ تم إلغاء إرسال إثبات الدفع\n\n🔄 يمكنك البدء من جديد في أي وقت"
+        else:
+            message = "❌ Payment proof submission cancelled\n\n🔄 You can start again anytime"
+        
+        await query.edit_message_text(message, parse_mode='Markdown')
+        
+        # انتظار قليل قبل إعادة التوجيه
+        await asyncio.sleep(1)
+        
+        # للمستخدم العادي - إعادة توجيه للقائمة الرئيسية
+        try:
+            await start(update, context)
+            print(f"✅ تم إعادة توجيه المستخدم {user_id} للقائمة الرئيسية بعد الإلغاء")
+        except Exception as e:
+            print(f"⚠️ خطأ في إعادة التوجيه للمستخدم {user_id}: {e}")
+        
+        return ConversationHandler.END
+        
+    except Exception as e:
+        print(f"❌ خطأ في معالجة إلغاء إثبات الدفع للمستخدم {update.effective_user.id}: {e}")
+        try:
+            # تنظيف البيانات على أي حال
+            context.user_data.clear()
+            await update.callback_query.answer("❌ تم الإلغاء")
+        except:
+            pass
+        return ConversationHandler.END
 
 async def handle_order_completed_success(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة إنهاء الطلب بنجاح وإنهاء ConversationHandler"""
