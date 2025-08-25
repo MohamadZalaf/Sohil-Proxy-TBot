@@ -60,9 +60,10 @@ ADMIN_CHAT_ID = None  # سيتم تحديده عند أول تسجيل دخول 
     REFERRAL_AMOUNT, USER_LOOKUP, QUIET_HOURS, LANGUAGE_SELECTION,
     PAYMENT_METHOD_SELECTION, WITHDRAWAL_REQUEST, SET_PRICE_STATIC,
     SET_PRICE_SOCKS, ADMIN_ORDER_INQUIRY, BROADCAST_MESSAGE,
-    BROADCAST_USERS, BROADCAST_CONFIRM,
+    BROADCAST_USERS, BROADCAST_CONFIRM, PACKAGE_MESSAGE, PACKAGE_CONFIRMATION,
+    PACKAGE_ACTION_CHOICE
 
-) = range(26)
+) = range(28)
 
 # قواميس البيانات
 STATIC_COUNTRIES = {
@@ -5429,7 +5430,7 @@ async def handle_database_clear(update: Update, context: ContextTypes.DEFAULT_TY
         # إعادة تفعيل كيبورد الأدمن الرئيسي
         await restore_admin_keyboard(context, update.effective_chat.id)
 
-async def handle_cancel_processing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_cancel_processing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة إلغاء معالجة الطلب مؤقتاً"""
     query = update.callback_query
     await query.answer()
@@ -5465,7 +5466,7 @@ async def handle_cancel_processing(update: Update, context: ContextTypes.DEFAULT
             (order_id,)
         )
 
-        context.user_data.pop('processing_order_id', None)
+        context.user_data.clear()
         
         # إعادة تفعيل كيبورد الأدمن الرئيسي
         await restore_admin_keyboard(context, update.effective_chat.id)
@@ -5475,6 +5476,8 @@ async def handle_cancel_processing(update: Update, context: ContextTypes.DEFAULT
         
         # إعادة تفعيل كيبورد الأدمن الرئيسي حتى في حالة الخطأ
         await restore_admin_keyboard(context, update.effective_chat.id)
+    
+    return ConversationHandler.END
 
 async def handle_cancel_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة إلغاء البحث عن مستخدم"""
@@ -6292,44 +6295,70 @@ def main() -> None:
             PROCESS_ORDER: [
                 CallbackQueryHandler(handle_payment_success, pattern="^payment_success$"),
                 CallbackQueryHandler(handle_payment_failed, pattern="^payment_failed$"),
-                CallbackQueryHandler(handle_quantity_selection, pattern="^quantity_")
+                CallbackQueryHandler(handle_quantity_selection, pattern="^quantity_"),
+                CallbackQueryHandler(handle_back_to_quantity, pattern="^back_to_quantity$"),
+                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
             ],
-            ENTER_PROXY_TYPE: [CallbackQueryHandler(handle_proxy_details_input, pattern="^proxy_type_")],
+            ENTER_PROXY_TYPE: [
+                CallbackQueryHandler(handle_proxy_details_input, pattern="^proxy_type_"),
+                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+            ],
             ENTER_PROXY_ADDRESS: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
-                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
+                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
+                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
             ],
             ENTER_PROXY_PORT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
-                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
+                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
+                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
             ],
             ENTER_COUNTRY: [
                 CallbackQueryHandler(handle_admin_country_selection, pattern="^admin_country_"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
-                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
+                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
+                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
             ],
             ENTER_STATE: [
                 CallbackQueryHandler(handle_admin_country_selection, pattern="^admin_state_"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
-                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
+                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
+                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
             ],
             ENTER_USERNAME: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
-                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
+                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
+                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
             ],
             ENTER_PASSWORD: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
-                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$")
+                CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
+                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
             ],
             ENTER_THANK_MESSAGE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_proxy_details_input),
                 CallbackQueryHandler(handle_cancel_proxy_setup, pattern="^cancel_proxy_setup$"),
-                CallbackQueryHandler(handle_order_completed_success, pattern="^order_completed_success$")
+                CallbackQueryHandler(handle_order_completed_success, pattern="^order_completed_success$"),
+                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
             ],
             CUSTOM_MESSAGE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input),
                 CallbackQueryHandler(handle_custom_message_choice, pattern="^(send_custom_message|no_custom_message)$"),
-                CallbackQueryHandler(handle_cancel_custom_message, pattern="^cancel_custom_message$")
+                CallbackQueryHandler(handle_cancel_custom_message, pattern="^cancel_custom_message$"),
+                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+            ],
+            PACKAGE_MESSAGE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_package_message),
+                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$"),
+                CallbackQueryHandler(handle_back_to_quantity, pattern="^back_to_quantity$")
+            ],
+            PACKAGE_CONFIRMATION: [
+                CallbackQueryHandler(handle_package_confirmation, pattern="^(confirm_send_package|decline_send_package)$"),
+                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+            ],
+            PACKAGE_ACTION_CHOICE: [
+                CallbackQueryHandler(handle_package_action_choice, pattern="^(redesign_package|review_later)$"),
+                CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
             ]
         },
         fallbacks=[
@@ -6534,14 +6563,14 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
         context.user_data["quantity"] = "واحد"
         # الانتقال لاختيار نوع البروكسي العادي
         keyboard = [
-            [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single")],
-            [InlineKeyboardButton("📦 باكج", callback_data="quantity_package")]
+            [InlineKeyboardButton("Static ISP", callback_data="proxy_type_static_isp")],
+            [InlineKeyboardButton("Static Residential", callback_data="proxy_type_static_residential")],
+            [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        "1️⃣ اختر الكمية المطلوبة:",
-        await context.bot.send_message(
-            update.effective_chat.id,
-            "1️⃣ اختر الكمية المطلوبة:",
+        
+        await query.edit_message_text(
+            "2️⃣ اختر نوع البروكسي:",
             reply_markup=reply_markup
         )
         
@@ -6549,8 +6578,11 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
         
     elif query.data == "quantity_package":
         context.user_data["quantity"] = "باكج"
-        # طلب رسالة مخصصة للباكج
-        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_package")]]
+        # طلب رسالة مخصصة للباكج مع أزرار الإلغاء
+        keyboard = [
+            [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")],
+            [InlineKeyboardButton("🔙 العودة لاختيار الكمية", callback_data="back_to_quantity")]
+        ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
             "📦 **وضع الباكج**\n\nيرجى كتابة الرسالة المخصصة التي تريد إرسالها للمستخدم بدلاً من خطوات إدخال البروكسي:\n\n💡 يمكنك تضمين جميع تفاصيل البروكسي في رسالة واحدة.",
@@ -6565,11 +6597,188 @@ async def handle_package_message(update: Update, context: ContextTypes.DEFAULT_T
         package_message = update.message.text
         context.user_data["package_message"] = package_message
         
-        # إرسال الباكج للمستخدم مباشرة
-        await send_package_to_user(update, context, package_message)
-        return ConversationHandler.END
+        # عرض معاينة الرسالة مع خيارات التأكيد
+        await show_package_preview_confirmation(update, context, package_message)
+        return PACKAGE_CONFIRMATION
     
     return PACKAGE_MESSAGE
+
+async def show_package_preview_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, package_message: str) -> None:
+    """عرض معاينة رسالة الباكج مع خيارات التأكيد"""
+    order_id = context.user_data.get("processing_order_id", "غير معروف")
+    
+    preview_message = f"""📋 **معاينة رسالة الباكج**
+
+🆔 معرف الطلب: `{order_id}`
+📦 نوع الطلب: باكج
+
+━━━━━━━━━━━━━━━
+**الرسالة التي ستُرسل للمستخدم:**
+
+{package_message}
+━━━━━━━━━━━━━━━
+
+❓ هل تريد إرسال هذه الرسالة للمستخدم وإتمام الطلب؟"""
+    
+    keyboard = [
+        [InlineKeyboardButton("✅ إرسال وإتمام الطلب", callback_data="confirm_send_package")],
+        [InlineKeyboardButton("❌ لا", callback_data="decline_send_package")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        preview_message,
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+async def handle_package_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة تأكيد إرسال الباكج"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "confirm_send_package":
+        # إرسال الباكج للمستخدم وإتمام الطلب
+        package_message = context.user_data.get("package_message", "")
+        await send_package_to_user_from_confirmation(query, context, package_message)
+        return ConversationHandler.END
+        
+    elif query.data == "decline_send_package":
+        # عرض خيارات ماذا تريد أن تفعل
+        await show_package_action_choices(query, context)
+        return PACKAGE_ACTION_CHOICE
+    
+    return PACKAGE_CONFIRMATION
+
+async def show_package_action_choices(query, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """عرض خيارات العمل بعد رفض إرسال الباكج"""
+    message = """❓ **ماذا تريد أن تفعل؟**
+
+يمكنك اختيار أحد الخيارات التالية:"""
+    
+    keyboard = [
+        [InlineKeyboardButton("🔄 إعادة تصميم الباكج", callback_data="redesign_package")],
+        [InlineKeyboardButton("📋 مراجعة الطلب لاحقاً", callback_data="review_later")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        message,
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+async def handle_package_action_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة اختيار العمل بعد رفض الباكج"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "redesign_package":
+        # إعادة السؤال عن رسالة الباكج
+        keyboard = [
+            [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")],
+            [InlineKeyboardButton("🔙 العودة لاختيار الكمية", callback_data="back_to_quantity")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "📦 **إعادة تصميم الباكج**\n\nيرجى كتابة الرسالة المخصصة الجديدة التي تريد إرسالها للمستخدم:\n\n💡 يمكنك تضمين جميع تفاصيل البروكسي في رسالة واحدة.",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return PACKAGE_MESSAGE
+        
+    elif query.data == "review_later":
+        # الخروج من الحلقة دون تصنيف الطلب
+        order_id = context.user_data.get("processing_order_id", "غير معروف")
+        
+        await query.edit_message_text(
+            f"📋 **مراجعة لاحقاً**\n\n🆔 معرف الطلب: `{order_id}`\n\n✅ تم الخروج من معالجة الطلب\n❗ الطلب لا يزال في حالة معلق ويمكن معالجته لاحقاً\n\n💡 لن يتم تصنيف الطلب كناجح أو فاشل",
+            parse_mode="Markdown"
+        )
+        
+        # تنظيف البيانات المؤقتة وإعادة تفعيل كيبورد الأدمن
+        context.user_data.clear()
+        await restore_admin_keyboard(context, update.effective_chat.id, "🔧 لوحة الأدمن جاهزة للاستخدام")
+        
+        return ConversationHandler.END
+    
+    return PACKAGE_ACTION_CHOICE
+
+async def send_package_to_user_from_confirmation(query, context: ContextTypes.DEFAULT_TYPE, package_message: str) -> None:
+    """إرسال الباكج للمستخدم من صفحة التأكيد"""
+    order_id = context.user_data.get("processing_order_id", "")
+    
+    # الحصول على معلومات المستخدم والطلب
+    user_query = """
+        SELECT o.user_id, u.first_name, u.last_name 
+        FROM orders o 
+        JOIN users u ON o.user_id = u.user_id 
+        WHERE o.id = ?
+    """
+    user_result = db.execute_query(user_query, (order_id,))
+    
+    if user_result:
+        user_id, first_name, last_name = user_result[0]
+        user_full_name = f"{first_name} {last_name or ''}".strip()
+        
+        # إرسال الباكج للمستخدم
+        final_message = f"""✅ تم معالجة طلب {user_full_name}
+
+🆔 معرف الطلب: `{order_id}`
+📦 نوع الطلب: باكج
+
+━━━━━━━━━━━━━━━
+{package_message}
+━━━━━━━━━━━━━━━
+
+📅 التاريخ: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}"""
+        
+        await context.bot.send_message(user_id, final_message, parse_mode="Markdown")
+        
+        # تحديث حالة الطلب
+        db.execute_query(
+            "UPDATE orders SET status = 'completed', processed_at = CURRENT_TIMESTAMP, proxy_details = ?, truly_processed = TRUE WHERE id = ?",
+            (package_message, order_id)
+        )
+        
+        # رسالة تأكيد للأدمن
+        admin_message = f"""✅ **تم إرسال الباكج بنجاح وإتمام الطلب**
+
+👤 المستخدم: {user_full_name}
+🆔 معرف الطلب: `{order_id}`
+📦 نوع الطلب: باكج
+
+📝 الرسالة المرسلة:
+{package_message}
+
+🎉 تم تصنيف الطلب كناجح ونقله للطلبات المكتملة"""
+
+        await query.edit_message_text(admin_message, parse_mode="Markdown")
+        
+        # تنظيف البيانات المؤقتة وإعادة تفعيل كيبورد الأدمن
+        context.user_data.clear()
+        await restore_admin_keyboard(context, query.message.chat_id, "🔧 لوحة الأدمن جاهزة للاستخدام")
+
+async def handle_back_to_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة العودة لاختيار الكمية"""
+    query = update.callback_query
+    await query.answer()
+    
+    # إعادة عرض خيارات الكمية
+    keyboard = [
+        [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single")],
+        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package")],
+        [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        "1️⃣ اختر الكمية المطلوبة:",
+        reply_markup=reply_markup
+    )
+    
+    return PROCESS_ORDER
 
 async def send_package_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE, package_message: str) -> None:
     """إرسال الباكج المخصص للمستخدم"""
