@@ -3360,12 +3360,11 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
     
     order_id = context.user_data['processing_order_id']
     
-    # توليد رقم المعاملة وحفظها
+    # توليد رقم المعاملة وحفظها (بدون تحديث حالة الطلب)
     transaction_number = generate_transaction_number('proxy')
     save_transaction(order_id, transaction_number, 'proxy', 'completed')
     
-    # تحديث حالة الطلب إلى مكتمل
-    update_order_status(order_id, 'completed')
+    # ملاحظة: لا نحدث حالة الطلب هنا - فقط عند إرسال البروكسي فعلياً
     
     # إرسال رسالة للمستخدم أن الطلب قيد المعالجة
     order_query = "SELECT user_id, proxy_type FROM orders WHERE id = ?"
@@ -3469,10 +3468,10 @@ async def handle_payment_failed(update: Update, context: ContextTypes.DEFAULT_TY
     transaction_number = generate_transaction_number('proxy')
     save_transaction(order_id, transaction_number, 'proxy', 'failed')
     
-    # تحديث حالة الطلب إلى فاشل وتسجيله كمعالج فعلياً (الشرط الأول: ضغط زر "لا")
+    # تحديث حالة الطلب إلى فاشل وتسجيله كمعالج فعلياً (الحالة الوحيدة للفشل: ضغط زر "لا")
     update_order_status(order_id, 'failed')
     
-    # تسجيل الطلب كمعالج فعلياً لأن الأدمن أكد أن الدفع غير حقيقي
+    # تسجيل الطلب كمعالج فعلياً لأن الأدمن أكد أن الدفع غير حقيقي أو فاشل
     db.execute_query(
         "UPDATE orders SET truly_processed = TRUE WHERE id = ?",
         (order_id,)
@@ -5394,6 +5393,12 @@ async def handle_cancel_processing(update: Update, context: ContextTypes.DEFAULT
         )
         
         # تنظيف البيانات المؤقتة
+        # إعادة الطلب إلى حالة pending (لا نجاح ولا فشل)
+        db.execute_query(
+            "UPDATE orders SET status = 'pending' WHERE id = ?",
+            (order_id,)
+        )
+
         context.user_data.pop('processing_order_id', None)
         
         # إعادة تفعيل كيبورد الأدمن الرئيسي
@@ -5516,6 +5521,27 @@ async def handle_cancel_payment_proof(update: Update, context: ContextTypes.DEFA
     # للمستخدم العادي - إعادة توجيه للقائمة الرئيسية
     await start(update, context)
     
+    return ConversationHandler.END
+
+async def handle_order_completed_success(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إنهاء الطلب بنجاح وإنهاء ConversationHandler"""
+    query = update.callback_query
+    await query.answer()
+    
+    order_id = context.user_data.get('processing_order_id')
+    if order_id:
+        # تنظيف جميع البيانات المؤقتة
+        context.user_data.clear()
+    
+    await query.edit_message_text(
+        f"✅ تم إنهاء الطلب بنجاح!\n\n🆔 معرف الطلب: `{order_id}`\n\n📋 تم نقل الطلب إلى الطلبات المكتملة.\n\n🔄 يمكنك الآن معالجة طلبات أخرى.",
+        parse_mode='Markdown'
+    )
+    
+    # إعادة تفعيل كيبورد الأدمن الرئيسي
+    await restore_admin_keyboard(context, update.effective_chat.id)
+    
+    # إنهاء ConversationHandler بشكل صحيح
     return ConversationHandler.END
 
 async def handle_cancel_custom_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
