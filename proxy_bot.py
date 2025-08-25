@@ -2967,132 +2967,131 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         print(f"⚠️ خطأ في إجابة الاستعلام: {answer_error}")
     
     try:
-    
-    if query.data.startswith("country_") or query.data.startswith("state_") or query.data in ["manual_country", "manual_state"]:
-        await handle_country_selection(update, context)
-    elif query.data.startswith("payment_"):
-        await handle_payment_method_selection(update, context)
-    elif query.data.startswith("lang_"):
-        await handle_language_change(update, context)
-    elif query.data.startswith("quantity_"):
-        await handle_user_quantity_selection(update, context)
-    elif query.data == "cancel_user_proxy_request":
-        await handle_cancel_user_proxy_request(update, context)
+        if query.data.startswith("country_") or query.data.startswith("state_") or query.data in ["manual_country", "manual_state"]:
+            await handle_country_selection(update, context)
+        elif query.data.startswith("payment_"):
+            await handle_payment_method_selection(update, context)
+        elif query.data.startswith("lang_"):
+            await handle_language_change(update, context)
+        elif query.data.startswith("quantity_"):
+            await handle_user_quantity_selection(update, context)
+        elif query.data == "cancel_user_proxy_request":
+            await handle_cancel_user_proxy_request(update, context)
     # تم نقل معالجة process_ إلى process_order_conv_handler
     # تم نقل معالجة payment_success و payment_failed إلى process_order_conv_handler
     # تم نقل معالجة proxy_type_ إلى process_order_conv_handler
     # تم نقل معالجة admin_country_ و admin_state_ إلى process_order_conv_handler
-    elif query.data in ["manage_orders", "show_pending_orders", "admin_referrals", "user_lookup", "manage_money", "admin_settings", "reset_balance"]:
-        await handle_admin_menu_actions(update, context)
-    elif query.data == "withdraw_balance":
-        await handle_withdrawal_request(update, context)
-    elif query.data in ["confirm_logout", "cancel_logout"]:
-        await handle_logout_confirmation(update, context)
-    elif query.data == "back_to_admin":
-        await handle_back_to_admin(update, context)
-    elif query.data in ["send_custom_message", "no_custom_message"]:
-        await handle_custom_message_choice(update, context)
-    elif query.data == "send_proxy_confirm":
-        thank_message = context.user_data.get('admin_thank_message', '')
-        await send_proxy_to_user(update, context, thank_message)
-        
-        # إنشاء زر "تم إنهاء الطلب بنجاح"
-        keyboard = [[InlineKeyboardButton("✅ تم إنهاء الطلب بنجاح", callback_data="order_completed_success")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            "✅ تم إرسال البروكسي للمستخدم بنجاح!",
-            reply_markup=reply_markup
-        )
-    elif query.data == "cancel_proxy_send":
-        # إلغاء إرسال البروكسي وتنظيف البيانات
-        order_id = context.user_data.get('processing_order_id')
-        if order_id:
-            # تنظيف البيانات المؤقتة
-            admin_keys = [k for k in context.user_data.keys() if k.startswith('admin_')]
-            for key in admin_keys:
-                context.user_data.pop(key, None)
-            context.user_data.pop('processing_order_id', None)
-        
-        await query.edit_message_text(
-            f"❌ تم إلغاء إرسال البروكسي\n\n🆔 معرف الطلب: `{order_id}`\n\n📋 الطلب لا يزال في حالة معلق ويمكن معالجته لاحقاً.",
-            parse_mode='Markdown'
-        )
-        
-        # إعادة تفعيل كيبورد الأدمن الرئيسي
-        await restore_admin_keyboard(context, update.effective_chat.id)
-    elif query.data == "order_completed_success":
-        # تمت معالجة هذا الزر في ConversationHandler - تجاهل هنا
-        await query.answer("تم إنهاء الطلب بنجاح!")
-    elif query.data == "developer_info":
-        # إظهار نافذة منبثقة مع معلومات المطور
-        popup_text = context.user_data.get('popup_text', "🧑‍💻 Developed by Mohamad Zalaf")
-        await query.answer(text=popup_text, show_alert=True)
-    elif query.data == "cancel_manual_input":
-        # إلغاء الإدخال اليدوي والعودة للقائمة
-        context.user_data.pop('waiting_for', None)
-        user_id = update.effective_user.id
-        language = get_user_language(user_id)
-        await query.edit_message_text("❌ تم إلغاء العملية. يمكنك البدء من جديد.")
-        # إرسال القائمة الرئيسية مرة أخرى
-        await start(update, context)
-    elif query.data == "cancel_custom_message":
-        # إلغاء إدخال الرسالة المخصصة والعودة لقائمة الأدمن
-        context.user_data.clear()
-        await query.edit_message_text("❌ تم إلغاء إدخال الرسالة المخصصة.")
-        
-        # إعادة تفعيل كيبورد الأدمن الرئيسي
-        await restore_admin_keyboard(context, update.effective_chat.id)
-        
-        return ConversationHandler.END
-
-    elif query.data.startswith("quiet_"):
-        await handle_quiet_hours_selection(update, context)
-    elif query.data in ["confirm_clear_db", "cancel_clear_db"]:
-        await handle_database_clear(update, context)
-    elif query.data == "cancel_processing":
-        await handle_cancel_processing(update, context)
-    elif query.data.startswith("withdrawal_success_"):
-        await handle_withdrawal_success(update, context)
-    elif query.data.startswith("withdrawal_failed_"):
-        await handle_withdrawal_failed(update, context)
-    elif query.data == "cancel_user_lookup":
-        await handle_cancel_user_lookup(update, context)
-    elif query.data == "cancel_referral_amount":
-        await handle_cancel_referral_amount(update, context)
-    elif query.data == "cancel_order_inquiry":
-        await handle_cancel_order_inquiry(update, context)
-    elif query.data == "cancel_static_prices":
-        await handle_cancel_static_prices(update, context)
-    elif query.data == "cancel_socks_prices":
-        await handle_cancel_socks_prices(update, context)
-    elif query.data == "cancel_balance_reset":
-        await handle_cancel_balance_reset(update, context)
-    elif query.data == "cancel_payment_proof":
-        await handle_cancel_payment_proof(update, context)
-    elif query.data == "cancel_proxy_setup":
-        await handle_cancel_proxy_setup(update, context)
-    elif query.data.startswith("show_more_users_"):
-        offset = int(query.data.replace("show_more_users_", ""))
-        await query.answer()
-        await show_user_statistics(update, context, offset)
-
-    else:
-        # معالجة الأزرار غير المعروفة - تسجيل وإعادة توجيه مناسب
-        print(f"⚠️ إجراء غير معروف من المستخدم {update.effective_user.id}: {query.data}")
-        try:
-            await query.answer("❌ إجراء غير معروف")
-        except:
-            pass
-        
-        # التحقق من نوع المستخدم وإعادة توجيهه للقائمة المناسبة
-        user_id = update.effective_user.id
-        if context.user_data.get('is_admin') or user_id == ADMIN_CHAT_ID:
-            # للأدمن - إعادة تفعيل كيبورد الأدمن
-            await restore_admin_keyboard(context, update.effective_chat.id, "⚠️ تم اكتشاف إجراء غير معروف. عودة للقائمة الرئيسية...")
-        else:
-            # للمستخدم العادي - العودة للقائمة الرئيسية
+        elif query.data in ["manage_orders", "show_pending_orders", "admin_referrals", "user_lookup", "manage_money", "admin_settings", "reset_balance"]:
+            await handle_admin_menu_actions(update, context)
+        elif query.data == "withdraw_balance":
+            await handle_withdrawal_request(update, context)
+        elif query.data in ["confirm_logout", "cancel_logout"]:
+            await handle_logout_confirmation(update, context)
+        elif query.data == "back_to_admin":
+            await handle_back_to_admin(update, context)
+        elif query.data in ["send_custom_message", "no_custom_message"]:
+            await handle_custom_message_choice(update, context)
+        elif query.data == "send_proxy_confirm":
+            thank_message = context.user_data.get('admin_thank_message', '')
+            await send_proxy_to_user(update, context, thank_message)
+            
+            # إنشاء زر "تم إنهاء الطلب بنجاح"
+            keyboard = [[InlineKeyboardButton("✅ تم إنهاء الطلب بنجاح", callback_data="order_completed_success")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                "✅ تم إرسال البروكسي للمستخدم بنجاح!",
+                reply_markup=reply_markup
+            )
+        elif query.data == "cancel_proxy_send":
+            # إلغاء إرسال البروكسي وتنظيف البيانات
+            order_id = context.user_data.get('processing_order_id')
+            if order_id:
+                # تنظيف البيانات المؤقتة
+                admin_keys = [k for k in context.user_data.keys() if k.startswith('admin_')]
+                for key in admin_keys:
+                    context.user_data.pop(key, None)
+                context.user_data.pop('processing_order_id', None)
+            
+            await query.edit_message_text(
+                f"❌ تم إلغاء إرسال البروكسي\n\n🆔 معرف الطلب: `{order_id}`\n\n📋 الطلب لا يزال في حالة معلق ويمكن معالجته لاحقاً.",
+                parse_mode='Markdown'
+            )
+            
+            # إعادة تفعيل كيبورد الأدمن الرئيسي
+            await restore_admin_keyboard(context, update.effective_chat.id)
+        elif query.data == "order_completed_success":
+            # تمت معالجة هذا الزر في ConversationHandler - تجاهل هنا
+            await query.answer("تم إنهاء الطلب بنجاح!")
+        elif query.data == "developer_info":
+            # إظهار نافذة منبثقة مع معلومات المطور
+            popup_text = context.user_data.get('popup_text', "🧑‍💻 Developed by Mohamad Zalaf")
+            await query.answer(text=popup_text, show_alert=True)
+        elif query.data == "cancel_manual_input":
+            # إلغاء الإدخال اليدوي والعودة للقائمة
+            context.user_data.pop('waiting_for', None)
+            user_id = update.effective_user.id
+            language = get_user_language(user_id)
+            await query.edit_message_text("❌ تم إلغاء العملية. يمكنك البدء من جديد.")
+            # إرسال القائمة الرئيسية مرة أخرى
             await start(update, context)
+        elif query.data == "cancel_custom_message":
+            # إلغاء إدخال الرسالة المخصصة والعودة لقائمة الأدمن
+            context.user_data.clear()
+            await query.edit_message_text("❌ تم إلغاء إدخال الرسالة المخصصة.")
+            
+            # إعادة تفعيل كيبورد الأدمن الرئيسي
+            await restore_admin_keyboard(context, update.effective_chat.id)
+            
+            return ConversationHandler.END
+
+        elif query.data.startswith("quiet_"):
+            await handle_quiet_hours_selection(update, context)
+        elif query.data in ["confirm_clear_db", "cancel_clear_db"]:
+            await handle_database_clear(update, context)
+        elif query.data == "cancel_processing":
+            await handle_cancel_processing(update, context)
+        elif query.data.startswith("withdrawal_success_"):
+            await handle_withdrawal_success(update, context)
+        elif query.data.startswith("withdrawal_failed_"):
+            await handle_withdrawal_failed(update, context)
+        elif query.data == "cancel_user_lookup":
+            await handle_cancel_user_lookup(update, context)
+        elif query.data == "cancel_referral_amount":
+            await handle_cancel_referral_amount(update, context)
+        elif query.data == "cancel_order_inquiry":
+            await handle_cancel_order_inquiry(update, context)
+        elif query.data == "cancel_static_prices":
+            await handle_cancel_static_prices(update, context)
+        elif query.data == "cancel_socks_prices":
+            await handle_cancel_socks_prices(update, context)
+        elif query.data == "cancel_balance_reset":
+            await handle_cancel_balance_reset(update, context)
+        elif query.data == "cancel_payment_proof":
+            await handle_cancel_payment_proof(update, context)
+        elif query.data == "cancel_proxy_setup":
+            await handle_cancel_proxy_setup(update, context)
+        elif query.data.startswith("show_more_users_"):
+            offset = int(query.data.replace("show_more_users_", ""))
+            await query.answer()
+            await show_user_statistics(update, context, offset)
+
+        else:
+            # معالجة الأزرار غير المعروفة - تسجيل وإعادة توجيه مناسب
+            print(f"⚠️ إجراء غير معروف من المستخدم {update.effective_user.id}: {query.data}")
+            try:
+                await query.answer("❌ إجراء غير معروف")
+            except:
+                pass
+            
+            # التحقق من نوع المستخدم وإعادة توجيهه للقائمة المناسبة
+            user_id = update.effective_user.id
+            if context.user_data.get('is_admin') or user_id == ADMIN_CHAT_ID:
+                # للأدمن - إعادة تفعيل كيبورد الأدمن
+                await restore_admin_keyboard(context, update.effective_chat.id, "⚠️ تم اكتشاف إجراء غير معروف. عودة للقائمة الرئيسية...")
+            else:
+                # للمستخدم العادي - العودة للقائمة الرئيسية
+                await start(update, context)
             
     except Exception as e:
         print(f"❌ خطأ في معالجة callback query من المستخدم {update.effective_user.id}: {e}")
