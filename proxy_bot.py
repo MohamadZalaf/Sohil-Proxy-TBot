@@ -6895,7 +6895,7 @@ async def handle_broadcast_message(update: Update, context: ContextTypes.DEFAULT
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(preview_text, reply_markup=reply_markup, parse_mode='Markdown')
-        return BROADCAST_CONFIRM,
+        return BROADCAST_CONFIRM
 
     
     elif broadcast_type == 'custom':
@@ -6986,17 +6986,27 @@ async def handle_broadcast_custom_message(update: Update, context: ContextTypes.
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(preview_text, reply_markup=reply_markup, parse_mode='Markdown')
-    return BROADCAST_CONFIRM,
+    return BROADCAST_CONFIRM
 
 
 async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة تأكيد أو إلغاء البث"""
+    import asyncio
+    
     query = update.callback_query
     await query.answer()
+    
+
     
     if query.data == "confirm_broadcast":
         broadcast_type = context.user_data.get('broadcast_type', 'all')
         message_text = context.user_data.get('broadcast_message', '')
+        
+        # التحقق من وجود الرسالة
+        if not message_text:
+            await query.edit_message_text("❌ خطأ: لم يتم العثور على رسالة البث. يرجى المحاولة مرة أخرى.")
+            await restore_admin_keyboard(context, update.effective_chat.id)
+            return ConversationHandler.END
         
         await query.edit_message_text("📤 جاري إرسال الإعلان...")
         
@@ -7011,9 +7021,11 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
                 try:
                     await context.bot.send_message(user_id, f"📢 **إعلان هام**\n\n{message_text}", parse_mode='Markdown')
                     success_count += 1
+                    # توقف قصير لتجنب حدود التيليجرام
+                    await asyncio.sleep(0.05)
                 except Exception as e:
                     failed_count += 1
-                    logger.error(f"Failed to send broadcast to {user_id}: {e}")
+                    print(f"فشل إرسال البث للمستخدم {user_id}: {e}")
         else:
             # إرسال للمستخدمين المخصصين
             valid_users = context.user_data.get('broadcast_valid_users', [])
@@ -7023,7 +7035,7 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
                     success_count += 1
                 except Exception as e:
                     failed_count += 1
-                    logger.error(f"Failed to send broadcast to {user_id}: {e}")
+                    print(f"فشل إرسال البث للمستخدم {user_id}: {e}")
         
         result_message = f"""✅ **تم إرسال الإعلان**
 
