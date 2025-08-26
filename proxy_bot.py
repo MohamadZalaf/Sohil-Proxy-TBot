@@ -4216,7 +4216,9 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
             
             keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("2️⃣ يرجى إدخال عنوان البروكسي:", reply_markup=reply_markup)
+            message = await query.edit_message_text("2️⃣ يرجى إدخال عنوان البروكسي:", reply_markup=reply_markup)
+            # حفظ معرف الرسالة الحالية للتحديث لاحقاً
+            context.user_data['last_cancel_message_id'] = message.message_id
             return ENTER_PROXY_ADDRESS
     
     else:
@@ -4245,7 +4247,7 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
             if not validate_ip_address(text):
                 keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                await update.message.reply_text(
+                message = await update.message.reply_text(
                     "❌ عنوان IP غير صحيح!\n\n"
                     "✅ الشكل المطلوب: xxx.xxx.xxx.xxx\n"
                     "✅ مثال صحيح: 192.168.1.1 أو 62.1.2.1\n"
@@ -4253,13 +4255,31 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
                     "يرجى إعادة إدخال عنوان IP:",
                     reply_markup=reply_markup
                 )
+                # حفظ معرف رسالة الخطأ أيضاً
+                context.user_data['last_cancel_message_id'] = message.message_id
                 return ENTER_PROXY_ADDRESS
             
             context.user_data['admin_proxy_address'] = text
             context.user_data['admin_input_state'] = ENTER_PROXY_PORT
+            
+            # تحديث الرسالة السابقة لإزالة زر الإلغاء
+            try:
+                last_message_id = context.user_data.get('last_cancel_message_id')
+                if last_message_id:
+                    await context.bot.edit_message_text(
+                        chat_id=update.effective_chat.id,
+                        message_id=last_message_id,
+                        text="2️⃣ ✅ تم حفظ عنوان البروكسي: " + text
+                    )
+            except:
+                # في حالة فشل التحديث، إرسال رسالة تأكيد منفصلة
+                await update.message.reply_text("✅ تم حفظ عنوان البروكسي: " + text)
+            
             keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text("3️⃣ يرجى إدخال البورت:", reply_markup=reply_markup)
+            message = await update.message.reply_text("3️⃣ يرجى إدخال البورت:", reply_markup=reply_markup)
+            # حفظ معرف الرسالة الجديدة
+            context.user_data['last_cancel_message_id'] = message.message_id
             return ENTER_PROXY_PORT
         
         elif current_state == ENTER_PROXY_PORT:
@@ -4267,7 +4287,7 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
             if not validate_port(text):
                 keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                await update.message.reply_text(
+                message = await update.message.reply_text(
                     "❌ رقم البورت غير صحيح!\n\n"
                     "✅ يجب أن يكون رقماً فقط\n"
                     "✅ حد أقصى 6 أرقام\n"
@@ -4275,9 +4295,24 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
                     "يرجى إعادة إدخال رقم البورت:",
                     reply_markup=reply_markup
                 )
+                # حفظ معرف رسالة الخطأ أيضاً
+                context.user_data['last_cancel_message_id'] = message.message_id
                 return ENTER_PROXY_PORT
             
             context.user_data['admin_proxy_port'] = text
+            
+            # تحديث الرسالة السابقة لإزالة زر الإلغاء
+            try:
+                last_message_id = context.user_data.get('last_cancel_message_id')
+                if last_message_id:
+                    await context.bot.edit_message_text(
+                        chat_id=update.effective_chat.id,
+                        message_id=last_message_id,
+                        text="3️⃣ ✅ تم حفظ البورت: " + text
+                    )
+            except:
+                # في حالة فشل التحديث، إرسال رسالة تأكيد منفصلة
+                await update.message.reply_text("✅ تم حفظ البورت: " + text)
             
             # تحديد نوع البروكسي المختار لعرض الدول المناسبة
             proxy_type = context.user_data.get('admin_proxy_type', 'static')
@@ -4295,39 +4330,109 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
             # معالجة إدخال الدولة يدوياً
             context.user_data['admin_proxy_country'] = text
             context.user_data['admin_input_state'] = ENTER_STATE
+            
+            # تأكيد حفظ الدولة
+            try:
+                await update.message.reply_text("✅ تم حفظ الدولة: " + text)
+            except:
+                pass
+            
             keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text("5️⃣ يرجى إدخال اسم الولاية:", reply_markup=reply_markup)
+            message = await update.message.reply_text("5️⃣ يرجى إدخال اسم الولاية:", reply_markup=reply_markup)
+            # حفظ معرف الرسالة الجديدة
+            context.user_data['last_cancel_message_id'] = message.message_id
             return ENTER_STATE
         
         elif current_state == ENTER_STATE:
             # معالجة إدخال الولاية يدوياً
             context.user_data['admin_proxy_state'] = text
             context.user_data['admin_input_state'] = ENTER_USERNAME
+            
+            # تحديث الرسالة السابقة لإزالة زر الإلغاء
+            try:
+                last_message_id = context.user_data.get('last_cancel_message_id')
+                if last_message_id:
+                    await context.bot.edit_message_text(
+                        chat_id=update.effective_chat.id,
+                        message_id=last_message_id,
+                        text="5️⃣ ✅ تم حفظ الولاية: " + text
+                    )
+            except:
+                # في حالة فشل التحديث، إرسال رسالة تأكيد منفصلة
+                await update.message.reply_text("✅ تم حفظ الولاية: " + text)
+            
             keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text("6️⃣ يرجى إدخال اسم المستخدم للبروكسي:", reply_markup=reply_markup)
+            message = await update.message.reply_text("6️⃣ يرجى إدخال اسم المستخدم للبروكسي:", reply_markup=reply_markup)
+            # حفظ معرف الرسالة الجديدة
+            context.user_data['last_cancel_message_id'] = message.message_id
             return ENTER_USERNAME
         
         elif current_state == ENTER_USERNAME:
             context.user_data['admin_proxy_username'] = text
             context.user_data['admin_input_state'] = ENTER_PASSWORD
+            
+            # تحديث الرسالة السابقة لإزالة زر الإلغاء
+            try:
+                last_message_id = context.user_data.get('last_cancel_message_id')
+                if last_message_id:
+                    await context.bot.edit_message_text(
+                        chat_id=update.effective_chat.id,
+                        message_id=last_message_id,
+                        text="6️⃣ ✅ تم حفظ اسم المستخدم: " + text
+                    )
+            except:
+                # في حالة فشل التحديث، إرسال رسالة تأكيد منفصلة
+                await update.message.reply_text("✅ تم حفظ اسم المستخدم: " + text)
+            
             keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text("7️⃣ يرجى إدخال كلمة المرور:", reply_markup=reply_markup)
+            message = await update.message.reply_text("7️⃣ يرجى إدخال كلمة المرور:", reply_markup=reply_markup)
+            # حفظ معرف الرسالة الجديدة
+            context.user_data['last_cancel_message_id'] = message.message_id
             return ENTER_PASSWORD
         
         elif current_state == ENTER_PASSWORD:
             context.user_data['admin_proxy_password'] = text
             context.user_data['admin_input_state'] = ENTER_THANK_MESSAGE
+            
+            # تحديث الرسالة السابقة لإزالة زر الإلغاء
+            try:
+                last_message_id = context.user_data.get('last_cancel_message_id')
+                if last_message_id:
+                    await context.bot.edit_message_text(
+                        chat_id=update.effective_chat.id,
+                        message_id=last_message_id,
+                        text="7️⃣ ✅ تم حفظ كلمة المرور بنجاح"
+                    )
+            except:
+                # في حالة فشل التحديث، إرسال رسالة تأكيد منفصلة
+                await update.message.reply_text("✅ تم حفظ كلمة المرور بنجاح")
+            
             keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_proxy_setup")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text("8️⃣ يرجى إدخال رسالة شكر قصيرة:", reply_markup=reply_markup)
+            message = await update.message.reply_text("8️⃣ يرجى إدخال رسالة شكر قصيرة:", reply_markup=reply_markup)
+            # حفظ معرف الرسالة الجديدة
+            context.user_data['last_cancel_message_id'] = message.message_id
             return ENTER_THANK_MESSAGE
         
         elif current_state == ENTER_THANK_MESSAGE:
             thank_message = text
             context.user_data['admin_thank_message'] = thank_message
+            
+            # تحديث الرسالة السابقة لإزالة زر الإلغاء
+            try:
+                last_message_id = context.user_data.get('last_cancel_message_id')
+                if last_message_id:
+                    await context.bot.edit_message_text(
+                        chat_id=update.effective_chat.id,
+                        message_id=last_message_id,
+                        text="8️⃣ ✅ تم حفظ رسالة الشكر بنجاح"
+                    )
+            except:
+                # في حالة فشل التحديث، إرسال رسالة تأكيد منفصلة
+                await update.message.reply_text("✅ تم حفظ رسالة الشكر بنجاح")
             
             # عرض المعلومات للمراجعة قبل الإرسال
             await show_proxy_preview(update, context)
