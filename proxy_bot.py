@@ -3264,7 +3264,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         # تم نقل معالجة payment_success و payment_failed إلى process_order_conv_handler
         # تم نقل معالجة proxy_type_ إلى process_order_conv_handler
         # تم نقل معالجة admin_country_ و admin_state_ إلى process_order_conv_handler
-        elif query.data in ["manage_orders", "show_pending_orders", "admin_referrals", "user_lookup", "manage_money", "admin_settings", "reset_balance"]:
+        elif query.data in ["admin_referrals", "user_lookup", "manage_money", "admin_settings", "reset_balance"]:
             await handle_admin_menu_actions(update, context)
         elif query.data == "withdraw_balance":
             await handle_withdrawal_request(update, context)
@@ -4162,30 +4162,7 @@ async def handle_admin_menu_actions(update: Update, context: ContextTypes.DEFAUL
     query = update.callback_query
     await query.answer()
     
-    if query.data == "manage_orders":
-        keyboard = [
-            [InlineKeyboardButton("الطلبات المعلقة", callback_data="show_pending_orders")],
-            [InlineKeyboardButton("حذف الطلبات الفاشلة", callback_data="delete_failed_orders")],
-            [InlineKeyboardButton("حذف الطلبات المكتملة", callback_data="delete_completed_orders")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("إدارة الطلبات:", reply_markup=reply_markup)
-    
-    elif query.data == "show_pending_orders":
-        pending_orders = db.get_pending_orders()
-        if not pending_orders:
-            await query.edit_message_text("لا توجد طلبات معلقة حالياً.")
-            return
-        
-        message = "الطلبات المعلقة:\n\n"
-        for order in pending_orders[:10]:  # عرض أول 10 طلبات
-            message += f"🔸 معرف: {order[0]}\n"
-            message += f"   نوع: {order[2]}\n"
-            message += f"   الدولة: {order[3]}\n\n"
-        
-        await query.edit_message_text(message)
-    
-    elif query.data == "admin_referrals":
+    if query.data == "admin_referrals":
         await show_admin_referrals(query, context)
     
     elif query.data == "user_lookup":
@@ -6978,19 +6955,46 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
         
     elif query.data == "quantity_package":
         context.user_data["quantity"] = "باكج"
-        # طلب رسالة مخصصة للباكج مع أزرار الإلغاء
-        keyboard = [
-            [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")],
+        
+        # إرسال رسالة منفصلة لوضع الباكج مع زر إلغاء المعالجة
+        package_keyboard = [
+            [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")]
+        ]
+        package_reply_markup = InlineKeyboardMarkup(package_keyboard)
+        
+        package_instruction_message = f"""📦 **وضع الباكج**
+
+🆔 معرف الطلب: `{context.user_data['processing_order_id']}`
+📝 نوع الطلب: باكج
+
+━━━━━━━━━━━━━━━
+يرجى كتابة الرسالة المخصصة التي تريد إرسالها للمستخدم:
+
+💡 يمكنك تضمين جميع تفاصيل البروكسي في رسالة واحدة
+💡 الرسالة ستُرسل كما تكتبها بدون تعديل
+💡 يمكنك استخدام أي تنسيق تريده"""
+        
+        # إرسال رسالة منفصلة للباكج
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=package_instruction_message,
+            reply_markup=package_reply_markup,
+            parse_mode="Markdown"
+        )
+        
+        # تحديث الرسالة الأصلية لإبقاء زر العودة لاختيار الكمية
+        original_keyboard = [
             [InlineKeyboardButton("🔙 العودة لاختيار الكمية", callback_data="back_to_quantity")]
         ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        # الحفاظ على المعلومات الأصلية مع إضافة تعليمات الباكج
+        original_reply_markup = InlineKeyboardMarkup(original_keyboard)
+        
+        # الحفاظ على المعلومات الأصلية مع تحديث الحالة
         original_message = context.user_data.get('original_order_message', '')
-        combined_message = f"{original_message}\n\n━━━━━━━━━━━━━━━\n✅ تم قبول الدفع للطلب\n\n🆔 معرف الطلب: `{context.user_data['processing_order_id']}`\n📝 الطلب: باكج\n\n📋 الطلب جاهز للمعالجة والإرسال للمستخدم.\n\n━━━━━━━━━━━━━━━\n📦 **وضع الباكج**\n\nيرجى كتابة الرسالة المخصصة التي تريد إرسالها للمستخدم بدلاً من خطوات إدخال البروكسي:\n\n💡 يمكنك تضمين جميع تفاصيل البروكسي في رسالة واحدة."
+        updated_message = f"{original_message}\n\n━━━━━━━━━━━━━━━\n✅ تم قبول الدفع للطلب\n📝 الطلب: باكج\n📋 الطلب جاهز للمعالجة والإرسال للمستخدم"
         
         await query.edit_message_text(
-            combined_message,
-            reply_markup=reply_markup,
+            updated_message,
+            reply_markup=original_reply_markup,
             parse_mode="Markdown"
         )
         return PACKAGE_MESSAGE
@@ -7078,18 +7082,34 @@ async def handle_package_action_choice(update: Update, context: ContextTypes.DEF
     await query.answer()
     
     if query.data == "redesign_package":
-        # إعادة السؤال عن رسالة الباكج
-        keyboard = [
-            [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")],
-            [InlineKeyboardButton("🔙 العودة لاختيار الكمية", callback_data="back_to_quantity")]
+        # إرسال رسالة منفصلة لإعادة تصميم الباكج
+        package_keyboard = [
+            [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")]
         ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        package_reply_markup = InlineKeyboardMarkup(package_keyboard)
         
-        await query.edit_message_text(
-            "📦 **إعادة تصميم الباكج**\n\nيرجى كتابة الرسالة المخصصة الجديدة التي تريد إرسالها للمستخدم:\n\n💡 يمكنك تضمين جميع تفاصيل البروكسي في رسالة واحدة.",
-            reply_markup=reply_markup,
+        redesign_message = f"""📦 **إعادة تصميم الباكج**
+
+🆔 معرف الطلب: `{context.user_data['processing_order_id']}`
+
+━━━━━━━━━━━━━━━
+يرجى كتابة الرسالة المخصصة الجديدة التي تريد إرسالها للمستخدم:
+
+💡 يمكنك تضمين جميع تفاصيل البروكسي في رسالة واحدة
+💡 الرسالة ستُرسل كما تكتبها بدون تعديل
+💡 يمكنك استخدام أي تنسيق تريده"""
+        
+        # إرسال رسالة منفصلة لإعادة التصميم
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=redesign_message,
+            reply_markup=package_reply_markup,
             parse_mode="Markdown"
         )
+        
+        # حذف رسالة المعاينة السابقة
+        await query.delete_message()
+        
         return PACKAGE_MESSAGE
         
     elif query.data == "review_later":
