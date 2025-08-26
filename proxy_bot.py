@@ -3858,7 +3858,7 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
         parse_mode='Markdown'
     )
     
-    return ENTER_PROXY_TYPE
+    return PROCESS_ORDER
 
 async def handle_withdrawal_approval(query, context: ContextTypes.DEFAULT_TYPE, order_id: str, user_id: int) -> None:
     """معالجة طلب السحب مع خيارات النجاح/الفشل"""
