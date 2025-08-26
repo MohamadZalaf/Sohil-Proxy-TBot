@@ -1667,6 +1667,14 @@ def get_user_language(user_id: int) -> str:
     user = db.get_user(user_id)
     return user[4] if user else 'ar'  # اللغة في العمود الخامس
 
+def get_referral_amount() -> float:
+    """الحصول على قيمة الإحالة من الإعدادات"""
+    try:
+        result = db.execute_query("SELECT value FROM settings WHERE key = 'referral_amount'")
+        return float(result[0][0]) if result else 0.1
+    except:
+        return 0.1  # قيمة افتراضية
+
 async def restore_admin_keyboard(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message: str = "🔧 لوحة الأدمن جاهزة"):
     """إعادة تفعيل كيبورد الأدمن الرئيسي"""
     admin_keyboard = [
@@ -1985,7 +1993,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             await context.bot.send_message(
                 referred_by,
-                f"🎉 تهانينا! انضم مستخدم جديد عبر رابط الإحالة الخاص بك.\n💰 سيتم إضافة `0.1$` إلى رصيدك عندما تقوم بإتمام عملية شراء ناجحة!",
+                f"🎉 تهانينا! انضم مستخدم جديد عبر رابط الإحالة الخاص بك.\n💰 سيتم إضافة `{get_referral_amount()}$` إلى رصيدك عندما تقوم بإتمام عملية شراء ناجحة!",
                 parse_mode='Markdown'
             )
         except:
@@ -2415,8 +2423,8 @@ async def check_and_add_referral_bonus(context: ContextTypes.DEFAULT_TYPE, user_
             previous_orders = db.execute_query(previous_orders_query, (user_id,))
             
             if previous_orders and previous_orders[0][0] == 1:  # أول عملية شراء
-                # إضافة 0.1$ لرصيد المحيل
-                referral_bonus = 0.1
+                # إضافة قيمة الإحالة لرصيد المحيل
+                referral_bonus = get_referral_amount()
                 db.execute_query(
                     "UPDATE users SET referral_balance = referral_balance + ? WHERE user_id = ?",
                     (referral_bonus, referrer_id)
@@ -2509,7 +2517,7 @@ async def send_referral_notification(context: ContextTypes.DEFAULT_TYPE, referre
 🆔 معرف المحيل: `{referrer[0]}`
 
 ━━━━━━━━━━━━━━━
-💰 سيتم إضافة `0.1$` لرصيد المحيل عندما يقوم المُحال بعملية شراء
+💰 سيتم إضافة `{get_referral_amount()}$` لرصيد المحيل عندما يقوم المُحال بعملية شراء
 📅 تاريخ الانضمام: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
 
         if ADMIN_CHAT_ID:
@@ -2565,7 +2573,7 @@ async def send_order_copy_to_user(update: Update, context: ContextTypes.DEFAULT_
         if language == 'ar':
             message = f"""📋 نسخة من طلبك
             
-👤 الاسم: `{order[12]} {order[13] or ''}`
+👤 الاسم: `{order[14]} {order[15] or ''}`
 🆔 معرف المستخدم: `{order[1]}`
 
 ━━━━━━━━━━━━━━━
@@ -2589,7 +2597,7 @@ async def send_order_copy_to_user(update: Update, context: ContextTypes.DEFAULT_
         else:
             message = f"""📋 Copy of Your Order
             
-👤 Name: `{order[12]} {order[13] or ''}`
+👤 Name: `{order[14]} {order[15] or ''}`
 🆔 User ID: `{order[1]}`
 
 ━━━━━━━━━━━━━━━
@@ -2652,8 +2660,8 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
         
         message = f"""🔔 طلب جديد
 
-👤 الاسم: `{order[12]} {order[13] or ''}`
-📱 اسم المستخدم: @{order[14] or 'غير محدد'}
+👤 الاسم: `{order[14]} {order[15] or ''}`
+📱 اسم المستخدم: @{order[16] or 'غير محدد'}
 🆔 معرف المستخدم: `{order[1]}`
 
 ━━━━━━━━━━━━━━━
@@ -2809,7 +2817,7 @@ async def handle_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 👥 عدد إحالاتك: `{referral_count}`
 
 ━━━━━━━━━━━━━━━
-شارك رابطك واحصل على `0.1$` لكل إحالة!
+شارك رابطك واحصل على `{get_referral_amount()}$` لكل إحالة!
 الحد الأدنى للسحب: `1.0$`"""
     else:
         message = f"""👥 Referral System
@@ -2821,7 +2829,7 @@ async def handle_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 👥 Your referrals: `{referral_count}`
 
 ━━━━━━━━━━━━━━━
-Share your link and earn `0.1$` per referral!
+Share your link and earn `{get_referral_amount()}$` per referral!
 Minimum withdrawal: `1.0$`"""
     
     keyboard = [
@@ -3835,7 +3843,8 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
     # إنشاء رسالة جديدة بدلاً من تعديل الرسالة الأصلية
     keyboard = [
         [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single")],
-        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package")]
+        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package")],
+        [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -5137,8 +5146,8 @@ async def resend_order_notification(update: Update, context: ContextTypes.DEFAUL
     
     message = f"""🔔 طلب معاد إرساله
 
-👤 الاسم: `{order[12]} {order[13] or ''}`
-📱 اسم المستخدم: @{order[14] or 'غير محدد'}
+👤 الاسم: `{order[14]} {order[15] or ''}`
+📱 اسم المستخدم: @{order[16] or 'غير محدد'}
 🆔 معرف المستخدم: `{order[1]}`
 
 ━━━━━━━━━━━━━━━
@@ -6782,9 +6791,14 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
+        # الحفاظ على المعلومات الأصلية مع إضافة سؤال نوع البروكسي
+        original_message = context.user_data.get('original_order_message', '')
+        combined_message = f"{original_message}\n\n━━━━━━━━━━━━━━━\n✅ تم قبول الدفع للطلب\n\n🆔 معرف الطلب: `{context.user_data['processing_order_id']}`\n📝 الطلب: بروكسي ستاتيك\n\n📋 الطلب جاهز للمعالجة والإرسال للمستخدم.\n\n━━━━━━━━━━━━━━━\n2️⃣ اختر نوع البروكسي:"
+        
         await query.edit_message_text(
-            "2️⃣ اختر نوع البروكسي:",
-            reply_markup=reply_markup
+            combined_message,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
         )
         
         return PROCESS_ORDER
@@ -6797,8 +6811,12 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
             [InlineKeyboardButton("🔙 العودة لاختيار الكمية", callback_data="back_to_quantity")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
+        # الحفاظ على المعلومات الأصلية مع إضافة تعليمات الباكج
+        original_message = context.user_data.get('original_order_message', '')
+        combined_message = f"{original_message}\n\n━━━━━━━━━━━━━━━\n✅ تم قبول الدفع للطلب\n\n🆔 معرف الطلب: `{context.user_data['processing_order_id']}`\n📝 الطلب: باكج\n\n📋 الطلب جاهز للمعالجة والإرسال للمستخدم.\n\n━━━━━━━━━━━━━━━\n📦 **وضع الباكج**\n\nيرجى كتابة الرسالة المخصصة التي تريد إرسالها للمستخدم بدلاً من خطوات إدخال البروكسي:\n\n💡 يمكنك تضمين جميع تفاصيل البروكسي في رسالة واحدة."
+        
         await query.edit_message_text(
-            "📦 **وضع الباكج**\n\nيرجى كتابة الرسالة المخصصة التي تريد إرسالها للمستخدم بدلاً من خطوات إدخال البروكسي:\n\n💡 يمكنك تضمين جميع تفاصيل البروكسي في رسالة واحدة.",
+            combined_message,
             reply_markup=reply_markup,
             parse_mode="Markdown"
         )
