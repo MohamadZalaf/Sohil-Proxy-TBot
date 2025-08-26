@@ -1364,13 +1364,13 @@ class DatabaseManager:
         query = "UPDATE users SET language = ? WHERE user_id = ?"
         self.execute_query(query, (language, user_id))
     
-    def create_order(self, order_id: str, user_id: int, proxy_type: str, country: str, state: str, payment_method: str, payment_amount: float = 0.0):
+    def create_order(self, order_id: str, user_id: int, proxy_type: str, country: str, state: str, payment_method: str, payment_amount: float = 0.0, quantity: str = "واحد"):
         """إنشاء طلب جديد"""
         query = '''
-            INSERT INTO orders (id, user_id, proxy_type, country, state, payment_method, payment_amount)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO orders (id, user_id, proxy_type, country, state, payment_method, payment_amount, quantity)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         '''
-        self.execute_query(query, (order_id, user_id, proxy_type, country, state, payment_method, payment_amount))
+        self.execute_query(query, (order_id, user_id, proxy_type, country, state, payment_method, payment_amount, quantity))
     
     def update_order_payment_proof(self, order_id: str, payment_proof: str):
         """تحديث إثبات الدفع للطلب"""
