@@ -2497,6 +2497,189 @@ async def check_and_add_referral_bonus(context: ContextTypes.DEFAULT_TYPE, user_
     except Exception as e:
         print(f"خطأ في معالجة رصيد الإحالة: {e}")
 
+async def broadcast_referral_update(context: ContextTypes.DEFAULT_TYPE, new_amount: float) -> None:
+    """إرسال إشعار جماعي للمستخدمين بتحديث قيمة الإحالة"""
+    try:
+        # الحصول على جميع المستخدمين من قاعدة البيانات
+        all_users_query = "SELECT user_id, language FROM users"
+        users = db.execute_query(all_users_query)
+        
+        sent_count = 0
+        failed_count = 0
+        
+        for user in users:
+            user_id, language = user
+            language = language or 'ar'  # افتراضي للعربية
+            
+            try:
+                # تحديد الرسالة حسب اللغة
+                if language == 'ar':
+                    message = f"""📢 إشعار هام - تحديث قيمة الإحالة
+
+💰 تم تحديث قيمة الإحالة الواحدة إلى: `{new_amount}$`
+
+🎉 شارك رابط الإحالة الخاص بك واحصل على `{new_amount}$` لكل عضو جديد ينضم عبر رابطك!
+
+👥 يمكنك مراجعة رصيدك من قسم "إحالاتي"
+
+━━━━━━━━━━━━━━━
+🔗 رابط الإحالة الخاص بك:
+`https://t.me/{(await context.bot.get_me()).username}?start={user_id}`"""
+                else:
+                    message = f"""📢 Important Notice - Referral Value Update
+
+💰 Referral value updated to: `{new_amount}$`
+
+🎉 Share your referral link and earn `{new_amount}$` for each new member who joins via your link!
+
+👥 You can check your balance in "My Referrals" section
+
+━━━━━━━━━━━━━━━
+🔗 Your referral link:
+`https://t.me/{(await context.bot.get_me()).username}?start={user_id}`"""
+                
+                await context.bot.send_message(
+                    user_id,
+                    message,
+                    parse_mode='Markdown'
+                )
+                sent_count += 1
+                
+                # توقف قصير لتجنب حدود التيليجرام
+                await asyncio.sleep(0.05)  # 50ms delay
+                
+            except Exception as e:
+                failed_count += 1
+                print(f"فشل إرسال إشعار تحديث الإحالة للمستخدم {user_id}: {e}")
+        
+        # إرسال تقرير للأدمن
+        if ADMIN_CHAT_ID:
+            admin_report = f"""📊 تقرير إشعار تحديث الإحالة
+
+✅ تم الإرسال بنجاح: {sent_count} مستخدم
+❌ فشل الإرسال: {failed_count} مستخدم
+💰 القيمة الجديدة: {new_amount}$
+📅 وقت التحديث: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+            
+            try:
+                await context.bot.send_message(
+                    ADMIN_CHAT_ID,
+                    admin_report,
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                print(f"فشل إرسال تقرير الإشعار للأدمن: {e}")
+        
+        # تسجيل العملية في قاعدة البيانات
+        db.log_action(ADMIN_CHAT_ID, "referral_update_broadcast", f"Amount: {new_amount}, Sent: {sent_count}, Failed: {failed_count}")
+        
+    except Exception as e:
+        print(f"خطأ في إرسال إشعار تحديث الإحالة: {e}")
+
+async def broadcast_price_update(context: ContextTypes.DEFAULT_TYPE, price_type: str, prices: dict) -> None:
+    """إرسال إشعار جماعي للمستخدمين بتحديث الأسعار"""
+    try:
+        # الحصول على جميع المستخدمين من قاعدة البيانات
+        all_users_query = "SELECT user_id, language FROM users"
+        users = db.execute_query(all_users_query)
+        
+        sent_count = 0
+        failed_count = 0
+        
+        for user in users:
+            user_id, language = user
+            language = language or 'ar'  # افتراضي للعربية
+            
+            try:
+                # تحديد الرسالة حسب اللغة ونوع السعر
+                if price_type == "static":
+                    if language == 'ar':
+                        prices_text = f"""
+- Static ISP Risk0: `{prices.get('ISP', '3')}$`
+- Static Residential Verizon: `{prices.get('Verizon', '4')}$`
+- Static Residential AT&T: `{prices.get('ATT', '6')}$`"""
+                        message = f"""📢 إشعار هام - تحديث أسعار البروكسي الستاتيك
+
+💰 تم تحديث أسعار البروكسي الستاتيك:{prices_text}
+
+🔄 الأسعار الجديدة سارية المفعول من الآن
+
+🛒 يمكنك طلب بروكسي ستاتيك بالأسعار الجديدة"""
+                    else:
+                        prices_text = f"""
+- Static ISP Risk0: `{prices.get('ISP', '3')}$`
+- Static Residential Verizon: `{prices.get('Verizon', '4')}$`
+- Static Residential AT&T: `{prices.get('ATT', '6')}$`"""
+                        message = f"""📢 Important Notice - Static Proxy Prices Update
+
+💰 Static proxy prices have been updated:{prices_text}
+
+🔄 New prices are effective immediately
+
+🛒 You can order static proxy with new prices"""
+                        
+                elif price_type == "socks":
+                    if language == 'ar':
+                        prices_text = f"""
+- باكج 5 بروكسيات مؤقتة: `{prices.get('5proxy', '0.4')}$`
+- باكج 10 بروكسيات مؤقتة: `{prices.get('10proxy', '0.7')}$`"""
+                        message = f"""📢 إشعار هام - تحديث أسعار بروكسي السوكس
+
+💰 تم تحديث أسعار بروكسي السوكس:{prices_text}
+
+🔄 الأسعار الجديدة سارية المفعول من الآن
+
+🛒 يمكنك طلب بروكسي سوكس بالأسعار الجديدة"""
+                    else:
+                        prices_text = f"""
+- 5 Temporary Proxies Package: `{prices.get('5proxy', '0.4')}$`
+- 10 Temporary Proxies Package: `{prices.get('10proxy', '0.7')}$`"""
+                        message = f"""📢 Important Notice - Socks Proxy Prices Update
+
+💰 Socks proxy prices have been updated:{prices_text}
+
+🔄 New prices are effective immediately
+
+🛒 You can order socks proxy with new prices"""
+                
+                await context.bot.send_message(
+                    user_id,
+                    message,
+                    parse_mode='Markdown'
+                )
+                sent_count += 1
+                
+                # توقف قصير لتجنب حدود التيليجرام
+                await asyncio.sleep(0.05)  # 50ms delay
+                
+            except Exception as e:
+                failed_count += 1
+                print(f"فشل إرسال إشعار تحديث الأسعار للمستخدم {user_id}: {e}")
+        
+        # إرسال تقرير للأدمن
+        if ADMIN_CHAT_ID:
+            admin_report = f"""📊 تقرير إشعار تحديث الأسعار
+
+📦 نوع الأسعار: {price_type}
+✅ تم الإرسال بنجاح: {sent_count} مستخدم
+❌ فشل الإرسال: {failed_count} مستخدم
+📅 وقت التحديث: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+            
+            try:
+                await context.bot.send_message(
+                    ADMIN_CHAT_ID,
+                    admin_report,
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                print(f"فشل إرسال تقرير الإشعار للأدمن: {e}")
+        
+        # تسجيل العملية في قاعدة البيانات
+        db.log_action(ADMIN_CHAT_ID, f"{price_type}_price_update_broadcast", f"Sent: {sent_count}, Failed: {failed_count}")
+        
+    except Exception as e:
+        print(f"خطأ في إرسال إشعار تحديث الأسعار: {e}")
+
 async def send_referral_notification(context: ContextTypes.DEFAULT_TYPE, referrer_id: int, new_user) -> None:
     """إرسال إشعار للأدمن بانضمام عضو جديد عبر الإحالة"""
     # الحصول على بيانات المحيل
@@ -4913,10 +5096,13 @@ async def handle_referral_amount_update(update: Update, context: ContextTypes.DE
             ("referral_amount", str(amount))
         )
         
-        await update.message.reply_text(f"✅ تم تحديث قيمة الإحالة إلى `{amount}$`\n\n📢 سيتم إشعار جميع المستخدمين بالتحديث...", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(f"✅ تم تحديث قيمة الإحالة إلى `{amount}$`\n\n📢 سيتم إشعار جميع المستخدمين بالتحديث...", parse_mode='Markdown')
         
         # إشعار جميع المستخدمين بالتحديث
         await broadcast_referral_update(context, amount)
+        
+        # إعادة تفعيل كيبورد الأدمن الرئيسي
+        await restore_admin_keyboard(context, update.effective_chat.id, "✅ تم تحديث قيمة الإحالة بنجاح")
         
     except ValueError:
         keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_referral_amount")]]
@@ -5413,42 +5599,7 @@ Order ID: {{}}"""
     
     return ConversationHandler.END
 
-async def broadcast_price_update(context: ContextTypes.DEFAULT_TYPE, proxy_type: str, prices: dict) -> None:
-    """إشعار المستخدمين بتحديث الأسعار"""
-    try:
-        all_users = db.execute_query("SELECT user_id FROM users")
-        success_count = 0
-        
-        if proxy_type == "static":
-            message = f"""📢 **تحديث أسعار البروكسي الستاتيك**
 
-🔹 الأسعار الجديدة:
-- Static ISP Risk0: `{prices.get('ISP', '3')}$`
-- Static Residential Verizon: `{prices.get('Verizon', '4')}$`
-- Static Residential AT&T: `{prices.get('ATT', '6')}$`
-
-📦 يمكنك الآن طلب البروكسي بالأسعار الجديدة!"""
-        else:
-            message = f"""📢 **تحديث أسعار بروكسي السوكس**
-
-🔹 الأسعار الجديدة:
-- باكج 5 بروكسيات مؤقتة: `{prices.get('5proxy', '0.4')}$`
-- باكج 10 بروكسيات مؤقتة: `{prices.get('10proxy', '0.7')}$`
-
-📦 يمكنك الآن طلب البروكسي بالأسعار الجديدة!"""
-        
-        for user_tuple in all_users:
-            user_id = user_tuple[0]
-            try:
-                await context.bot.send_message(user_id, message, parse_mode='Markdown')
-                success_count += 1
-            except Exception as e:
-                logger.error(f"Failed to send price update to {user_id}: {e}")
-        
-        logger.info(f"Price update sent to {success_count} users")
-        
-    except Exception as e:
-        logger.error(f"Error in broadcast_price_update: {e}")
 
 async def handle_socks_price_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة تحديث أسعار السوكس"""
