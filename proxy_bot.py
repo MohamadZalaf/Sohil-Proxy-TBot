@@ -7125,8 +7125,8 @@ async def initialize_cleanup_scheduler(application):
     except Exception as e:
         logger.error(f"Failed to initialize cleanup scheduler: {e}")
 
-async def main() -> None:
-    """الدالة الرئيسية"""
+def setup_bot():
+    """إعداد البوت بدون تشغيله"""
     print("🔧 فحص إعدادات البوت...")
     
     if not TOKEN:
@@ -7135,7 +7135,7 @@ async def main() -> None:
         print("1. اذهب إلى @BotFather على تيليجرام")
         print("2. أنشئ بوت جديد وانسخ التوكن")
         print("3. ضع التوكن في متغير TOKEN في بداية الملف")
-        return
+        return None
     
     print(f"✅ التوكن موجود: {TOKEN[:10]}...{TOKEN[-10:]}")
     print("🔧 بدء تهيئة البوت...")
@@ -7173,7 +7173,7 @@ async def main() -> None:
         
     except Exception as e:
         print(f"❌ خطأ في إنشاء التطبيق أو الاتصال: {e}")
-        return
+        return None
     
     # إضافة المعالجات
     print("🔧 إضافة معالجات الأوامر...")
@@ -7197,15 +7197,12 @@ async def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
     print("✅ تم إضافة جميع المعالجات")
     
-    # تشغيل البوت
-    print("🚀 بدء تشغيل البوت...")
     print("📊 قاعدة البيانات جاهزة")
     print("⚡ البوت يعمل الآن!")
     print(f"🔑 التوكن: {TOKEN[:10]}...")
     print("💡 في انتظار الرسائل...")
-    
-    # إرجاع التطبيق الجاهز للتشغيل
     print("✅ البوت جاهز للتشغيل!")
+    
     return application
     
     
@@ -7569,8 +7566,7 @@ process_order_conv_handler = ConversationHandler(
         CommandHandler("reset", handle_reset_command),
         CommandHandler("cleanup", handle_cleanup_command),
         MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
-    ],
-    per_message=False,
+    ]
 )
 
 # معالج تغيير كلمة المرور
@@ -7587,8 +7583,7 @@ password_change_conv_handler = ConversationHandler(
         CommandHandler("reset", handle_reset_command),
         CommandHandler("cleanup", handle_cleanup_command),
         MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
-    ],
-    per_message=False,
+    ]
 )
 
     # معالج شامل لجميع وظائف الأدمن
@@ -7631,8 +7626,7 @@ admin_functions_conv_handler = ConversationHandler(
         CommandHandler("reset", handle_reset_command),
         CommandHandler("cleanup", handle_cleanup_command),
         MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
-    ],
-    per_message=False,
+    ]
 )
 
 admin_conv_handler = ConversationHandler(
@@ -7646,8 +7640,7 @@ admin_conv_handler = ConversationHandler(
         CommandHandler("reset", handle_reset_command),
         CommandHandler("cleanup", handle_cleanup_command),
         MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
-    ],
-    per_message=False,
+    ]
 )
     
     # معالج إثبات الدفع
@@ -7664,8 +7657,7 @@ payment_conv_handler = ConversationHandler(
         CommandHandler("reset", handle_reset_command),
         CommandHandler("cleanup", handle_cleanup_command),
         MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
-    ],
-    per_message=False,
+    ]
 )
     
     # معالج البث
@@ -7692,23 +7684,28 @@ broadcast_conv_handler = ConversationHandler(
         CommandHandler("reset", handle_reset_command),
         CommandHandler("cleanup", handle_cleanup_command),
         MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
-    ],
-    per_message=False,
+    ]
 )
 
-async def run_bot():
-    """تشغيل البوت"""
+def main():
+    """الدالة الرئيسية لتشغيل البوت"""
     try:
         print("=" * 50)
         print("🤖 تشغيل بوت البروكسي")
         print("=" * 50)
         
-        # إنشاء وتهيئة البوت
-        application = await main()
+        # إعداد البوت
+        application = setup_bot()
+        if application is None:
+            print("❌ فشل في إعداد البوت")
+            return
         
         # تشغيل البوت
         print("🚀 بدء تشغيل البوت...")
-        await application.run_polling(allowed_updates=Update.ALL_TYPES)
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True
+        )
         
     except KeyboardInterrupt:
         print("\n⚠️ تم إيقاف البوت بواسطة المستخدم")
@@ -7720,11 +7717,6 @@ async def run_bot():
         print("✅ تم إيقاف البوت بنجاح")
 
 if __name__ == '__main__':
-    try:
-        asyncio.run(run_bot())
-    except KeyboardInterrupt:
-        print("\n⚠️ تم إيقاف البوت")
-    except Exception as e:
-        print(f"❌ خطأ في التشغيل: {e}")
+    main()
 
 
