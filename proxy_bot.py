@@ -1890,6 +1890,15 @@ async def handle_password_change(update: Update, context: ContextTypes.DEFAULT_T
     if step == 'current':
         # التحقق من كلمة المرور الحالية
         if update.message.text == ADMIN_PASSWORD:
+            # حذف رسالة كلمة المرور الحالية من المحادثة لأسباب أمنية
+            try:
+                await context.bot.delete_message(
+                    chat_id=update.effective_chat.id,
+                    message_id=update.message.message_id
+                )
+            except Exception as e:
+                print(f"تعذر حذف رسالة كلمة المرور الحالية: {e}")
+            
             context.user_data['password_change_step'] = 'new'
             if user_language == 'ar':
                 keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_password_change")]]
@@ -1912,6 +1921,15 @@ async def handle_password_change(update: Update, context: ContextTypes.DEFAULT_T
         # تحديث كلمة المرور
         new_password = update.message.text
         ADMIN_PASSWORD = new_password
+        
+        # حذف رسالة كلمة المرور الجديدة من المحادثة لأسباب أمنية
+        try:
+            await context.bot.delete_message(
+                chat_id=update.effective_chat.id,
+                message_id=update.message.message_id
+            )
+        except Exception as e:
+            print(f"تعذر حذف رسالة كلمة المرور الجديدة: {e}")
         
         # حفظ كلمة المرور الجديدة في قاعدة البيانات
         db.execute_query(
@@ -2044,6 +2062,15 @@ async def handle_admin_password(update: Update, context: ContextTypes.DEFAULT_TY
         ADMIN_CHAT_ID = update.effective_user.id  # حفظ معرف الأدمن
         
         db.log_action(update.effective_user.id, "admin_login_success")
+        
+        # حذف رسالة كلمة المرور من المحادثة لأسباب أمنية
+        try:
+            await context.bot.delete_message(
+                chat_id=update.effective_chat.id,
+                message_id=update.message.message_id
+            )
+        except Exception as e:
+            print(f"تعذر حذف رسالة كلمة المرور: {e}")
         
         # لوحة مفاتيح عادية للأدمن
         keyboard = [
@@ -3049,10 +3076,40 @@ async def handle_about_command(update: Update, context: ContextTypes.DEFAULT_TYP
     # إنشاء زر لإظهار النافذة المنبثقة
     if language == 'ar':
         button_text = "🧑‍💻 معلومات المطور"
-        popup_text = "🧑‍💻 بوت بيع البروكسي\nطُور بواسطة: Mohamad Zalaf\n© 2025"
+        popup_text = """🧑‍💻 معلومات المطور
+
+📦 بوت بيع البروكسي وإدارة البروكسي
+🔢 الإصدار: 1.0.0
+
+━━━━━━━━━━━━━━━
+👨‍💻 طُور بواسطة: Mohamad Zalaf
+
+📞 معلومات الاتصال:
+📱 تليجرام: @MohamadZalaf
+📧 البريد الإلكتروني:
+   • MohamadZalaf@outlook.com
+   • Mohamadzalaf2017@gmail.com
+
+━━━━━━━━━━━━━━━
+© Mohamad Zalaf 2025"""
     else:
         button_text = "🧑‍💻 Developer Info"
-        popup_text = "🧑‍💻 Proxy Sales Bot\nDeveloped by: Mohamad Zalaf\n© 2025"
+        popup_text = """🧑‍💻 Developer Information
+
+📦 Proxy Sales & Management Bot
+🔢 Version: 1.0.0
+
+━━━━━━━━━━━━━━━
+👨‍💻 Developed by: Mohamad Zalaf
+
+📞 Contact Information:
+📱 Telegram: @MohamadZalaf
+📧 Email:
+   • MohamadZalaf@outlook.com
+   • Mohamadzalaf2017@gmail.com
+
+━━━━━━━━━━━━━━━
+© Mohamad Zalaf 2025"""
     
     keyboard = [[InlineKeyboardButton(button_text, callback_data="developer_info")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -3308,7 +3365,48 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await query.answer("تم إنهاء الطلب بنجاح!")
         elif query.data == "developer_info":
             # إظهار نافذة منبثقة مع معلومات المطور
-            popup_text = context.user_data.get('popup_text', "🧑‍💻 Developed by Mohamad Zalaf")
+            user_id = update.effective_user.id
+            language = get_user_language(user_id)
+            
+            # الحصول على النص المحفوظ أو استخدام النص الافتراضي
+            popup_text = context.user_data.get('popup_text')
+            if not popup_text:
+                # إنشاء النص بناءً على لغة المستخدم الحالية
+                if language == 'ar':
+                    popup_text = """🧑‍💻 معلومات المطور
+
+📦 بوت بيع البروكسي وإدارة البروكسي
+🔢 الإصدار: 1.0.0
+
+━━━━━━━━━━━━━━━
+👨‍💻 طُور بواسطة: Mohamad Zalaf
+
+📞 معلومات الاتصال:
+📱 تليجرام: @MohamadZalaf
+📧 البريد الإلكتروني:
+   • MohamadZalaf@outlook.com
+   • Mohamadzalaf2017@gmail.com
+
+━━━━━━━━━━━━━━━
+© Mohamad Zalaf 2025"""
+                else:
+                    popup_text = """🧑‍💻 Developer Information
+
+📦 Proxy Sales & Management Bot
+🔢 Version: 1.0.0
+
+━━━━━━━━━━━━━━━
+👨‍💻 Developed by: Mohamad Zalaf
+
+📞 Contact Information:
+📱 Telegram: @MohamadZalaf
+📧 Email:
+   • MohamadZalaf@outlook.com
+   • Mohamadzalaf2017@gmail.com
+
+━━━━━━━━━━━━━━━
+© Mohamad Zalaf 2025"""
+            
             await query.answer(text=popup_text, show_alert=True)
         elif query.data == "cancel_manual_input":
             # إلغاء الإدخال اليدوي والعودة للقائمة
