@@ -7169,8 +7169,7 @@ async def main() -> None:
         
         # اختبار الاتصال مع تيليجرام
         print("🌐 اختبار الاتصال مع خوادم تيليجرام...")
-        bot_info = await application.bot.get_me()
-        print(f"✅ تم الاتصال بنجاح! اسم البوت: @{bot_info.username}")
+        print("🌐 سيتم اختبار الاتصال عند بدء التشغيل...")
         
     except Exception as e:
         print(f"❌ خطأ في إنشاء التطبيق أو الاتصال: {e}")
@@ -7205,24 +7204,9 @@ async def main() -> None:
     print(f"🔑 التوكن: {TOKEN[:10]}...")
     print("💡 في انتظار الرسائل...")
     
-    # بدء التطبيق بشكل آمن
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-    
-    # تشغيل البوت حتى يتم إيقافه
-    try:
-        # تشغيل مستمر
-        await asyncio.Event().wait()  # ينتظر إلى ما لا نهاية
-    except KeyboardInterrupt:
-        print("\n⚠️ تم إيقاف البوت بواسطة المستخدم")
-    finally:
-        # إيقاف البوت بشكل آمن
-        print("🛑 إيقاف البوت...")
-        await application.updater.stop()
-        await application.stop()
-        await application.shutdown()
-        print("✅ تم إيقاف البوت بنجاح")
+    # إرجاع التطبيق الجاهز للتشغيل
+    print("✅ البوت جاهز للتشغيل!")
+    return application
     
     
 async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -7712,17 +7696,30 @@ broadcast_conv_handler = ConversationHandler(
     per_message=False,
 )
 
-if __name__ == '__main__':
+async def run_bot():
+    """تشغيل البوت"""
     try:
         print("=" * 50)
         print("🤖 تشغيل بوت البروكسي")
         print("=" * 50)
-        asyncio.run(main())
+        
+        # إنشاء وتهيئة البوت
+        application = await main()
+        
+        # تشغيل البوت
+        print("🚀 بدء تشغيل البوت...")
+        await application.run_polling(allowed_updates=Update.ALL_TYPES)
+        
     except KeyboardInterrupt:
         print("\n⚠️ تم إيقاف البوت بواسطة المستخدم")
     except Exception as e:
         print(f"❌ خطأ فادح في البوت: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        print("✅ تم إيقاف البوت بنجاح")
+
+if __name__ == '__main__':
+    asyncio.run(run_bot())
 
 
