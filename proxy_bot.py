@@ -2397,6 +2397,98 @@ async def send_withdrawal_notification(context: ContextTypes.DEFAULT_TYPE, withd
     # حفظ الإشعار في قاعدة البيانات
     db.log_action(user[0], "withdrawal_notification", f"New withdrawal: {withdrawal_id}")
 
+async def check_and_add_referral_bonus(context: ContextTypes.DEFAULT_TYPE, user_id: int, order_id: str) -> None:
+    """التحقق من إضافة رصيد الإحالة عند أول عملية شراء للمُحال"""
+    try:
+        # التحقق من وجود إحالة لهذا المستخدم
+        referral_query = "SELECT referrer_id FROM referrals WHERE referred_id = ?"
+        referral_result = db.execute_query(referral_query, (user_id,))
+        
+        if referral_result:
+            referrer_id = referral_result[0][0]
+            
+            # التحقق من أن هذه أول عملية شراء ناجحة للمُحال
+            previous_orders_query = """
+                SELECT COUNT(*) FROM orders 
+                WHERE user_id = ? AND status = 'completed' AND truly_processed = TRUE
+            """
+            previous_orders = db.execute_query(previous_orders_query, (user_id,))
+            
+            if previous_orders and previous_orders[0][0] == 1:  # أول عملية شراء
+                # إضافة 0.1$ لرصيد المحيل
+                referral_bonus = 0.1
+                db.execute_query(
+                    "UPDATE users SET referral_balance = referral_balance + ? WHERE user_id = ?",
+                    (referral_bonus, referrer_id)
+                )
+                
+                # الحصول على بيانات المحيل والمُحال
+                referrer = db.get_user(referrer_id)
+                referred_user = db.get_user(user_id)
+                
+                if referrer and referred_user and ADMIN_CHAT_ID:
+                    # إشعار الأدمن بإضافة رصيد الإحالة
+                    admin_message = f"""💰 تم إضافة رصيد إحالة!
+
+🎉 **أول عملية شراء ناجحة للمُحال**
+
+👤 **المُحال:**
+📝 الاسم: {referred_user[2]} {referred_user[3] or ''}
+📱 اسم المستخدم: @{referred_user[1] or 'غير محدد'}
+🆔 المعرف: `{user_id}`
+
+━━━━━━━━━━━━━━━
+👥 **المحيل:**
+📝 الاسم: {referrer[2]} {referrer[3] or ''}
+📱 اسم المستخدم: @{referrer[1] or 'غير محدد'}
+🆔 المعرف: `{referrer_id}`
+
+━━━━━━━━━━━━━━━
+💵 **تم إضافة `{referral_bonus}$` لرصيد المحيل**
+🔗 معرف الطلب: `{order_id}`
+📅 التاريخ: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+
+                    try:
+                        await context.bot.send_message(
+                            ADMIN_CHAT_ID,
+                            admin_message,
+                            parse_mode='Markdown'
+                        )
+                    except Exception as e:
+                        print(f"خطأ في إرسال إشعار رصيد الإحالة للأدمن: {e}")
+                
+                # إشعار المحيل بإضافة الرصيد
+                try:
+                    referrer_language = get_user_language(referrer_id)
+                    if referrer_language == 'ar':
+                        referrer_message = f"""🎉 تهانينا! تم إضافة رصيد الإحالة!
+
+💰 تم إضافة `{referral_bonus}$` إلى رصيدك
+🛍️ السبب: أول عملية شراء ناجحة للعضو المُحال
+
+💵 يمكنك سحب رصيدك عند وصوله إلى `1.0$`"""
+                    else:
+                        referrer_message = f"""🎉 Congratulations! Referral bonus added!
+
+💰 `{referral_bonus}$` added to your balance
+🛍️ Reason: First successful purchase by referred member
+
+💵 You can withdraw when balance reaches `1.0$`"""
+                    
+                    await context.bot.send_message(
+                        referrer_id,
+                        referrer_message,
+                        parse_mode='Markdown'
+                    )
+                except Exception as e:
+                    print(f"خطأ في إرسال إشعار رصيد الإحالة للمحيل: {e}")
+                
+                # تسجيل العملية
+                db.log_action(referrer_id, "referral_bonus_added", f"Bonus: {referral_bonus}$ for order: {order_id}")
+                
+    except Exception as e:
+        print(f"خطأ في معالجة رصيد الإحالة: {e}")
+
 async def send_referral_notification(context: ContextTypes.DEFAULT_TYPE, referrer_id: int, new_user) -> None:
     """إرسال إشعار للأدمن بانضمام عضو جديد عبر الإحالة"""
     # الحصول على بيانات المحيل
@@ -2417,7 +2509,7 @@ async def send_referral_notification(context: ContextTypes.DEFAULT_TYPE, referre
 🆔 معرف المحيل: `{referrer[0]}`
 
 ━━━━━━━━━━━━━━━
-💰 تم إضافة `0.1$` لرصيد المحيل
+💰 سيتم إضافة `0.1$` لرصيد المحيل عندما يقوم المُحال بعملية شراء
 📅 تاريخ الانضمام: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
 
         if ADMIN_CHAT_ID:
@@ -3661,6 +3753,9 @@ async def handle_process_order(update: Update, context: ContextTypes.DEFAULT_TYP
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
+    # حفظ الرسالة الأصلية قبل التعديل
+    context.user_data['original_order_message'] = query.message.text
+    
     await query.edit_message_text(
         f"🔄 **بدء معالجة الطلب**\n\n"
         f"🆔 معرف الطلب: `{order_id}`\n\n"
@@ -3744,11 +3839,14 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # إرسال رسالة جديدة بدلاً من تعديل الرسالة الموجودة
-    await context.bot.send_message(
-        update.effective_chat.id,
-        "1️⃣ اختر الكمية المطلوبة:",
-        reply_markup=reply_markup
+    # استخدام الرسالة الأصلية مع إضافة معلومات الدفع وسؤال الكمية
+    original_message = context.user_data.get('original_order_message', '')
+    combined_message = f"{original_message}\n\n━━━━━━━━━━━━━━━\n{admin_message}\n\n━━━━━━━━━━━━━━━\n1️⃣ اختر الكمية المطلوبة:"
+    
+    await query.edit_message_text(
+        combined_message,
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
     )
     
     return ENTER_PROXY_TYPE
@@ -4109,6 +4207,9 @@ async def send_proxy_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE,
             (json.dumps(proxy_details), order_id)
         )
         
+        # التحقق من إضافة رصيد الإحالة لأول عملية شراء
+        await check_and_add_referral_bonus(context, user_id, order_id)
+        
         # رسالة تأكيد للأدمن
         admin_message = f"""✅ تم معالجة طلب {user_full_name}
 
@@ -4195,6 +4296,9 @@ async def send_proxy_to_user_direct(update: Update, context: ContextTypes.DEFAUL
             "UPDATE orders SET status = 'completed', processed_at = CURRENT_TIMESTAMP, proxy_details = ?, truly_processed = TRUE WHERE id = ?",
             (json.dumps(proxy_details), order_id)
         )
+        
+        # التحقق من إضافة رصيد الإحالة لأول عملية شراء
+        await check_and_add_referral_bonus(context, user_id, order_id)
 
 async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة البحث عن مستخدم"""
@@ -6683,7 +6787,7 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
             reply_markup=reply_markup
         )
         
-        return ENTER_PROXY_TYPE
+        return PROCESS_ORDER
         
     elif query.data == "quantity_package":
         context.user_data["quantity"] = "باكج"
@@ -6851,6 +6955,9 @@ async def send_package_to_user_from_confirmation(query, context: ContextTypes.DE
             (package_message, order_id)
         )
         
+        # التحقق من إضافة رصيد الإحالة لأول عملية شراء
+        await check_and_add_referral_bonus(context, user_id, order_id)
+        
         # رسالة تأكيد للأدمن
         admin_message = f"""✅ **تم إرسال الباكج بنجاح وإتمام الطلب**
 
@@ -6897,6 +7004,7 @@ process_order_conv_handler = ConversationHandler(
             CallbackQueryHandler(handle_payment_success, pattern="^payment_success$"),
             CallbackQueryHandler(handle_payment_failed, pattern="^payment_failed$"),
             CallbackQueryHandler(handle_quantity_selection, pattern="^quantity_"),
+            CallbackQueryHandler(handle_proxy_details_input, pattern="^proxy_type_"),
             CallbackQueryHandler(handle_back_to_quantity, pattern="^back_to_quantity$"),
             CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
         ],
