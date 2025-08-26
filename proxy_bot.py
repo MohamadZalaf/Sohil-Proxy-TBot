@@ -3126,23 +3126,49 @@ async def handle_about_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def handle_reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة أمر /reset لإعادة تعيين حالة المستخدم"""
+    user_id = update.effective_user.id
+    
+    # تنظيف شامل للبيانات المؤقتة
+    context.user_data.clear()
+    
+    # إنهاء أي محادثات نشطة
+    try:
+        return ConversationHandler.END
+    except:
+        pass
+    
+    # إعادة توجيه المستخدم بناءً على نوعه
+    if context.user_data.get('is_admin', False) or user_id == ADMIN_CHAT_ID:
+        await restore_admin_keyboard(context, update.effective_chat.id, "🔄 تم إعادة تعيين حالة الأدمن")
+    else:
+        await start(update, context)
+    
     await force_reset_user_state(update, context)
 
 async def handle_cleanup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة أمر /cleanup لتنظيف العمليات المعلقة"""
     user_id = update.effective_user.id
     
+    # تنظيف البيانات المؤقتة أولاً
+    context.user_data.clear()
+    
     # تنظيف العمليات المعلقة
     success = await cleanup_incomplete_operations(context, user_id, "all")
     
     if success:
-        await update.message.reply_text(
-            "🧹 **تم تنظيف العمليات المعلقة بنجاح**\n\n"
-            "✅ تم إزالة جميع البيانات المؤقتة\n"
-            "✅ تم تنظيف المحادثات المعلقة\n"
-            "✅ البوت جاهز للاستخدام بشكل طبيعي",
-            parse_mode='Markdown'
-        )
+        # إعادة توجيه المستخدم للحالة المناسبة
+        if user_id == ADMIN_CHAT_ID:
+            await restore_admin_keyboard(context, update.effective_chat.id, "🧹 تم تنظيف العمليات بنجاح")
+        else:
+            await update.message.reply_text(
+                "🧹 **تم تنظيف العمليات المعلقة بنجاح**\n\n"
+                "✅ تم إزالة جميع البيانات المؤقتة\n"
+                "✅ تم تنظيف المحادثات المعلقة\n"
+                "✅ البوت جاهز للاستخدام بشكل طبيعي",
+                parse_mode='Markdown'
+            )
+            # إعادة إرسال القائمة الرئيسية للمستخدم العادي
+            await start(update, context)
     else:
         await update.message.reply_text(
             "⚠️ حدث خطأ أثناء التنظيف\n"
@@ -3298,6 +3324,19 @@ async def handle_cancel_user_proxy_request(update: Update, context: ContextTypes
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة الاستعلامات المرسلة"""
     query = update.callback_query
+    
+    # قائمة الأزرار التي تُعالج في ConversationHandlers - يجب تجاهلها هنا
+    conversation_only_buttons = [
+        'confirm_broadcast', 'cancel_broadcast',
+        'cancel_order_inquiry', 'cancel_static_prices', 'cancel_socks_prices',
+        'cancel_referral_amount', 'cancel_balance_reset', 'cancel_payment_proof',
+        'cancel_proxy_setup', 'cancel_user_lookup', 'cancel_password_change',
+        'cancel_custom_message', 'cancel_manual_input'
+    ]
+    
+    # إذا كان الزر مُعالج في ConversationHandler، لا تتدخل هنا
+    if query.data in conversation_only_buttons:
+        return
     
     try:
         # التأكد من إجابة الاستعلام أولاً لتجنب تعليق الأزرار
@@ -3465,9 +3504,12 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             except:
                 pass
             
+            # تنظيف البيانات المؤقتة لتجنب التعليق
+            context.user_data.clear()
+            
             # التحقق من نوع المستخدم وإعادة توجيهه للقائمة المناسبة
             user_id = update.effective_user.id
-            if context.user_data.get('is_admin') or user_id == ADMIN_CHAT_ID:
+            if user_id == ADMIN_CHAT_ID:
                 # للأدمن - إعادة تفعيل كيبورد الأدمن
                 await restore_admin_keyboard(context, update.effective_chat.id, "⚠️ تم اكتشاف إجراء غير معروف. عودة للقائمة الرئيسية...")
             else:
@@ -5515,6 +5557,10 @@ async def handle_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYP
     elif status == 'failed':
         await update.message.reply_text(f"ℹ️ الطلب `{order_id}` فشل ولم يتم معالجته", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
     
+    # تنظيف البيانات المؤقتة وإعادة تفعيل كيبورد الأدمن
+    context.user_data.clear()
+    await restore_admin_keyboard(context, update.effective_chat.id, "✅ تم الانتهاء من الاستعلام")
+    
     return ConversationHandler.END
 
 async def resend_order_notification(update: Update, context: ContextTypes.DEFAULT_TYPE, order: tuple) -> None:
@@ -6960,6 +7006,9 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
         broadcast_keys = ['broadcast_type', 'broadcast_message', 'broadcast_users_input', 'broadcast_valid_users']
         for key in broadcast_keys:
             context.user_data.pop(key, None)
+        
+        # إعادة تفعيل كيبورد الأدمن
+        await restore_admin_keyboard(context, update.effective_chat.id, "📊 تم إرسال البث بنجاح")
             
     elif query.data == "cancel_broadcast":
         await query.edit_message_text("❌ تم إلغاء الإعلان.")
@@ -6968,6 +7017,9 @@ async def handle_broadcast_confirmation(update: Update, context: ContextTypes.DE
         broadcast_keys = ['broadcast_type', 'broadcast_message', 'broadcast_users_input', 'broadcast_valid_users']
         for key in broadcast_keys:
             context.user_data.pop(key, None)
+        
+        # إعادة تفعيل كيبورد الأدمن
+        await restore_admin_keyboard(context, update.effective_chat.id)
     
     return ConversationHandler.END
 
