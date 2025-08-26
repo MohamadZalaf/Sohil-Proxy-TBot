@@ -6581,6 +6581,18 @@ async def main() -> None:
     # تحميل الأسعار المحفوظة عند بدء التشغيل
     load_saved_prices()
     
+    # تحميل معرف الأدمن من آخر تسجيل دخول ناجح
+    try:
+        global ADMIN_CHAT_ID
+        admin_logs = db.execute_query("SELECT user_id FROM logs WHERE action = 'admin_login_success' ORDER BY timestamp DESC LIMIT 1")
+        if admin_logs:
+            ADMIN_CHAT_ID = admin_logs[0][0]
+            print(f"✅ تم تحميل معرف الأدمن: {ADMIN_CHAT_ID}")
+        else:
+            print("⚠️ لم يتم العثور على تسجيل دخول أدمن سابق")
+    except Exception as e:
+        print(f"⚠️ خطأ في تحميل معرف الأدمن: {e}")
+    
     # إنشاء ملفات المساعدة
     print("📁 إنشاء ملفات المساعدة...")
     create_requirements_file()
