@@ -3852,11 +3852,33 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
     original_message = context.user_data.get('original_order_message', '')
     combined_message = f"{original_message}\n\n━━━━━━━━━━━━━━━\n{admin_message}\n\n━━━━━━━━━━━━━━━\n1️⃣ اختر الكمية المطلوبة:"
     
-    await query.edit_message_text(
-        combined_message,
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
+    # التحقق من طول الرسالة
+    print(f"📏 طول الرسالة: {len(combined_message)} حرف")
+    if len(combined_message) > 4000:  # حد أمان أقل من حد Telegram (4096)
+        print("⚠️ الرسالة طويلة جداً، سيتم تقصيرها")
+        # استخدام رسالة مختصرة
+        combined_message = f"✅ تم قبول الدفع للطلب\n\n🆔 معرف الطلب: `{context.user_data['processing_order_id']}`\n💰 قيمة الطلب: `{payment_amount}$`\n\n📋 الطلب جاهز للمعالجة والإرسال للمستخدم.\n\n━━━━━━━━━━━━━━━\n1️⃣ اختر الكمية المطلوبة:"
+    
+    try:
+        print(f"🔄 محاولة تحديث الرسالة مع الأزرار")
+        print(f"📋 عدد الأزرار: {len(keyboard)} أزرار")
+        await query.edit_message_text(
+            combined_message,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        print(f"✅ تم تحديث الرسالة بنجاح مع الأزرار")
+    except Exception as e:
+        print(f"❌ خطأ في تحديث الرسالة: {e}")
+        # محاولة بديلة بدون parse_mode
+        try:
+            await query.edit_message_text(
+                combined_message,
+                reply_markup=reply_markup
+            )
+            print(f"✅ تم تحديث الرسالة بنجاح بدون parse_mode")
+        except Exception as e2:
+            print(f"❌ خطأ في المحاولة البديلة: {e2}")
     
     return PROCESS_ORDER
 
