@@ -1806,6 +1806,11 @@ async def handle_withdrawal_success(update: Update, context: ContextTypes.DEFAUL
 📋 تم نقل الطلب إلى الطلبات المكتملة."""
             
             await query.edit_message_text(admin_message, reply_markup=reply_markup, parse_mode='Markdown')
+            
+            # إعادة تفعيل كيبورد الأدمن بعد فترة قصيرة
+            import asyncio
+            await asyncio.sleep(2)
+            await restore_admin_keyboard(context, update.effective_chat.id)
 
 async def handle_withdrawal_failed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة فشل سحب الرصيد"""
@@ -1865,6 +1870,11 @@ async def handle_withdrawal_failed(update: Update, context: ContextTypes.DEFAULT
 📋 تم نقل الطلب إلى الطلبات الفاشلة."""
             
             await query.edit_message_text(admin_message, parse_mode='Markdown')
+            
+            # إعادة تفعيل كيبورد الأدمن بعد فترة قصيرة
+            import asyncio
+            await asyncio.sleep(2)
+            await restore_admin_keyboard(context, update.effective_chat.id)
 
 async def change_admin_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """بدء عملية تغيير كلمة مرور الأدمن"""
@@ -3331,7 +3341,18 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         'cancel_order_inquiry', 'cancel_static_prices', 'cancel_socks_prices',
         'cancel_referral_amount', 'cancel_balance_reset', 'cancel_payment_proof',
         'cancel_proxy_setup', 'cancel_user_lookup', 'cancel_password_change',
-        'cancel_custom_message', 'cancel_manual_input'
+        'cancel_custom_message', 'cancel_manual_input',
+        # أزرار معالجة الطلبات
+        'payment_success', 'payment_failed', 'cancel_processing',
+        'quantity_single', 'quantity_package', 'quantity_single_static', 'quantity_single_socks',
+        'quantity_package_static', 'quantity_package_socks',
+        # أزرار أخرى من ConversationHandlers
+        'broadcast_all', 'broadcast_custom', 'confirm_clear_db', 'cancel_clear_db',
+        'confirm_logout', 'cancel_logout', 'understood_current_processing',
+        # أزرار معالجة البروكسي
+        'send_custom_message', 'no_custom_message', 'send_proxy_confirm', 'cancel_proxy_send',
+        # أزرار أخرى متنوعة
+        'quiet_8_18', 'quiet_22_6', 'quiet_12_14', 'quiet_20_22', 'quiet_24h'
     ]
     
     # إذا كان الزر مُعالج في ConversationHandler، لا تتدخل هنا
@@ -5375,6 +5396,12 @@ async def handle_quiet_hours_selection(update: Update, context: ContextTypes.DEF
         message = f"🔕 تم تعيين ساعات الهدوء: `{start_hour}:00 - {end_hour}:00`"
     
     await query.edit_message_text(message, parse_mode='Markdown')
+    
+    # إعادة تفعيل كيبورد الأدمن بعد فترة قصيرة
+    import asyncio
+    await asyncio.sleep(1)
+    await restore_admin_keyboard(context, update.effective_chat.id)
+    
     return ConversationHandler.END
 
 async def admin_logout_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -6179,6 +6206,11 @@ async def handle_database_clear(update: Update, context: ContextTypes.DEFAULT_TY
             await query.edit_message_text(
                 "✅ تم تفريغ قاعدة البيانات بنجاح!\n\n🗑️ تم حذف:\n- جميع الطلبات\n- جميع الإحالات\n- جميع السجلات\n\n✅ تم الاحتفاظ ببيانات المستخدمين والإعدادات"
             )
+            
+            # إعادة تفعيل كيبورد الأدمن بعد فترة قصيرة
+            import asyncio
+            await asyncio.sleep(2)
+            await restore_admin_keyboard(context, update.effective_chat.id)
         except Exception as e:
             await query.edit_message_text(f"❌ خطأ في تفريغ قاعدة البيانات: {str(e)}")
     
