@@ -2131,19 +2131,6 @@ async def handle_static_proxy_request(update: Update, context: ContextTypes.DEFA
     await update.message.reply_text("اختر الكمية المطلوبة:", reply_markup=reply_markup)
     context.user_data['proxy_type'] = 'static'
     return
-    
-    # عرض قائمة الدول للستاتيك (سيتم تنفيذه بعد اختيار الكمية)
-    # عرض قائمة الدول للستاتيك
-    keyboard = []
-    for code, name in STATIC_COUNTRIES[language].items():
-        keyboard.append([InlineKeyboardButton(name, callback_data=f"country_{code}")])
-    keyboard.append([InlineKeyboardButton(MESSAGES[language]['manual_input'], callback_data="manual_country")])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        MESSAGES[language]['select_country'],
-        reply_markup=reply_markup
-    )
 
 async def handle_socks_proxy_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة طلب بروكسي السوكس"""
@@ -2169,18 +2156,6 @@ async def handle_socks_proxy_request(update: Update, context: ContextTypes.DEFAU
     await update.message.reply_text("اختر الكمية المطلوبة:", reply_markup=reply_markup)
     context.user_data['proxy_type'] = 'socks'
     return
-    
-    # عرض قائمة الدول للسوكس (سيتم تنفيذه بعد اختيار الكمية)
-    keyboard = []
-    for code, name in SOCKS_COUNTRIES[language].items():
-        keyboard.append([InlineKeyboardButton(name, callback_data=f"country_{code}")])
-    keyboard.append([InlineKeyboardButton(MESSAGES[language]['manual_input'], callback_data="manual_country")])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        MESSAGES[language]['select_country'],
-        reply_markup=reply_markup
-    )
 
 @timeout_handler(60)  # timeout بعد دقيقة واحدة  
 async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2203,63 +2178,63 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
         language = get_user_language(user_id)
         
         if query.data == "manual_country":
-        # الإدخال اليدوي للدولة
-        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("يرجى إدخال اسم الدولة يدوياً:", reply_markup=reply_markup)
-        context.user_data['waiting_for'] = 'manual_country'
-        return
-    
-    elif query.data == "manual_state":
-        # الإدخال اليدوي للولاية
-        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("يرجى إدخال اسم الولاية/المنطقة يدوياً:", reply_markup=reply_markup)
-        context.user_data['waiting_for'] = 'manual_state'
-        return
-    
-    elif query.data.startswith("country_"):
-        country_code = query.data.replace("country_", "")
-        # حفظ اسم الدولة الكامل مع العلم بدلاً من الرمز فقط
-        proxy_type = context.user_data.get('proxy_type', 'static')
-        if proxy_type == 'socks':
-            country_name = SOCKS_COUNTRIES[language].get(country_code, country_code)
-        else:
-            country_name = STATIC_COUNTRIES[language].get(country_code, country_code)
-        context.user_data['selected_country'] = country_name
-        context.user_data['selected_country_code'] = country_code
-        
-        # عرض قائمة الولايات بناء على الدولة
-        states_data = get_states_for_country(country_code)
-        if states_data:
-            states = states_data[language]
-        else:
-            # للدول الأخرى، انتقل مباشرة لطرق الدفع
-            await show_payment_methods(query, context, language)
+            # الإدخال اليدوي للدولة
+            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("يرجى إدخال اسم الدولة يدوياً:", reply_markup=reply_markup)
+            context.user_data['waiting_for'] = 'manual_country'
             return
         
-        keyboard = []
-        for code, name in states.items():
-            keyboard.append([InlineKeyboardButton(name, callback_data=f"state_{code}")])
-        keyboard.append([InlineKeyboardButton(MESSAGES[language]['manual_input'], callback_data="manual_state")])
+        elif query.data == "manual_state":
+            # الإدخال اليدوي للولاية
+            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("يرجى إدخال اسم الولاية/المنطقة يدوياً:", reply_markup=reply_markup)
+            context.user_data['waiting_for'] = 'manual_state'
+            return
         
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
-            MESSAGES[language]['select_state'],
-            reply_markup=reply_markup
-        )
-    
-    elif query.data.startswith("state_"):
-        state_code = query.data.replace("state_", "")
-        # حفظ اسم الولاية الكامل بدلاً من الرمز فقط
-        country_code = context.user_data.get('selected_country_code', '')
-        states_data = get_states_for_country(country_code)
-        if states_data:
-            state_name = states_data[language].get(state_code, state_code)
-        else:
-            state_name = state_code
-        context.user_data['selected_state'] = state_name
-        await show_payment_methods(query, context, language)
+        elif query.data.startswith("country_"):
+            country_code = query.data.replace("country_", "")
+            # حفظ اسم الدولة الكامل مع العلم بدلاً من الرمز فقط
+            proxy_type = context.user_data.get('proxy_type', 'static')
+            if proxy_type == 'socks':
+                country_name = SOCKS_COUNTRIES[language].get(country_code, country_code)
+            else:
+                country_name = STATIC_COUNTRIES[language].get(country_code, country_code)
+            context.user_data['selected_country'] = country_name
+            context.user_data['selected_country_code'] = country_code
+            
+            # عرض قائمة الولايات بناء على الدولة
+            states_data = get_states_for_country(country_code)
+            if states_data:
+                states = states_data[language]
+            else:
+                # للدول الأخرى، انتقل مباشرة لطرق الدفع
+                await show_payment_methods(query, context, language)
+                return
+            
+            keyboard = []
+            for code, name in states.items():
+                keyboard.append([InlineKeyboardButton(name, callback_data=f"state_{code}")])
+            keyboard.append([InlineKeyboardButton(MESSAGES[language]['manual_input'], callback_data="manual_state")])
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                MESSAGES[language]['select_state'],
+                reply_markup=reply_markup
+            )
+        
+        elif query.data.startswith("state_"):
+            state_code = query.data.replace("state_", "")
+            # حفظ اسم الولاية الكامل بدلاً من الرمز فقط
+            country_code = context.user_data.get('selected_country_code', '')
+            states_data = get_states_for_country(country_code)
+            if states_data:
+                state_name = states_data[language].get(state_code, state_code)
+            else:
+                state_name = state_code
+            context.user_data['selected_state'] = state_name
+            await show_payment_methods(query, context, language)
     
     except Exception as e:
         logger.error(f"Error in handle_country_selection for user {user_id}: {e}")
@@ -4081,12 +4056,7 @@ async def cleanup_old_orders() -> None:
     
     # يمكن الاحتفاظ بالطلبات المكتملة للإحصائيات (لا نحذفها)
 
-# تشغيل تنظيف الطلبات كل ساعة
-async def schedule_cleanup():
-    """جدولة تنظيف الطلبات"""
-    while True:
-        await asyncio.sleep(3600)  # كل ساعة
-        await cleanup_old_orders()
+
 
 def create_requirements_file():
     """إنشاء ملف requirements.txt"""
@@ -4562,20 +4532,7 @@ async def handle_proxy_details_input(update: Update, context: ContextTypes.DEFAU
         # معالجة النص المدخل
         text = update.message.text
         
-        # التحقق من زر الإلغاء (لم يعد مستخدماً نظراً لتحويله لـ inline)
-        if text == "❌ إلغاء":
-            context.user_data.clear()
-            # إعادة تفعيل كيبورد الأدمن
-            keyboard = [
-                [KeyboardButton("📋 إدارة الطلبات")],
-                [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
-                [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
-                [KeyboardButton("⚙️ الإعدادات")],
-                [KeyboardButton("🚪 تسجيل الخروج")]
-            ]
-            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-            await update.message.reply_text("❌ تم إلغاء العملية.", reply_markup=reply_markup)
-            return ConversationHandler.END
+
         
         current_state = context.user_data.get('admin_input_state', ENTER_PROXY_ADDRESS)
         
@@ -4937,19 +4894,7 @@ async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """معالجة البحث عن مستخدم"""
     search_term = update.message.text
     
-    # التحقق من زر الإلغاء
-    if search_term == "❌ إلغاء":
-        # إعادة تفعيل كيبورد الأدمن
-        keyboard = [
-            [KeyboardButton("📋 إدارة الطلبات")],
-            [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
-            [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
-            [KeyboardButton("⚙️ الإعدادات")],
-            [KeyboardButton("🚪 تسجيل الخروج")]
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        await update.message.reply_text("❌ تم إلغاء البحث عن المستخدم.", reply_markup=reply_markup)
-        return ConversationHandler.END
+
     
     # البحث بالمعرف أو اسم المستخدم
     if search_term.startswith('@'):
@@ -5522,19 +5467,7 @@ async def set_referral_amount(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def handle_referral_amount_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة تحديث قيمة الإحالة"""
-    # التحقق من زر الإلغاء (لم يعد مستخدماً لأنه تم تحويله لـ inline)
-    if update.message.text == "❌ إلغاء":
-        # إعادة تفعيل كيبورد الأدمن
-        keyboard = [
-            [KeyboardButton("📋 إدارة الطلبات")],
-            [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
-            [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
-            [KeyboardButton("⚙️ الإعدادات")],
-            [KeyboardButton("🚪 تسجيل الخروج")]
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        await update.message.reply_text("❌ تم إلغاء تحديث قيمة الإحالة.", reply_markup=reply_markup)
-        return ConversationHandler.END
+
     
     try:
         amount = float(update.message.text)
@@ -5694,26 +5627,7 @@ async def handle_back_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
         reply_markup=reply_markup
     )
 
-async def admin_signout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """تسجيل خروج الأدمن (أمر قديم)"""
-    context.user_data['is_admin'] = False
-    user_id = update.effective_user.id
-    language = get_user_language(user_id)
-    
-    # إنشاء الأزرار الرئيسية للمستخدم
-    keyboard = [
-        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][0])],
-        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][1])],
-        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2])],
-        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][3]), 
-         KeyboardButton(MESSAGES[language]['main_menu_buttons'][4])]
-    ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    
-    await update.message.reply_text(
-        "👋 تم تسجيل الخروج من لوحة الأدمن\n\n" + MESSAGES[language]['welcome'],
-        reply_markup=reply_markup
-    )
+
 
 async def admin_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """الاستعلام عن طلب"""
@@ -5730,19 +5644,7 @@ async def handle_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYP
     """معالجة الاستعلام عن طلب"""
     order_id = update.message.text.strip()
     
-    # التحقق من زر الإلغاء (لم يعد مستخدماً لأنه تم تحويله لـ inline)
-    if order_id == "❌ إلغاء":
-        # إعادة تفعيل كيبورد الأدمن
-        keyboard = [
-            [KeyboardButton("📋 إدارة الطلبات")],
-            [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
-            [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
-            [KeyboardButton("⚙️ الإعدادات")],
-            [KeyboardButton("🚪 تسجيل الخروج")]
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        await update.message.reply_text("❌ تم إلغاء الاستعلام عن الطلب.", reply_markup=reply_markup)
-        return ConversationHandler.END
+
     
     # التحقق من صحة معرف الطلب
     if len(order_id) != 16:
@@ -5885,19 +5787,7 @@ async def handle_static_price_update(update: Update, context: ContextTypes.DEFAU
     """معالجة تحديث أسعار الستاتيك"""
     prices_text = update.message.text
     
-    # التحقق من زر الإلغاء (لم يعد مستخدماً لأنه تم تحويله لـ inline)
-    if prices_text == "❌ إلغاء":
-        # إعادة تفعيل كيبورد الأدمن
-        keyboard = [
-            [KeyboardButton("📋 إدارة الطلبات")],
-            [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
-            [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
-            [KeyboardButton("⚙️ الإعدادات")],
-            [KeyboardButton("🚪 تسجيل الخروج")]
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        await update.message.reply_text("❌ تم إلغاء تعديل أسعار الستاتيك.", reply_markup=reply_markup)
-        return ConversationHandler.END
+
     
     def validate_price(price_str):
         """التحقق من صحة السعر (يجب أن يكون رقم صحيح أو عشري)"""
@@ -6064,19 +5954,7 @@ async def handle_socks_price_update(update: Update, context: ContextTypes.DEFAUL
     """معالجة تحديث أسعار السوكس"""
     prices_text = update.message.text
     
-    # التحقق من زر الإلغاء (لم يعد مستخدماً لأنه تم تحويله لـ inline)
-    if prices_text == "❌ إلغاء":
-        # إعادة تفعيل كيبورد الأدمن
-        keyboard = [
-            [KeyboardButton("📋 إدارة الطلبات")],
-            [KeyboardButton("💰 إدارة الأموال"), KeyboardButton("👥 الإحالات")],
-            [KeyboardButton("📢 البث"), KeyboardButton("🔍 استعلام عن مستخدم")],
-            [KeyboardButton("⚙️ الإعدادات")],
-            [KeyboardButton("🚪 تسجيل الخروج")]
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        await update.message.reply_text("❌ تم إلغاء تعديل أسعار السوكس.", reply_markup=reply_markup)
-        return ConversationHandler.END
+
     
     def validate_price(price_str):
         """التحقق من صحة السعر (يجب أن يكون رقم صحيح أو عشري)"""
@@ -7567,7 +7445,7 @@ def setup_bot():
     application.add_handler(CommandHandler("reset", handle_reset_command))
     application.add_handler(CommandHandler("cleanup", handle_cleanup_command))
     application.add_handler(CommandHandler("status", handle_status_command))
-    application.add_handler(CommandHandler("admin_signout", admin_signout))
+
     
     print("🔧 إضافة معالجات المحادثات...")
     application.add_handler(admin_conv_handler)
