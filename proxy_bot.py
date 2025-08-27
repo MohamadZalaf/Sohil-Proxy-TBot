@@ -2190,6 +2190,12 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
     user_id = update.effective_user.id
     language = get_user_language(user_id)
     
+    # تسجيل نشاط المستخدم
+    health_monitor.mark_user_activity(user_id)
+    
+    # تسجيل الإجراء
+    logger.info(f"User {user_id} selected: {query.data}")
+    
     if query.data == "manual_country":
         # الإدخال اليدوي للدولة
         keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
@@ -3269,6 +3275,12 @@ async def handle_user_quantity_selection(update: Update, context: ContextTypes.D
     user_id = update.effective_user.id
     language = get_user_language(user_id)
     
+    # تسجيل نشاط المستخدم
+    health_monitor.mark_user_activity(user_id)
+    
+    # تسجيل الإجراء
+    logger.info(f"User {user_id} selected quantity: {query.data}")
+    
     if query.data in ["quantity_single_static", "quantity_single_socks"]:
         context.user_data['user_quantity'] = 'single'
         # الانتقال لاختيار الدولة
@@ -3354,8 +3366,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         'cancel_custom_message', 'cancel_manual_input',
         # أزرار معالجة الطلبات
         'payment_success', 'payment_failed', 'cancel_processing',
-        'quantity_single', 'quantity_package', 'quantity_single_static', 'quantity_single_socks',
-        'quantity_package_static', 'quantity_package_socks',
+        'quantity_single', 'quantity_package',
         # أزرار أخرى من ConversationHandlers
         'broadcast_all', 'broadcast_custom', 'confirm_clear_db', 'cancel_clear_db',
         'confirm_logout', 'cancel_logout', 'understood_current_processing',
@@ -3384,6 +3395,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         elif query.data.startswith("lang_"):
             await handle_language_change(update, context)
         elif query.data.startswith("quantity_"):
+            logger.info(f"Processing quantity selection: {query.data} for user {user_id}")
             await handle_user_quantity_selection(update, context)
         elif query.data == "cancel_user_proxy_request":
             await handle_cancel_user_proxy_request(update, context)
