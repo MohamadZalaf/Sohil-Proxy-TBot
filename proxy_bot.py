@@ -16,10 +16,18 @@ import pandas as pd
 import io
 import csv
 import openpyxl
-import fcntl
 import atexit
+import platform
+import subprocess
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
+
+# استيراد fcntl فقط في أنظمة Unix/Linux
+try:
+    import fcntl
+    FCNTL_AVAILABLE = True
+except ImportError:
+    FCNTL_AVAILABLE = False
 
 from telegram import (
     Update,
@@ -8167,36 +8175,96 @@ def setup_bot():
         traceback.print_exc()
         return None
 
+def check_bot_lock():
+    """فحص وإنشاء قفل البوت - يعمل على Windows و Unix/Linux"""
+    lock_file = None
+    
+    if FCNTL_AVAILABLE:
+        # نظام Unix/Linux - استخدام fcntl
+        try:
+            lock_file = open('bot.lock', 'w')
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_file.write(str(os.getpid()))
+            lock_file.flush()
+            print("🔒 تم الحصول على قفل البوت بنجاح (Unix/Linux)")
+            return lock_file
+        except IOError:
+            print("❌ يوجد بوت آخر يعمل بالفعل!")
+            print("⚠️ يرجى إيقاف البوت الآخر أولاً أو استخدام:")
+            print("   pkill -f proxy_bot.py")
+            if lock_file:
+                lock_file.close()
+            return None
+    else:
+        # نظام Windows - استخدام ملف PID
+        try:
+            if os.path.exists('bot.lock'):
+                # قراءة PID من الملف
+                with open('bot.lock', 'r') as f:
+                    old_pid = f.read().strip()
+                
+                # التحقق من وجود العملية
+                if old_pid.isdigit():
+                    try:
+                        if platform.system() == "Windows":
+                            # على Windows، نستخدم tasklist للتحقق من وجود العملية
+                            result = subprocess.run(['tasklist', '/FI', f'PID eq {old_pid}'], 
+                                                  capture_output=True, text=True)
+                            if old_pid in result.stdout:
+                                print("❌ يوجد بوت آخر يعمل بالفعل!")
+                                print("⚠️ يرجى إيقاف البوت الآخر أولاً أو حذف ملف bot.lock")
+                                return None
+                        else:
+                            # على Unix/Linux، نستخدم os.kill مع الإشارة 0
+                            os.kill(int(old_pid), 0)
+                            print("❌ يوجد بوت آخر يعمل بالفعل!")
+                            print("⚠️ يرجى إيقاف البوت الآخر أولاً أو حذف ملف bot.lock")
+                            return None
+                    except (OSError, subprocess.SubprocessError):
+                        # العملية غير موجودة، يمكننا المتابعة
+                        pass
+            
+            # إنشاء ملف القفل الجديد
+            lock_file = open('bot.lock', 'w')
+            lock_file.write(str(os.getpid()))
+            lock_file.flush()
+            print("🔒 تم الحصول على قفل البوت بنجاح (Windows)")
+            return lock_file
+            
+        except Exception as e:
+            print(f"⚠️ تحذير: لا يمكن إنشاء قفل البوت: {e}")
+            print("سيتم تشغيل البوت بدون قفل")
+            return None
+
+def cleanup_bot_lock(lock_file):
+    """تنظيف قفل البوت"""
+    if lock_file:
+        try:
+            if FCNTL_AVAILABLE:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            lock_file.close()
+            os.unlink('bot.lock')
+            print("🔓 تم تحرير قفل البوت")
+        except:
+            pass
+
 def main():
     """الدالة الرئيسية لتشغيل البوت"""
-    # إنشاء ملف قفل لمنع تشغيل أكثر من نسخة
     lock_file = None
     try:
         print("=" * 50)
         print("🤖 تشغيل بوت البروكسي")
         print("=" * 50)
         
-        # إنشاء ملف قفل
-        lock_file = open('bot.lock', 'w')
-        try:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            print("🔒 تم الحصول على قفل البوت بنجاح")
-        except IOError:
-            print("❌ يوجد بوت آخر يعمل بالفعل!")
-            print("⚠️ يرجى إيقاف البوت الآخر أولاً أو استخدام:")
-            print("   pkill -f proxy_bot.py")
+        # فحص وإنشاء قفل البوت
+        lock_file = check_bot_lock()
+        if lock_file is None and FCNTL_AVAILABLE:
+            # في أنظمة Unix، إذا فشل القفل فلا نكمل
             return
             
         # تسجيل دالة تنظيف عند إغلاق البرنامج
         def cleanup_lock():
-            if lock_file:
-                try:
-                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-                    lock_file.close()
-                    os.unlink('bot.lock')
-                    print("🔓 تم تحرير قفل البوت")
-                except:
-                    pass
+            cleanup_bot_lock(lock_file)
         
         atexit.register(cleanup_lock)
         
@@ -8221,14 +8289,7 @@ def main():
         traceback.print_exc()
     finally:
         # تنظيف ملف القفل
-        if lock_file:
-            try:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-                lock_file.close()
-                os.unlink('bot.lock')
-                print("🔓 تم تحرير قفل البوت")
-            except:
-                pass
+        cleanup_bot_lock(lock_file)
         print("✅ تم إيقاف البوت بنجاح")
 
 if __name__ == '__main__':
