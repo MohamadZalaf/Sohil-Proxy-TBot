@@ -1719,6 +1719,18 @@ def get_referral_amount() -> float:
     except:
         return 0.1  # قيمة افتراضية
 
+def clean_user_data_preserve_admin(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن"""
+    # حفظ حالة الأدمن
+    is_admin = context.user_data.get('is_admin', False)
+    
+    # تنظيف جميع البيانات
+    context.user_data.clear()
+    
+    # استعادة حالة الأدمن
+    if is_admin:
+        context.user_data['is_admin'] = True
+
 async def restore_admin_keyboard(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message: str = "🔧 لوحة الأدمن جاهزة"):
     """إعادة تفعيل كيبورد الأدمن الرئيسي"""
     admin_keyboard = [
@@ -5730,8 +5742,8 @@ async def handle_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYP
     elif status == 'failed':
         await update.message.reply_text(f"ℹ️ الطلب `{order_id}` فشل ولم يتم معالجته", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
     
-    # تنظيف البيانات المؤقتة وإعادة تفعيل كيبورد الأدمن
-    context.user_data.clear()
+    # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+    clean_user_data_preserve_admin(context)
     await restore_admin_keyboard(context, update.effective_chat.id, "✅ تم الانتهاء من الاستعلام")
     
     return ConversationHandler.END
@@ -6411,8 +6423,8 @@ async def handle_cancel_referral_amount(update: Update, context: ContextTypes.DE
     query = update.callback_query
     await query.answer()
     
-    # تنظيف البيانات المؤقتة
-    context.user_data.clear()
+    # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+    clean_user_data_preserve_admin(context)
     
     await query.edit_message_text("❌ تم إلغاء تحديد قيمة الإحالة")
     
@@ -6426,8 +6438,8 @@ async def handle_cancel_order_inquiry(update: Update, context: ContextTypes.DEFA
     query = update.callback_query
     await query.answer()
     
-    # تنظيف البيانات المؤقتة
-    context.user_data.clear()
+    # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+    clean_user_data_preserve_admin(context)
     
     await query.edit_message_text("❌ تم إلغاء الاستعلام عن الطلب")
     
@@ -6441,8 +6453,8 @@ async def handle_cancel_static_prices(update: Update, context: ContextTypes.DEFA
     query = update.callback_query
     await query.answer()
     
-    # تنظيف البيانات المؤقتة
-    context.user_data.clear()
+    # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+    clean_user_data_preserve_admin(context)
     
     await query.edit_message_text("❌ تم إلغاء تعديل أسعار الستاتيك")
     
@@ -6456,8 +6468,8 @@ async def handle_cancel_socks_prices(update: Update, context: ContextTypes.DEFAU
     query = update.callback_query
     await query.answer()
     
-    # تنظيف البيانات المؤقتة
-    context.user_data.clear()
+    # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+    clean_user_data_preserve_admin(context)
     
     await query.edit_message_text("❌ تم إلغاء تعديل أسعار السوكس")
     
@@ -6471,8 +6483,8 @@ async def handle_cancel_balance_reset(update: Update, context: ContextTypes.DEFA
     query = update.callback_query
     await query.answer()
     
-    # تنظيف البيانات المؤقتة
-    context.user_data.clear()
+    # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+    clean_user_data_preserve_admin(context)
     
     await query.edit_message_text("❌ تم إلغاء تصفير رصيد المستخدم")
     
@@ -6537,8 +6549,8 @@ async def handle_order_completed_success(update: Update, context: ContextTypes.D
     
     order_id = context.user_data.get('processing_order_id')
     if order_id:
-        # تنظيف جميع البيانات المؤقتة
-        context.user_data.clear()
+        # تنظيف جميع البيانات المؤقتة مع الحفاظ على حالة الأدمن
+        clean_user_data_preserve_admin(context)
     
     await query.edit_message_text(
         f"✅ تم إنهاء الطلب بنجاح!\n\n🆔 معرف الطلب: `{order_id}`\n\n📋 تم نقل الطلب إلى الطلبات المكتملة.\n\n🔄 يمكنك الآن معالجة طلبات أخرى.",
@@ -7654,8 +7666,8 @@ async def handle_package_action_choice(update: Update, context: ContextTypes.DEF
             parse_mode="Markdown"
         )
         
-        # تنظيف البيانات المؤقتة وإعادة تفعيل كيبورد الأدمن
-        context.user_data.clear()
+        # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+        clean_user_data_preserve_admin(context)
         await restore_admin_keyboard(context, update.effective_chat.id, "🔧 لوحة الأدمن جاهزة للاستخدام")
         
         return ConversationHandler.END
@@ -7716,8 +7728,8 @@ async def send_package_to_user_from_confirmation(query, context: ContextTypes.DE
 
         await query.edit_message_text(admin_message, parse_mode="Markdown")
         
-        # تنظيف البيانات المؤقتة وإعادة تفعيل كيبورد الأدمن
-        context.user_data.clear()
+        # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+        clean_user_data_preserve_admin(context)
         await restore_admin_keyboard(context, query.message.chat_id, "🔧 لوحة الأدمن جاهزة للاستخدام")
 
 async def handle_back_to_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
