@@ -2924,81 +2924,7 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
         )
         print(f"✅ تم إرسال إشعار بسيط للأدمن للطلب: {order_id}")
     except Exception as e:
-        print(f"❌ خطأ في إرسال إشعار الأدمن للطلب {order_id}: {e}")لب
-                if payment_proof:
-                    try:
-                        if payment_proof.startswith("photo:"):
-                            file_id = payment_proof.replace("photo:", "")
-                            print(f"📸 إرسال إثبات دفع (صورة) للأدمن للطلب: {order_id}")
-                            await context.bot.send_photo(
-                                ADMIN_CHAT_ID,
-                                photo=file_id,
-                                caption=f"📸 إثبات دفع للطلب بمعرف: `{order_id}`",
-                                parse_mode='Markdown',
-                                reply_to_message_id=main_msg.message_id
-                            )
-                            print(f"✅ تم إرسال إثبات الدفع (صورة) للأدمن - الطلب: {order_id}")
-                        elif payment_proof.startswith("text:"):
-                            text_proof = payment_proof.replace("text:", "")
-                            print(f"📝 إرسال إثبات دفع (نص) للأدمن للطلب: {order_id}")
-                            await context.bot.send_message(
-                                ADMIN_CHAT_ID,
-                                f"📝 إثبات دفع للطلب بمعرف: `{order_id}`\n\nالنص:\n{text_proof}",
-                                parse_mode='Markdown',
-                                reply_to_message_id=main_msg.message_id
-                            )
-                            print(f"✅ تم إرسال إثبات الدفع (نص) للأدمن - الطلب: {order_id}")
-                        else:
-                            print(f"⚠️ نوع إثبات الدفع غير معروف: {payment_proof}")
-                    except Exception as proof_error:
-                        print(f"⚠️ خطأ في إرسال إثبات الدفع للطلب {order_id}: {proof_error}")
-                        # إرسال رسالة تبديلية بدلاً من إثبات الدفع
-                        try:
-                            await context.bot.send_message(
-                                ADMIN_CHAT_ID,
-                                f"⚠️ فشل في إرسال إثبات الدفع للطلب `{order_id}`\n\nالنوع: {payment_proof[:20]}...",
-                                parse_mode='Markdown',
-                                reply_to_message_id=main_msg.message_id
-                            )
-                        except:
-                            pass
-                else:
-                    print(f"⚠️ لا يوجد إثبات دفع مرفق للطلب: {order_id}")
-                
-                print(f"✅ تم إرسال إشعار الطلب للأدمن بنجاح - الطلب: {order_id}")
-                
-            except Exception as e:
-                print(f"❌ خطأ في إرسال إشعار الأدمن للطلب {order_id}: {e}")
-                print(f"   تفاصيل الخطأ: {type(e).__name__}")
-                import traceback
-                print(f"   Traceback: {traceback.format_exc()}")
-                
-                # محاولة تسجيل الخطأ في قاعدة البيانات
-                try:
-                    db.log_action(order[1], "admin_notification_failed", f"Order: {order_id}, Error: {str(e)}")
-                except Exception as log_error:
-                    print(f"⚠️ فشل في تسجيل خطأ الإشعار: {log_error}")
-                
-                # محاولة إرسال إشعار بديل للأدمن
-                try:
-                    await context.bot.send_message(
-                        ADMIN_CHAT_ID,
-                        f"⚠️ فشل في إرسال إشعار مفصل للطلب `{order_id}`\n\nيرجى التحقق من قاعدة البيانات مباشرة.",
-                        parse_mode='Markdown'
-                    )
-                except:
-                    print(f"❌ فشل في إرسال إشعار بديل للأدمن للطلب: {order_id}")
-                    pass
-        else:
-            print(f"⚠️ لم يتم تحديد ADMIN_CHAT_ID - لا يمكن إرسال إشعار للطلب: {order_id}")
-            # محاولة تسجيل عدم وجود أدمن في قاعدة البيانات
-            try:
-                db.log_action(order[1], "admin_notification_skipped", f"Order: {order_id} - No ADMIN_CHAT_ID set")
-            except:
-                pass
-        
-            # حفظ تفاصيل الطلب في قاعدة البيانات
-    db.log_action(order[1], "order_details_logged", f"Order: {order_id} - {order[2]} - {order[3]}")
+        print(f"❌ خطأ في إرسال إشعار الأدمن للطلب {order_id}: {e}")
 
 async def handle_view_order_details(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """عرض تفاصيل الطلب مع التوثيق عند الضغط على زر عرض الطلب"""
