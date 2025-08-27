@@ -61,33 +61,7 @@ import time
 from typing import Dict, Set
 from functools import wraps
 
-# دالة timeout للعمليات الطويلة
-def timeout_handler(seconds=300):  # 5 دقائق
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            try:
-                return await asyncio.wait_for(func(*args, **kwargs), timeout=seconds)
-            except asyncio.TimeoutError:
-                logger.warning(f"Operation timeout: {func.__name__}")
-                # تسجيل timeout للمستخدم إذا أمكن
-                if args and hasattr(args[0], 'effective_user') and args[0].effective_user:
-                    user_id = args[0].effective_user.id
-                    health_monitor.mark_conversation_timeout(user_id)
-                    # تنظيف البيانات المؤقتة للمستخدم
-                    if len(args) > 1 and hasattr(args[1], 'user_data'):
-                        try:
-                            await cleanup_incomplete_operations(args[1], user_id, "timeout")
-                        except Exception as cleanup_error:
-                            logger.error(f"Cleanup error after timeout: {cleanup_error}")
-                return ConversationHandler.END
-            except Exception as e:
-                logger.error(f"Error in {func.__name__}: {e}")
-                # تسجيل الخطأ في health monitor
-                health_monitor.increment_error()
-                return ConversationHandler.END
-        return wrapper
-    return decorator
+# تم إزالة timeout handler لتحسين الأداء والاستقرار
 
 # الإعدادات الثابتة
 ADMIN_PASSWORD = "sohilSOHIL"
@@ -1070,7 +1044,7 @@ sohilskaf123@gmail.com
 `P1114452356`
 
 ━━━━━━━━━━━━━━━
-📩 الرجاء إرسال إثبات الدفع للبوت مع تفاصيل الطلب
+📩 الرجاء إرسال إثبات الدفع (صورة فقط) للبوت مع تفاصيل الطلب
 ⏱️ يرجى الانتظار حتى تتم معالجة العملية من قبل الأدمن
 
 معرف الطلب: `{}`""",
@@ -1104,7 +1078,7 @@ sohilskaf123@gmail.com
 `P1114452356`
 
 ━━━━━━━━━━━━━━━
-📩 الرجاء إرسال إثبات الدفع للبوت مع تفاصيل الطلب
+📩 الرجاء إرسال إثبات الدفع (صورة فقط) للبوت مع تفاصيل الطلب
 ⏱️ يرجى الانتظار حتى تتم معالجة العملية من قبل الأدمن
 
 معرف الطلب: `{}`""",
@@ -1112,7 +1086,7 @@ sohilskaf123@gmail.com
         'select_state': 'اختر الولاية:',
         'manual_input': 'إدخال يدوي',
         'payment_methods': 'اختر طريقة الدفع:',
-        'send_payment_proof': 'يرجى إرسال إثبات الدفع (صورة أو نص):',
+        'send_payment_proof': 'يرجى إرسال إثبات الدفع (صورة فقط):',
         'order_received': '✅ تم استلام طلبك بنجاح!\n\n📋 سيتم معالجة الطلب يدوياً من الأدمن بأقرب وقت.\n\n📧 ستصلك تحديثات الحالة تلقائياً.',
         'main_menu_buttons': ['🔒 طلب بروكسي ستاتيك', '📡 طلب بروكسي سوكس', '👥 إحالاتي', '📋 تذكير بطلباتي', '⚙️ الإعدادات'],
         'admin_main_buttons': ['📋 إدارة الطلبات', '💰 إدارة الأموال', '👥 الإحالات', '📢 البث', '⚙️ الإعدادات'],
@@ -1181,7 +1155,7 @@ sohilskaf123@gmail.com
 `P1114452356`
 
 ━━━━━━━━━━━━━━━
-📩 Please send payment proof to the bot with order details
+📩 Please send payment proof (image only) to the bot with order details
 ⏱️ Please wait for admin to process manually
 
 Order ID: `{}`""",
@@ -1214,7 +1188,7 @@ sohilskaf123@gmail.com
 `P1114452356`
 
 ━━━━━━━━━━━━━━━
-📩 Please send payment proof to the bot with order details
+📩 Please send payment proof (image only) to the bot with order details
 ⏱️ Please wait for admin to process manually
 
 Order ID: `{}`""",
@@ -1222,7 +1196,7 @@ Order ID: `{}`""",
         'select_state': 'Select State:',
         'manual_input': 'Manual Input',
         'payment_methods': 'Choose payment method:',
-        'send_payment_proof': 'Please send payment proof (image or text):',
+        'send_payment_proof': 'Please send payment proof (image only):',
         'order_received': '✅ Your order has been received successfully!\n\n📋 Admin will process it manually soon.\n\n📧 You will receive status updates automatically.',
         'main_menu_buttons': ['🔒 Request Static Proxy', '📡 Request Socks Proxy', '👥 My Referrals', '📋 Order Reminder', '⚙️ Settings'],
         'admin_main_buttons': ['📋 Manage Orders', '💰 Manage Money', '👥 Referrals', '📢 Broadcast', '⚙️ Settings'],
@@ -1583,7 +1557,7 @@ sohilskaf123@gmail.com
 `P1114452356`
 
 ━━━━━━━━━━━━━━━
-📩 الرجاء إرسال إثبات الدفع للبوت مع تفاصيل الطلب
+📩 الرجاء إرسال إثبات الدفع (صورة فقط) للبوت مع تفاصيل الطلب
 ⏱️ يرجى الانتظار حتى تتم معالجة العملية من قبل الأدمن
 
 معرف الطلب: `{{}}`"""
@@ -1618,7 +1592,7 @@ sohilskaf123@gmail.com
   P1114452356
 
 ━━━━━━━━━━━━━━━
-📩 Please send payment proof to the bot with order details
+📩 Please send payment proof (image only) to the bot with order details
 ⏱️ Please wait for admin to process manually
 
 Order ID: {{}}"""
@@ -1659,7 +1633,7 @@ sohilskaf123@gmail.com
 `P1114452356`
 
 ━━━━━━━━━━━━━━━
-📩 الرجاء إرسال إثبات الدفع للبوت مع تفاصيل الطلب
+📩 الرجاء إرسال إثبات الدفع (صورة فقط) للبوت مع تفاصيل الطلب
 ⏱️ يرجى الانتظار حتى تتم معالجة العملية من قبل الأدمن
 
 معرف الطلب: `{{}}`"""
@@ -1693,7 +1667,7 @@ sohilskaf123@gmail.com
   P1114452356
 
 ━━━━━━━━━━━━━━━
-📩 Please send payment proof to the bot with order details
+📩 Please send payment proof (image only) to the bot with order details
 ⏱️ Please wait for admin to process manually
 
 Order ID: {{}}"""
@@ -2207,15 +2181,11 @@ async def handle_socks_proxy_request(update: Update, context: ContextTypes.DEFAU
     context.user_data['proxy_type'] = 'socks'
     return
 
-@timeout_handler(60)  # timeout بعد دقيقة واحدة  
 async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة اختيار الدولة"""
     try:
         query = update.callback_query
         user_id = update.effective_user.id
-        
-        # تسجيل نشاط المستخدم
-        health_monitor.mark_user_activity(user_id)
         
         # تسجيل الإجراء
         logger.info(f"User {user_id} selected: {query.data}")
@@ -2288,7 +2258,6 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
     
     except Exception as e:
         logger.error(f"Error in handle_country_selection for user {user_id}: {e}")
-        health_monitor.increment_error()
         
         try:
             # محاولة إرسال رسالة خطأ للمستخدم
@@ -2307,7 +2276,7 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
                 )
             
             # تنظيف البيانات المؤقتة
-            await cleanup_incomplete_operations(context, user_id, "all")
+            context.user_data.clear()
             
         except Exception as recovery_error:
             logger.error(f"Failed to send error message in country selection: {recovery_error}")
@@ -2331,7 +2300,6 @@ async def show_payment_methods(query, context: ContextTypes.DEFAULT_TYPE, langua
         
     except Exception as e:
         logger.error(f"Error in show_payment_methods: {e}")
-        health_monitor.increment_error()
         
         try:
             # محاولة إرسال رسالة خطأ بسيطة
@@ -2342,15 +2310,11 @@ async def show_payment_methods(query, context: ContextTypes.DEFAULT_TYPE, langua
         except Exception as recovery_error:
             logger.error(f"Failed to send error message in show_payment_methods: {recovery_error}")
 
-@timeout_handler(60)  # timeout بعد دقيقة واحدة
 async def handle_payment_method_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة اختيار طريقة الدفع"""
     try:
         query = update.callback_query
         user_id = update.effective_user.id
-        
-        # تسجيل نشاط المستخدم
-        health_monitor.mark_user_activity(user_id)
         
         # تسجيل الإجراء
         logger.info(f"User {user_id} selected payment method: {query.data}")
@@ -2378,7 +2342,6 @@ async def handle_payment_method_selection(update: Update, context: ContextTypes.
         
     except Exception as e:
         logger.error(f"Error in handle_payment_method_selection for user {user_id}: {e}")
-        health_monitor.increment_error()
         
         try:
             await update.callback_query.message.reply_text(
@@ -2387,7 +2350,7 @@ async def handle_payment_method_selection(update: Update, context: ContextTypes.
                 reply_markup=ReplyKeyboardRemove()
             )
             # تنظيف البيانات المؤقتة
-            await cleanup_incomplete_operations(context, user_id, "all")
+            context.user_data.clear()
             
         except Exception as recovery_error:
             logger.error(f"Failed to send error message in payment method selection: {recovery_error}")
@@ -2426,40 +2389,27 @@ async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYP
         print(f"📝 إنشاء طلب جديد: {order_id}")
         db.create_order(order_id, user_id, proxy_type, country, state, payment_method, payment_amount, context.user_data.get("quantity", "واحد"))
         
-        # معالجة إثبات الدفع
-        payment_proof = None
-        if update.message.photo:
-            # إذا كانت صورة
-            file_id = update.message.photo[-1].file_id
-            payment_proof = f"photo:{file_id}"
-            
-            print(f"📸 تم استلام إثبات دفع (صورة) للطلب: {order_id}")
-            
-            # إرسال نسخة للمستخدم
-            await update.message.reply_photo(
-                photo=file_id,
-                caption=f"📸 إثبات دفع للطلب بمعرف: `{order_id}`\n\n✅ تم حفظ إثبات الدفع بنجاح",
-                parse_mode='Markdown'
-            )
-        elif update.message.text:
-            # إذا كان نص
-            payment_proof = f"text:{update.message.text}"
-            
-            print(f"📝 تم استلام إثبات دفع (نص) للطلب: {order_id}")
-            
-            # إرسال نسخة للمستخدم
+        # التحقق من أن الرسالة تحتوي على صورة فقط
+        if not update.message.photo:
+            # رفض أي نوع آخر غير الصورة
             await update.message.reply_text(
-                f"📝 إثبات دفع للطلب بمعرف: `{order_id}`\n\nالتفاصيل:\n{update.message.text}\n\n✅ تم حفظ إثبات الدفع بنجاح",
-                parse_mode='Markdown'
-            )
-        else:
-            # نوع غير مدعوم
-            print(f"⚠️ تم استلام نوع غير مدعوم من إثبات الدفع للطلب: {order_id}")
-            await update.message.reply_text(
-                "❌ نوع الملف غير مدعوم. يرجى إرسال صورة أو نص فقط.",
+                "❌ يُسمح بإرسال الصور فقط كإثبات للدفع!\n\n📸 يرجى إرسال صورة واضحة لإثبات الدفع\n\n⏳ البوت ينتظر صورة إثبات الدفع أو يمكنك الإلغاء",
                 parse_mode='Markdown'
             )
             return PAYMENT_PROOF  # البقاء في نفس الحالة
+
+        # معالجة إثبات الدفع (صورة فقط)
+        file_id = update.message.photo[-1].file_id
+        payment_proof = f"photo:{file_id}"
+        
+        print(f"📸 تم استلام إثبات دفع (صورة) للطلب: {order_id}")
+        
+        # إرسال نسخة للمستخدم
+        await update.message.reply_photo(
+            photo=file_id,
+            caption=f"📸 إثبات دفع للطلب بمعرف: `{order_id}`\n\n✅ تم حفظ إثبات الدفع بنجاح",
+            parse_mode='Markdown'
+        )
         
         # حفظ إثبات الدفع في قاعدة البيانات
         if payment_proof:
@@ -2954,95 +2904,27 @@ Please keep the order ID for future reference."""
         await context.bot.send_message(user_id, message, parse_mode='Markdown')
 
 async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: str, payment_proof: str = None) -> None:
-    """إرسال إشعار للأدمن بطلب جديد"""
-    print(f"🔍 فحص حالة الأدمن:")
-    print(f"   ADMIN_CHAT_ID: {ADMIN_CHAT_ID}")
-    print(f"   نوع إثبات الدفع المستلم: {payment_proof[:20] if payment_proof else 'None'}...")
+    """إرسال إشعار بسيط للأدمن بطلب جديد"""
+    if not ADMIN_CHAT_ID:
+        print(f"⚠️ لم يتم تحديد ADMIN_CHAT_ID - لا يمكن إرسال إشعار للطلب: {order_id}")
+        return
     
-    # التحقق من وجود أدمن في قاعدة البيانات
+    # إرسال إشعار بسيط
+    message = f"🔔 لديك طلب جديد\n\n🆔 معرف الطلب: `{order_id}`"
+    
+    keyboard = [[InlineKeyboardButton("📋 عرض الطلب", callback_data=f"view_order_{order_id}")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     try:
-        admin_logs = db.execute_query("SELECT * FROM logs WHERE action = 'admin_login_success' ORDER BY timestamp DESC LIMIT 1")
-        if admin_logs:
-            print(f"   آخر تسجيل دخول أدمن: {admin_logs[0]}")
-        else:
-            print(f"   لم يتم العثور على تسجيل دخول أدمن في قاعدة البيانات")
+        await context.bot.send_message(
+            ADMIN_CHAT_ID, 
+            message, 
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        print(f"✅ تم إرسال إشعار بسيط للأدمن للطلب: {order_id}")
     except Exception as e:
-        print(f"   خطأ في فحص قاعدة البيانات: {e}")
-    # الحصول على تفاصيل الطلب
-    query = """
-        SELECT o.*, u.first_name, u.last_name, u.username 
-        FROM orders o 
-        JOIN users u ON o.user_id = u.user_id 
-        WHERE o.id = ?
-    """
-    result = db.execute_query(query, (order_id,))
-    
-    if result:
-        order = result[0]
-        
-        # تحديد طريقة الدفع باللغة العربية
-        payment_methods_ar = {
-            'shamcash': 'شام كاش',
-            'syriatel': 'سيرياتيل كاش',
-            'coinex': 'Coinex',
-            'binance': 'Binance',
-            'payeer': 'Payeer'
-        }
-        
-        payment_method_ar = payment_methods_ar.get(order[5], order[5])
-        
-        message = f"""🔔 طلب جديد
-
-👤 الاسم: `{order[14]} {order[15] or ''}`
-📱 اسم المستخدم: @{order[16] or 'غير محدد'}
-🆔 معرف المستخدم: `{order[1]}`
-
-━━━━━━━━━━━━━━━
-📦 تفاصيل الطلب:
-📊 الكمية: {order[8]}
-🔧 نوع البروكسي: {order[2]}
-🌍 الدولة: {order[3]}
-🏠 الولاية: {order[4]}
-
-━━━━━━━━━━━━━━━
-💳 تفاصيل الدفع:
-💰 طريقة الدفع: {payment_method_ar}
-💵 قيمة الطلب: `{order[6]}$`
-📄 إثبات الدفع: {"✅ مرفق" if order[7] else "❌ غير مرفق"}
-
-━━━━━━━━━━━━━━━
-🔗 معرف الطلب: `{order[0]}`
-📅 تاريخ الطلب: {order[9]}
-📊 الحالة: ⏳ معلق"""
-        
-        keyboard = [[InlineKeyboardButton("🔧 معالجة الطلب", callback_data=f"process_{order_id}")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        # حفظ رسالة إثبات الدفع مع معرف الطلب
-        if order[7]:  # payment_proof
-            proof_message = f"إثبات دفع للطلب بمعرف: {order_id}"
-            db.execute_query(
-                "INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)",
-                (order[1], "payment_proof_saved", proof_message)
-            )
-        
-        # إرسال للأدمن مع زر المعالجة
-        keyboard = [[InlineKeyboardButton("🔧 معالجة الطلب", callback_data=f"process_{order_id}")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        if ADMIN_CHAT_ID:
-            try:
-                # إرسال الإشعار الرئيسي
-                print(f"📤 إرسال إشعار أساسي للأدمن للطلب: {order_id}")
-                main_msg = await context.bot.send_message(
-                    ADMIN_CHAT_ID, 
-                    message, 
-                    reply_markup=reply_markup,
-                    parse_mode='Markdown'
-                )
-                print(f"✅ تم إرسال الإشعار الأساسي بنجاح للطلب: {order_id}")
-                
-                # إرسال إثبات الدفع كرد على رسالة الطلب
+        print(f"❌ خطأ في إرسال إشعار الأدمن للطلب {order_id}: {e}")لب
                 if payment_proof:
                     try:
                         if payment_proof.startswith("photo:"):
@@ -3115,8 +2997,96 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, order_id: 
             except:
                 pass
         
-        # حفظ تفاصيل الطلب في قاعدة البيانات
-        db.log_action(order[1], "order_details_logged", f"Order: {order_id} - {order[2]} - {order[3]}")
+            # حفظ تفاصيل الطلب في قاعدة البيانات
+    db.log_action(order[1], "order_details_logged", f"Order: {order_id} - {order[2]} - {order[3]}")
+
+async def handle_view_order_details(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """عرض تفاصيل الطلب مع التوثيق عند الضغط على زر عرض الطلب"""
+    query = update.callback_query
+    await query.answer()
+    
+    order_id = query.data.replace("view_order_", "")
+    
+    # الحصول على تفاصيل الطلب
+    order_query = """
+        SELECT o.*, u.first_name, u.last_name, u.username 
+        FROM orders o 
+        JOIN users u ON o.user_id = u.user_id 
+        WHERE o.id = ?
+    """
+    result = db.execute_query(order_query, (order_id,))
+    
+    if not result:
+        await query.edit_message_text("❌ لم يتم العثور على الطلب")
+        return
+    
+    order = result[0]
+    
+    # تحديد طريقة الدفع باللغة العربية
+    payment_methods_ar = {
+        'shamcash': 'شام كاش',
+        'syriatel': 'سيرياتيل كاش',
+        'coinex': 'Coinex',
+        'binance': 'Binance',
+        'payeer': 'Payeer'
+    }
+    
+    payment_method_ar = payment_methods_ar.get(order[5], order[5])
+    
+    message = f"""📋 تفاصيل الطلب مع التوثيق
+
+👤 الاسم: `{order[14]} {order[15] or ''}`
+📱 اسم المستخدم: @{order[16] or 'غير محدد'}
+🆔 معرف المستخدم: `{order[1]}`
+
+━━━━━━━━━━━━━━━
+📦 تفاصيل الطلب:
+📊 الكمية: {order[8]}
+🔧 نوع البروكسي: {order[2]}
+🌍 الدولة: {order[3]}
+🏠 الولاية: {order[4]}
+
+━━━━━━━━━━━━━━━
+💳 تفاصيل الدفع:
+💰 طريقة الدفع: {payment_method_ar}
+💵 قيمة الطلب: `{order[6]}$`
+📄 إثبات الدفع: {"✅ مرفق" if order[7] else "❌ غير مرفق"}
+
+━━━━━━━━━━━━━━━
+🔗 معرف الطلب: `{order_id}`
+📅 تاريخ الطلب: {order[9]}
+📊 الحالة: ⏳ معلق"""
+
+    # إنشاء أزرار الإجراءات
+    keyboard = [
+        [InlineKeyboardButton("🔧 معالجة الطلب", callback_data=f"process_{order_id}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(message, reply_markup=reply_markup, parse_mode='Markdown')
+    
+    # إرسال إثبات الدفع كرد على رسالة الطلب إذا كان موجوداً
+    if order[7]:  # payment_proof
+        try:
+            if order[7].startswith("photo:"):
+                file_id = order[7].replace("photo:", "")
+                await context.bot.send_photo(
+                    update.effective_chat.id,
+                    photo=file_id,
+                    caption=f"📸 إثبات دفع للطلب بمعرف: `{order_id}`",
+                    parse_mode='Markdown',
+                    reply_to_message_id=query.message.message_id
+                )
+            elif order[7].startswith("text:"):
+                text_proof = order[7].replace("text:", "")
+                await context.bot.send_message(
+                    update.effective_chat.id,
+                    f"📝 إثبات دفع للطلب بمعرف: `{order_id}`\n\nالنص:\n{text_proof}",
+                    parse_mode='Markdown',
+                    reply_to_message_id=query.message.message_id
+                )
+        except Exception as e:
+            print(f"خطأ في إرسال إثبات الدفع: {e}")
 
 async def handle_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة قسم الإحالات"""
@@ -3276,7 +3246,7 @@ async def handle_cleanup_command(update: Update, context: ContextTypes.DEFAULT_T
     clean_user_data_preserve_admin(context)
     
     # تنظيف العمليات المعلقة
-    success = await cleanup_incomplete_operations(context, user_id, "all")
+    context.user_data.clear()  # تبسيط التنظيف
     
     if success:
         # إعادة توجيه المستخدم للحالة المناسبة
@@ -3368,7 +3338,6 @@ Please use /start command to reload menus
     
     await query.edit_message_text(message)
 
-@timeout_handler(60)  # timeout بعد دقيقة واحدة
 async def handle_user_quantity_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة اختيار الكمية من قبل المستخدم"""
     try:
@@ -3380,9 +3349,6 @@ async def handle_user_quantity_selection(update: Update, context: ContextTypes.D
         logger.info(f"User ID: {user_id}")
         logger.info(f"Query data: {query.data}")
         logger.info(f"Current user_data: {context.user_data}")
-        
-        # تسجيل نشاط المستخدم
-        health_monitor.mark_user_activity(user_id)
         
         # تسجيل الإجراء
         logger.info(f"User {user_id} selected quantity: {query.data}")
@@ -3415,11 +3381,10 @@ async def handle_user_quantity_selection(update: Update, context: ContextTypes.D
                 reply_markup=ReplyKeyboardRemove()
             )
             # تنظيف البيانات والعودة للقائمة الرئيسية
-            await cleanup_incomplete_operations(context, user_id, "user")
+            context.user_data.clear()
             
     except Exception as e:
         logger.error(f"Error in handle_user_quantity_selection for user {user_id}: {e}")
-        health_monitor.increment_error()
         
         try:
             await update.callback_query.message.reply_text(
@@ -3428,7 +3393,7 @@ async def handle_user_quantity_selection(update: Update, context: ContextTypes.D
                 reply_markup=ReplyKeyboardRemove()
             )
             # تنظيف البيانات المؤقتة
-            await cleanup_incomplete_operations(context, user_id, "all")
+            context.user_data.clear()
         except Exception as recovery_error:
             logger.error(f"Failed to send error message in quantity selection: {recovery_error}")
 
@@ -3458,7 +3423,6 @@ async def show_country_selection_for_user(query, context: ContextTypes.DEFAULT_T
         
     except Exception as e:
         logger.error(f"Error in show_country_selection_for_user: {e}")
-        health_monitor.increment_error()
         
         try:
             # محاولة إرسال رسالة خطأ بسيطة
@@ -3508,9 +3472,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     """معالجة الاستعلامات المرسلة مع حماية من التوقف"""
     query = update.callback_query
     user_id = update.effective_user.id
-    
-    # تسجيل نشاط المستخدم في مراقب الصحة
-    health_monitor.mark_user_activity(user_id)
     
     # قائمة الأزرار التي تُعالج في ConversationHandlers - يجب تجاهلها هنا
     conversation_only_buttons = [
@@ -3610,12 +3571,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             user_id = update.effective_user.id
             language = get_user_language(user_id)
             
-            # الحصول على النص المحفوظ أو استخدام النص الافتراضي
-            popup_text = context.user_data.get('popup_text')
-            if not popup_text:
-                # إنشاء النص بناءً على لغة المستخدم الحالية
-                if language == 'ar':
-                    popup_text = """🧑‍💻 معلومات المطور
+            # إنشاء النص بناءً على لغة المستخدم الحالية
+            if language == 'ar':
+                popup_text = """🧑‍💻 معلومات المطور
 
 📦 بوت بيع البروكسي وإدارة البروكسي
 🔢 الإصدار: 1.0.0
@@ -3631,8 +3589,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 
 ━━━━━━━━━━━━━━━
 © Mohamad Zalaf 2025"""
-                else:
-                    popup_text = """🧑‍💻 Developer Information
+            else:
+                popup_text = """🧑‍💻 Developer Information
 
 📦 Proxy Sales & Management Bot
 🔢 Version: 1.0.0
@@ -3649,7 +3607,12 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 ━━━━━━━━━━━━━━━
 © Mohamad Zalaf 2025"""
             
-            await query.answer(text=popup_text, show_alert=True)
+            try:
+                await query.answer(text=popup_text, show_alert=True)
+            except Exception as e:
+                print(f"خطأ في إظهار النافذة المنبثقة: {e}")
+                # محاولة بديلة - إرسال رسالة عادية
+                await query.message.reply_text(popup_text)
         elif query.data == "cancel_manual_input":
             # إلغاء الإدخال اليدوي والعودة للقائمة
             context.user_data.pop('waiting_for', None)
@@ -3698,13 +3661,13 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             offset = int(query.data.replace("show_more_users_", ""))
             await query.answer()
             await show_user_statistics(update, context, offset)
-
+        elif query.data.startswith("view_order_"):
+            await handle_view_order_details(update, context)
+        elif query.data.startswith("send_direct_message_"):
+            await handle_send_direct_message(update, context)
         else:
             # معالجة الأزرار غير المعروفة أو المنتهية الصلاحية
             logger.warning(f"Unknown or expired callback action: {query.data} from user {user_id}")
-            
-            # تسجيل المستخدم كعالق مؤقتاً
-            health_monitor.mark_user_stuck(user_id, f"unknown_callback_{query.data}")
             
             try:
                 await query.answer("⚠️ هذا الزر منتهي الصلاحية أو غير صالح")
@@ -3712,7 +3675,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 logger.error(f"Failed to answer unknown callback: {answer_error}")
             
             # تنظيف البيانات المؤقتة لتجنب التعليق
-            await cleanup_incomplete_operations(context, user_id, "all")
+            context.user_data.clear()
             
             # التحقق من نوع المستخدم وإعادة توجيهه للقائمة المناسبة
             if user_id == ADMIN_CHAT_ID or context.user_data.get('is_admin'):
@@ -4388,16 +4351,16 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # استخدام الرسالة الأصلية مع إضافة معلومات الدفع وسؤال الكمية
+    # استخدام الرسالة الأصلية مع إضافة معلومات الدفع وتحضير للرد المباشر
     original_message = context.user_data.get('original_order_message', '')
-    combined_message = f"{original_message}\n\n━━━━━━━━━━━━━━━\n{admin_message}\n\n━━━━━━━━━━━━━━━\n1️⃣ اختر الكمية المطلوبة:"
+    combined_message = f"{original_message}\n\n━━━━━━━━━━━━━━━\n{admin_message}\n\n━━━━━━━━━━━━━━━\n💬 يمكنك الآن إرسال رسالة مباشرة للمستخدم:"
     
     # التحقق من طول الرسالة
     print(f"📏 طول الرسالة: {len(combined_message)} حرف")
     if len(combined_message) > 4000:  # حد أمان أقل من حد Telegram (4096)
         print("⚠️ الرسالة طويلة جداً، سيتم تقصيرها")
         # استخدام رسالة مختصرة
-        combined_message = f"✅ تم قبول الدفع للطلب\n\n🆔 معرف الطلب: `{context.user_data['processing_order_id']}`\n💰 قيمة الطلب: `{payment_amount}$`\n\n📋 الطلب جاهز للمعالجة والإرسال للمستخدم.\n\n━━━━━━━━━━━━━━━\n1️⃣ اختر الكمية المطلوبة:"
+        combined_message = f"✅ تم قبول الدفع للطلب\n\n🆔 معرف الطلب: `{context.user_data['processing_order_id']}`\n💰 قيمة الطلب: `{payment_amount}$`\n\n📋 الطلب جاهز للمعالجة والإرسال للمستخدم.\n\n━━━━━━━━━━━━━━━\n💬 يمكنك الآن إرسال رسالة مباشرة للمستخدم:"
     
     try:
         print(f"🔄 محاولة تحديث الرسالة مع الأزرار")
@@ -4419,6 +4382,25 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
             print(f"✅ تم تحديث الرسالة بنجاح بدون parse_mode")
         except Exception as e2:
             print(f"❌ خطأ في المحاولة البديلة: {e2}")
+    
+    return PROCESS_ORDER
+
+async def handle_send_direct_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة إرسال رسالة مباشرة للمستخدم"""
+    query = update.callback_query
+    await query.answer()
+    
+    order_id = query.data.replace("send_direct_message_", "")
+    context.user_data['direct_message_order_id'] = order_id
+    
+    # تحديث الرسالة لإظهار حالة انتظار الرسالة
+    await query.edit_message_text(
+        f"💬 إرسال رسالة مباشرة للمستخدم\n\n🆔 معرف الطلب: `{order_id}`\n\n📝 اكتب رسالتك الآن وسيتم إرسالها مباشرة للمستخدم:",
+        parse_mode='Markdown'
+    )
+    
+    # تحديد حالة انتظار رسالة الأدمن
+    context.user_data['waiting_for_admin_message'] = True
     
     return PROCESS_ORDER
 
@@ -5332,9 +5314,6 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         text = update.message.text
         user_id = update.effective_user.id
         
-        # تسجيل نشاط المستخدم
-        health_monitor.mark_user_activity(user_id)
-        
         # فحص طول الرسالة لتجنب المشاكل
         if len(text) > 1000:  # رسالة طويلة جداً
             await update.message.reply_text(
@@ -5356,7 +5335,6 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         is_admin = context.user_data.get('is_admin', False)
     except Exception as e:
         logger.error(f"Error in handle_text_messages initialization: {e}")
-        health_monitor.increment_error()
         try:
             await update.message.reply_text("⚠️ حدث خطأ. استخدم /start لإعادة التشغيل.")
         except:
@@ -5375,7 +5353,7 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     elif text.lower() in ['إلغاء', 'cancel', 'خروج', 'exit', 'stop']:
         # تنظيف العمليات المعلقة والعودة للقائمة الرئيسية
-        await cleanup_incomplete_operations(context, user_id, "all")
+        context.user_data.clear()  # تبسيط التنظيف
         await update.message.reply_text("✅ تم إلغاء العملية والعودة للقائمة الرئيسية")
         await start(update, context)
         return
@@ -5409,6 +5387,41 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_markup=reply_markup
         )
         return
+    
+    # التحقق من حالة انتظار رسالة مباشرة من الأدمن
+    if is_admin and context.user_data.get('waiting_for_admin_message'):
+        order_id = context.user_data.get('direct_message_order_id')
+        if order_id:
+            # إرسال الرسالة للمستخدم
+            user_query = "SELECT user_id FROM orders WHERE id = ?"
+            user_result = db.execute_query(user_query, (order_id,))
+            
+            if user_result:
+                user_id_target = user_result[0][0]
+                
+                # إرسال الرسالة للمستخدم
+                user_message = f"""📩 رسالة من الإدارة
+
+{text}
+
+━━━━━━━━━━━━━━━
+🆔 بخصوص الطلب: `{order_id}`"""
+                
+                try:
+                    await context.bot.send_message(user_id_target, user_message, parse_mode='Markdown')
+                    await update.message.reply_text(f"✅ تم إرسال رسالتك للمستخدم بنجاح!\n\n📋 الطلب: `{order_id}`\n📝 الرسالة: {text[:50]}...", parse_mode='Markdown')
+                except Exception as e:
+                    await update.message.reply_text(f"❌ فشل في إرسال الرسالة: {str(e)}")
+            else:
+                await update.message.reply_text("❌ لم يتم العثور على المستخدم")
+            
+            # تنظيف البيانات المؤقتة
+            context.user_data.pop('direct_message_order_id', None)
+            context.user_data.pop('waiting_for_admin_message', None)
+            
+            # إعادة تفعيل كيبورد الأدمن
+            await restore_admin_keyboard(context, update.effective_chat.id)
+            return
     
     # أزرار الأدمن
     if is_admin:
@@ -5933,7 +5946,7 @@ sohilskaf123@gmail.com
 `P1114452356`
 
 ━━━━━━━━━━━━━━━
-📩 الرجاء إرسال إثبات الدفع للبوت مع تفاصيل الطلب
+📩 الرجاء إرسال إثبات الدفع (صورة فقط) للبوت مع تفاصيل الطلب
 ⏱️ يرجى الانتظار حتى تتم معالجة العملية من قبل الأدمن
 
 معرف الطلب: `{{}}`"""
@@ -5968,7 +5981,7 @@ sohilskaf123@gmail.com
   P1114452356
 
 ━━━━━━━━━━━━━━━
-📩 Please send payment proof to the bot with order details
+📩 Please send payment proof (image only) to the bot with order details
 ⏱️ Please wait for admin to process manually
 
 Order ID: {{}}"""
@@ -6099,7 +6112,7 @@ sohilskaf123@gmail.com
 `P1114452356`
 
 ━━━━━━━━━━━━━━━
-📩 الرجاء إرسال إثبات الدفع للبوت مع تفاصيل الطلب
+📩 الرجاء إرسال إثبات الدفع (صورة فقط) للبوت مع تفاصيل الطلب
 ⏱️ يرجى الانتظار حتى تتم معالجة العملية من قبل الأدمن
 
 معرف الطلب: `{{}}`"""
@@ -6133,7 +6146,7 @@ sohilskaf123@gmail.com
   P1114452356
 
 ━━━━━━━━━━━━━━━
-📩 Please send payment proof to the bot with order details
+📩 Please send payment proof (image only) to the bot with order details
 ⏱️ Please wait for admin to process manually
 
 Order ID: {{}}"""
@@ -6663,7 +6676,7 @@ async def force_reset_user_state(update: Update, context: ContextTypes.DEFAULT_T
     
     try:
         # تنظيف جميع البيانات المؤقتة
-        await cleanup_incomplete_operations(context, user_id, "all")
+        context.user_data.clear()  # تبسيط التنظيف
         
         # التحقق من نوع المستخدم وإعادة تفعيل الكيبورد المناسب
         is_admin = context.user_data.get('is_admin', False) or user_id == ADMIN_CHAT_ID
@@ -6717,7 +6730,7 @@ async def handle_stuck_conversation(update: Update, context: ContextTypes.DEFAUL
         logger.warning(f"Stuck conversation detected for user {user_id}")
         
         # تنظيف العمليات المعلقة
-        await cleanup_incomplete_operations(context, user_id, "all")
+        context.user_data.clear()  # تبسيط التنظيف
         
         # إرسال رسالة توضيحية
         if update.message:
@@ -7361,31 +7374,9 @@ class BotHealthMonitor:
         logger.info("Bot health monitoring started successfully")
 
 # إنشاء مراقب الصحة
-health_monitor = BotHealthMonitor()
+# تم إزالة health_monitor لحل مشكلة تسجيل الخروج التلقائي
 
-# دالة مراقبة تعمل كل 10 دقائق
-async def health_check_routine():
-    """روتين فحص الصحة"""
-    while True:
-        try:
-            await asyncio.sleep(600)  # 10 دقائق
-            
-            # تنظيف المستخدمين العالقين
-            health_monitor.cleanup_stuck_users()
-            
-            # فحص حالة قاعدة البيانات
-            try:
-                db.execute_query("SELECT 1")
-            except Exception as db_error:
-                logger.critical(f"Database connection lost: {db_error}")
-                
-            # تسجيل حالة الصحة
-            health_status = health_monitor.get_health_status()
-            if health_status["stuck_users_count"] > 0:
-                logger.warning(f"Health check: {health_status}")
-                
-        except Exception as e:
-            logger.error(f"Health check routine failed: {e}")
+# تم إزالة دالة health_check_routine لحل مشكلة تسجيل الخروج التلقائي
 
 async def initialize_cleanup_scheduler(application):
     """تهيئة جدولة التنظيف التلقائي"""
@@ -7397,14 +7388,13 @@ async def initialize_cleanup_scheduler(application):
                 try:
                     logger.info("Running scheduled cleanup...")
                     await cleanup_old_orders()  # الدالة الموجودة مسبقاً
-                    health_monitor.cleanup_stuck_users()
+                    # تم إزالة health_monitor.cleanup_stuck_users()
                 except Exception as e:
                     logger.error(f"Error in scheduled cleanup: {e}")
         
         # تشغيل التنظيف في الخلفية
         application.create_task(scheduled_cleanup())
-        # تشغيل مراقب الصحة
-        application.create_task(health_check_routine())
+        # تم إزالة مراقب الصحة
         logger.info("Cleanup scheduler and health monitor initialized successfully")
         
     except Exception as e:
@@ -8041,12 +8031,12 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
         error_msg = f"Global error in {error_context}: {context.error}"
         logger.error(error_msg, exc_info=context.error)
         
-        # تسجيل المستخدم كعالق إذا كان معروف
+        # تنظيف البيانات المؤقتة للمستخدم إذا كان معروف
         if user_id:
-            health_monitor.mark_user_stuck(user_id, f"global_error_{type(context.error).__name__}")
+            # تم إزالة health_monitor.mark_user_stuck
             
             # تنظيف البيانات المؤقتة للمستخدم
-            await cleanup_incomplete_operations(context, user_id, "all")
+            context.user_data.clear()
             
             # محاولة إرسال رسالة للمستخدم
             try:
@@ -8137,17 +8127,8 @@ def setup_bot():
         application.add_error_handler(global_error_handler)
         
         # تهيئة نظام مراقبة الصحة
-        print("🔧 تهيئة نظام مراقبة الصحة...")
-        try:
-            # تهيئة جدولة التنظيف التلقائي
-            async def post_init(app):
-                print("🔧 تهيئة المهام المجدولة...")
-                await health_monitor.start_monitoring()
-                
-            application.post_init = post_init
-            print("✅ تم تهيئة نظام مراقبة الصحة")
-        except Exception as e:
-            print(f"⚠️ تحذير: فشل في تهيئة نظام مراقبة الصحة: {e}")
+        # تم إزالة نظام مراقبة الصحة لحل مشكلة تسجيل الخروج التلقائي
+        print("✅ تم تهيئة البوت بنجاح (بدون مراقب الصحة)")
         
         print("✅ تم إضافة جميع المعالجات")
         print("📊 قاعدة البيانات جاهزة")
