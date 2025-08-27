@@ -3350,6 +3350,12 @@ async def handle_user_quantity_selection(update: Update, context: ContextTypes.D
         query = update.callback_query
         user_id = update.effective_user.id
         
+        # تسجيل مفصل لتتبع المشكلة
+        logger.info(f"=== QUANTITY SELECTION START ===")
+        logger.info(f"User ID: {user_id}")
+        logger.info(f"Query data: {query.data}")
+        logger.info(f"Current user_data: {context.user_data}")
+        
         # تسجيل نشاط المستخدم
         health_monitor.mark_user_activity(user_id)
         
@@ -3364,14 +3370,18 @@ async def handle_user_quantity_selection(update: Update, context: ContextTypes.D
         language = get_user_language(user_id)
         
         if query.data in ["quantity_single_static", "quantity_single_socks"]:
+            logger.info(f"Processing SINGLE quantity for user {user_id}")
             context.user_data['user_quantity'] = 'single'
             # الانتقال لاختيار الدولة
             await show_country_selection_for_user(query, context, language)
+            logger.info(f"=== QUANTITY SELECTION SUCCESS (single) ===")
             
         elif query.data in ["quantity_package_static", "quantity_package_socks"]:
+            logger.info(f"Processing PACKAGE quantity for user {user_id}")
             context.user_data['user_quantity'] = 'package'
             # الانتقال لاختيار الدولة
             await show_country_selection_for_user(query, context, language)
+            logger.info(f"=== QUANTITY SELECTION SUCCESS (package) ===")
         else:
             # معالجة قيمة غير متوقعة
             logger.warning(f"Unknown quantity selection: {query.data} from user {user_id}")
@@ -3508,14 +3518,19 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         print(f"⚠️ خطأ في إجابة الاستعلام: {answer_error}")
     
     try:
+        logger.info(f"Processing callback query: {query.data} from user {user_id}")
+        
         if query.data.startswith("country_") or query.data.startswith("state_") or query.data in ["manual_country", "manual_state"]:
+            logger.info(f"Routing to country selection for user {user_id}")
             await handle_country_selection(update, context)
         elif query.data.startswith("payment_"):
+            logger.info(f"Routing to payment selection for user {user_id}")
             await handle_payment_method_selection(update, context)
         elif query.data.startswith("lang_"):
+            logger.info(f"Routing to language change for user {user_id}")
             await handle_language_change(update, context)
         elif query.data.startswith("quantity_"):
-            logger.info(f"Processing quantity selection: {query.data} for user {user_id}")
+            logger.info(f"Routing to quantity selection: {query.data} for user {user_id}")
             await handle_user_quantity_selection(update, context)
         elif query.data == "cancel_user_proxy_request":
             await handle_cancel_user_proxy_request(update, context)
