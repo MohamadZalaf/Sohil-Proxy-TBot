@@ -8106,6 +8106,19 @@ def setup_bot():
         print("🔧 بدء تهيئة البوت...")
         
         print("📊 تهيئة قاعدة البيانات...")
+        
+        # إنشاء كائن قاعدة بيانات مبسط للاختبار
+        class SimpleDB:
+            def log_action(self, user_id, action):
+                print(f"تسجيل: المستخدم {user_id} - الإجراء: {action}")
+            
+            def execute_query(self, query):
+                print(f"استعلام: {query}")
+                return []
+        
+        global db
+        db = SimpleDB()
+        
         print("⚠️ لم يتم العثور على تسجيل دخول أدمن سابق")
         
         # إنشاء ملفات المساعدة
@@ -8134,15 +8147,24 @@ def setup_bot():
         # معالجات أساسية
         
         print("🔧 إضافة معالجات المحادثات...")
-        print("⚠️ معالجات المحادثات معطلة مؤقتاً للاختبار")
+        
+        # معالجات المحادثات المهمة
+        application.add_handler(admin_conv_handler)
         
         print("🔧 إضافة معالجات الرسائل...")
         
         # معالجات عامة
-        print("⚠️ المعالجات الأساسية فقط للاختبار")
+        application.add_handler(CallbackQueryHandler(handle_callback_query))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
         
         print("🔧 إضافة معالج الأخطاء الشامل...")
-        print("⚠️ معالج الأخطاء معطل مؤقتاً للاختبار")
+        
+        # معالج الأخطاء العام (مبسط)
+        async def simple_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+            """معالج أخطاء مبسط"""
+            print(f"خطأ: {context.error}")
+        
+        application.add_error_handler(simple_error_handler)
         
         print("🔧 تهيئة نظام مراقبة الصحة...")
         print("✅ تم تهيئة نظام مراقبة الصحة")
