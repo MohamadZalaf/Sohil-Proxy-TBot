@@ -8128,6 +8128,9 @@ def setup_bot():
         # أوامر عامة  
         application.add_handler(CommandHandler("start", start))
         
+        # إضافة أمر admin_login
+        application.add_handler(CommandHandler("admin", admin_login))
+        
         # معالجات أساسية
         
         print("🔧 إضافة معالجات المحادثات...")
