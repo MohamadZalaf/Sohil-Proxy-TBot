@@ -2406,7 +2406,7 @@ async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYP
                 "❌ خطأ: لم يتم العثور على نوع البروكسي. يرجى البدء من جديد بالضغط على /start",
                 parse_mode='Markdown'
             )
-            context.user_data.clear()
+            clean_user_data_preserve_admin(context)
             return ConversationHandler.END
         
         # إنشاء معرف الطلب الآن فقط عند إرسال إثبات الدفع
@@ -2501,8 +2501,8 @@ async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYP
         except Exception as e:
             print(f"⚠️ خطأ في تسجيل العملية للطلب {order_id}: {e}")
         
-        # تنظيف البيانات المؤقتة وإنهاء المحادثة
-        context.user_data.clear()
+        # تنظيف البيانات المؤقتة وإنهاء المحادثة مع الحفاظ على حالة الأدمن
+        clean_user_data_preserve_admin(context)
         print(f"🧹 تم تنظيف البيانات المؤقتة وإنهاء معالجة الطلب: {order_id}")
         
         return ConversationHandler.END
@@ -2517,8 +2517,8 @@ async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYP
         except:
             pass
         
-        # تنظيف البيانات في حالة الخطأ
-        context.user_data.clear()
+        # تنظيف البيانات في حالة الخطأ مع الحفاظ على حالة الأدمن
+        clean_user_data_preserve_admin(context)
         return ConversationHandler.END
 
 async def send_withdrawal_notification(context: ContextTypes.DEFAULT_TYPE, withdrawal_id: str, user: tuple) -> None:
@@ -3251,8 +3251,8 @@ async def handle_reset_command(update: Update, context: ContextTypes.DEFAULT_TYP
     """معالجة أمر /reset لإعادة تعيين حالة المستخدم"""
     user_id = update.effective_user.id
     
-    # تنظيف شامل للبيانات المؤقتة
-    context.user_data.clear()
+    # تنظيف شامل للبيانات المؤقتة مع الحفاظ على حالة الأدمن
+    clean_user_data_preserve_admin(context)
     
     # إنهاء أي محادثات نشطة
     try:
@@ -3272,8 +3272,8 @@ async def handle_cleanup_command(update: Update, context: ContextTypes.DEFAULT_T
     """معالجة أمر /cleanup لتنظيف العمليات المعلقة"""
     user_id = update.effective_user.id
     
-    # تنظيف البيانات المؤقتة أولاً
-    context.user_data.clear()
+    # تنظيف البيانات المؤقتة أولاً مع الحفاظ على حالة الأدمن
+    clean_user_data_preserve_admin(context)
     
     # تنظيف العمليات المعلقة
     success = await cleanup_incomplete_operations(context, user_id, "all")
@@ -3477,8 +3477,8 @@ async def handle_cancel_user_proxy_request(update: Update, context: ContextTypes
     user_id = update.effective_user.id
     language = get_user_language(user_id)
     
-    # تنظيف البيانات المؤقتة
-    context.user_data.clear()
+    # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+    clean_user_data_preserve_admin(context)
     
     # رسالة الإلغاء
     if language == 'ar':
@@ -3660,7 +3660,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await start(update, context)
         elif query.data == "cancel_custom_message":
             # إلغاء إدخال الرسالة المخصصة والعودة لقائمة الأدمن
-            context.user_data.clear()
+            clean_user_data_preserve_admin(context)
             await query.edit_message_text("❌ تم إلغاء إدخال الرسالة المخصصة.")
             
             # إعادة تفعيل كيبورد الأدمن الرئيسي
@@ -3760,7 +3760,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         
         # تنظيف البيانات المؤقتة في حالة الخطأ
         try:
-            context.user_data.clear()
+            clean_user_data_preserve_admin(context)
         except:
             pass
 
@@ -3939,8 +3939,8 @@ If you have any questions, please contact support:
         # جدولة حذف الطلب بعد 48 ساعة
         await schedule_order_deletion(context, order_id, user_id if user_result else None)
         
-        # تنظيف البيانات المؤقتة
-        context.user_data.clear()
+        # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+        clean_user_data_preserve_admin(context)
         
         await query.edit_message_text(f"✅ تم إشعار المستخدم برفض الطلب.\nمعرف الطلب: `{order_id}`\n\n⏰ سيتم حذف الطلب تلقائياً بعد 48 ساعة", parse_mode='Markdown')
         
@@ -3992,8 +3992,8 @@ If you have any questions, please contact support:
         # جدولة حذف الطلب بعد 48 ساعة
         await schedule_order_deletion(context, order_id, user_id)
     
-    # تنظيف البيانات المؤقتة
-    context.user_data.clear()
+    # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+    clean_user_data_preserve_admin(context)
     
     await update.message.reply_text(
         f"✅ تم إرسال الرسالة المخصصة ورسالة فشل العملية للمستخدم.\nمعرف الطلب: {order_id}\n\n⏰ سيتم حذف الطلب تلقائياً بعد 48 ساعة"
@@ -6390,7 +6390,7 @@ async def handle_cancel_processing(update: Update, context: ContextTypes.DEFAULT
             (order_id,)
         )
 
-        context.user_data.clear()
+        clean_user_data_preserve_admin(context)
         
         # إعادة تفعيل كيبورد الأدمن الرئيسي
         await restore_admin_keyboard(context, update.effective_chat.id)
@@ -6510,8 +6510,8 @@ async def handle_cancel_payment_proof(update: Update, context: ContextTypes.DEFA
         except:
             pass
         
-        # تنظيف البيانات المؤقتة
-        context.user_data.clear()
+        # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن (إذا كان أدمن)
+        clean_user_data_preserve_admin(context)
         
         if language == 'ar':
             message = "❌ تم إلغاء إرسال إثبات الدفع\n\n🔄 يمكنك البدء من جديد في أي وقت"
@@ -6535,8 +6535,8 @@ async def handle_cancel_payment_proof(update: Update, context: ContextTypes.DEFA
     except Exception as e:
         print(f"❌ خطأ في معالجة إلغاء إثبات الدفع للمستخدم {update.effective_user.id}: {e}")
         try:
-            # تنظيف البيانات على أي حال
-            context.user_data.clear()
+            # تنظيف البيانات على أي حال مع الحفاظ على حالة الأدمن
+            clean_user_data_preserve_admin(context)
             await update.callback_query.answer("❌ تم الإلغاء")
         except:
             pass
@@ -6568,8 +6568,8 @@ async def handle_cancel_custom_message(update: Update, context: ContextTypes.DEF
     query = update.callback_query
     await query.answer()
     
-    # تنظيف البيانات المؤقتة
-    context.user_data.clear()
+    # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+    clean_user_data_preserve_admin(context)
     
     await query.edit_message_text("❌ تم إلغاء إرسال الرسالة المخصصة")
     
@@ -6583,8 +6583,8 @@ async def handle_cancel_proxy_setup(update: Update, context: ContextTypes.DEFAUL
     query = update.callback_query
     await query.answer()
     
-    # تنظيف البيانات المؤقتة
-    context.user_data.clear()
+    # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+    clean_user_data_preserve_admin(context)
     
     await query.edit_message_text("❌ تم إلغاء إعداد البروكسي")
     
@@ -6741,7 +6741,7 @@ async def handle_stuck_conversation(update: Update, context: ContextTypes.DEFAUL
     except Exception as e:
         logger.error(f"Error handling stuck conversation for user {user_id}: {e}")
         try:
-            context.user_data.clear()
+            clean_user_data_preserve_admin(context)
             if update.message:
                 await update.message.reply_text("⚠️ حدث خطأ. يرجى استخدام /start لإعادة التشغيل")
         except:
@@ -7244,8 +7244,8 @@ async def handle_cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     await query.answer()
     
-    # تنظيف البيانات المؤقتة
-    context.user_data.clear()
+    # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+    clean_user_data_preserve_admin(context)
     
     await query.edit_message_text("❌ تم إلغاء عملية البث")
     
@@ -7263,7 +7263,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         # تنظيف البيانات المؤقتة
         if hasattr(context, 'user_data') and context.user_data:
-            context.user_data.clear()
+            clean_user_data_preserve_admin(context)
         
         # محاولة إرسال رسالة للمستخدم
         if update and hasattr(update, 'effective_chat') and update.effective_chat:
