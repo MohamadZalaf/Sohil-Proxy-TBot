@@ -45,6 +45,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# إضافة معالج للأخطاء العامة
+import asyncio
+import time
+from typing import Dict, Set
+from functools import wraps
+
 # الإعدادات الثابتة
 ADMIN_PASSWORD = "sohilSOHIL"
 TOKEN = "8408804784:AAG8cSTsDQfycDaXOX9YMmc_OB3wABez7LA"
@@ -3332,8 +3338,12 @@ async def handle_cancel_user_proxy_request(update: Update, context: ContextTypes
     )
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """معالجة الاستعلامات المرسلة"""
+    """معالجة الاستعلامات المرسلة مع حماية من التوقف"""
     query = update.callback_query
+    user_id = update.effective_user.id
+    
+    # تسجيل نشاط المستخدم في مراقب الصحة
+    health_monitor.mark_user_activity(user_id)
     
     # قائمة الأزرار التي تُعالج في ConversationHandlers - يجب تجاهلها هنا
     conversation_only_buttons = [
@@ -3518,24 +3528,43 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await show_user_statistics(update, context, offset)
 
         else:
-            # معالجة الأزرار غير المعروفة - تسجيل وإعادة توجيه مناسب
-            print(f"⚠️ إجراء غير معروف من المستخدم {update.effective_user.id}: {query.data}")
+            # معالجة الأزرار غير المعروفة أو المنتهية الصلاحية
+            logger.warning(f"Unknown or expired callback action: {query.data} from user {user_id}")
+            
+            # تسجيل المستخدم كعالق مؤقتاً
+            health_monitor.mark_user_stuck(user_id, f"unknown_callback_{query.data}")
+            
             try:
-                await query.answer("❌ إجراء غير معروف")
-            except:
-                pass
+                await query.answer("⚠️ هذا الزر منتهي الصلاحية أو غير صالح")
+            except Exception as answer_error:
+                logger.error(f"Failed to answer unknown callback: {answer_error}")
             
             # تنظيف البيانات المؤقتة لتجنب التعليق
-            context.user_data.clear()
+            await cleanup_incomplete_operations(context, user_id, "all")
             
             # التحقق من نوع المستخدم وإعادة توجيهه للقائمة المناسبة
-            user_id = update.effective_user.id
-            if user_id == ADMIN_CHAT_ID:
+            if user_id == ADMIN_CHAT_ID or context.user_data.get('is_admin'):
                 # للأدمن - إعادة تفعيل كيبورد الأدمن
-                await restore_admin_keyboard(context, update.effective_chat.id, "⚠️ تم اكتشاف إجراء غير معروف. عودة للقائمة الرئيسية...")
+                await restore_admin_keyboard(context, update.effective_chat.id, 
+                                           "⚠️ تم اكتشاف زر منتهي الصلاحية. عودة للقائمة الرئيسية...")
             else:
                 # للمستخدم العادي - العودة للقائمة الرئيسية
-                await start(update, context)
+                try:
+                    await query.message.reply_text(
+                        "⚠️ هذا الزر منتهي الصلاحية. تم إعادة توجيهك للقائمة الرئيسية.",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+                    await start(update, context)
+                except Exception as redirect_error:
+                    logger.error(f"Failed to redirect user after unknown callback: {redirect_error}")
+                    # محاولة أخيرة بسيطة
+                    try:
+                        await context.bot.send_message(
+                            user_id,
+                            "يرجى استخدام /start لإعادة تشغيل البوت"
+                        )
+                    except:
+                        pass
             
     except Exception as e:
         print(f"❌ خطأ في معالجة callback query من المستخدم {update.effective_user.id}: {e}")
@@ -5157,10 +5186,40 @@ async def return_to_admin_main(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة الرسائل النصية"""
-    text = update.message.text
-    user_id = update.effective_user.id
-    language = get_user_language(user_id)
-    is_admin = context.user_data.get('is_admin', False)
+    try:
+        text = update.message.text
+        user_id = update.effective_user.id
+        
+        # تسجيل نشاط المستخدم
+        health_monitor.mark_user_activity(user_id)
+        
+        # فحص طول الرسالة لتجنب المشاكل
+        if len(text) > 1000:  # رسالة طويلة جداً
+            await update.message.reply_text(
+                "⚠️ الرسالة طويلة جداً. يرجى إرسال رسالة أقصر.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return
+        
+        # فحص الرسائل المكررة أو المشبوهة
+        if len(text) > 10 and text.count(text[0]) > len(text) * 0.8:  # رسالة مكررة
+            logger.warning(f"Suspicious repeated message from user {user_id}")
+            await update.message.reply_text(
+                "⚠️ يرجى عدم إرسال رسائل مكررة.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return
+        
+        language = get_user_language(user_id)
+        is_admin = context.user_data.get('is_admin', False)
+    except Exception as e:
+        logger.error(f"Error in handle_text_messages initialization: {e}")
+        health_monitor.increment_error()
+        try:
+            await update.message.reply_text("⚠️ حدث خطأ. استخدم /start لإعادة التشغيل.")
+        except:
+            pass
+        return
     
     # التحقق من الأوامر الخاصة للتنظيف وإعادة التعيين
     if text.lower() in ['/reset', '🔄 إعادة تعيين', 'reset']:
@@ -6580,14 +6639,24 @@ async def handle_stuck_conversation(update: Update, context: ContextTypes.DEFAUL
     user_id = update.effective_user.id
     
     try:
+        logger.warning(f"Stuck conversation detected for user {user_id}")
+        
         # تنظيف العمليات المعلقة
-        await cleanup_incomplete_operations(context, user_id, "conversation")
+        await cleanup_incomplete_operations(context, user_id, "all")
         
         # إرسال رسالة توضيحية
-        await update.message.reply_text(
-            "🔄 تم اكتشاف محادثة عالقة وتم تنظيفها\n"
-            "يمكنك الآن المتابعة بشكل طبيعي"
-        )
+        if update.message:
+            await update.message.reply_text(
+                "🔄 تم اكتشاف محادثة عالقة وتم تنظيفها\n"
+                "يمكنك الآن المتابعة بشكل طبيعي",
+                reply_markup=ReplyKeyboardRemove()
+            )
+        elif update.callback_query:
+            await update.callback_query.answer("تم إعادة تعيين الحالة")
+            await update.callback_query.message.reply_text(
+                "🔄 تم اكتشاف محادثة عالقة وتم تنظيفها\n"
+                "يمكنك الآن المتابعة بشكل طبيعي"
+            )
         
         # إعادة توجيه للقائمة الرئيسية
         await start(update, context)
@@ -6596,6 +6665,12 @@ async def handle_stuck_conversation(update: Update, context: ContextTypes.DEFAUL
         
     except Exception as e:
         logger.error(f"Error handling stuck conversation for user {user_id}: {e}")
+        try:
+            context.user_data.clear()
+            if update.message:
+                await update.message.reply_text("⚠️ حدث خطأ. يرجى استخدام /start لإعادة التشغيل")
+        except:
+            pass
         return ConversationHandler.END
 
 async def auto_cleanup_expired_operations(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -7104,6 +7179,167 @@ async def handle_cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_
     
     return ConversationHandler.END
 
+# ===== معالج الأخطاء الشامل =====
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالج شامل للأخطاء"""
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+    
+    try:
+        # تنظيف البيانات المؤقتة
+        if hasattr(context, 'user_data') and context.user_data:
+            context.user_data.clear()
+        
+        # محاولة إرسال رسالة للمستخدم
+        if update and hasattr(update, 'effective_chat') and update.effective_chat:
+            try:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="❌ حدث خطأ تقني. يرجى استخدام /start لإعادة تشغيل البوت",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+            except Exception as send_error:
+                logger.error(f"Could not send error message: {send_error}")
+        
+        # تسجيل تفاصيل الخطأ
+        if update and hasattr(update, 'effective_user'):
+            user_id = update.effective_user.id
+            try:
+                db.log_action(user_id, "error_occurred", str(context.error))
+            except Exception as log_error:
+                logger.error(f"Could not log error: {log_error}")
+        
+    except Exception as handler_error:
+        logger.error(f"Error in error handler: {handler_error}")
+
+# ===== نظام مراقبة صحة البوت =====
+
+class BotHealthMonitor:
+    """نظام مراقبة صحة البوت"""
+    
+    def __init__(self):
+        self.stuck_users: Dict[int, float] = {}  # user_id -> timestamp
+        self.conversation_timeouts: Dict[int, float] = {}
+        self.error_count: int = 0
+        self.last_activity: float = time.time()
+        
+    def mark_user_activity(self, user_id: int):
+        """تسجيل نشاط المستخدم"""
+        self.stuck_users.pop(user_id, None)
+        self.conversation_timeouts.pop(user_id, None)
+        self.last_activity = time.time()
+        
+    def mark_user_stuck(self, user_id: int, conversation_state: str):
+        """تسجيل مستخدم عالق"""
+        self.stuck_users[user_id] = time.time()
+        logger.warning(f"User {user_id} stuck in state: {conversation_state}")
+        
+    def mark_conversation_timeout(self, user_id: int):
+        """تسجيل انتهاء مهلة المحادثة"""
+        self.conversation_timeouts[user_id] = time.time()
+        
+    def increment_error(self):
+        """زيادة عداد الأخطاء"""
+        self.error_count += 1
+        
+    def get_stuck_users(self, timeout_minutes: int = 30) -> Set[int]:
+        """الحصول على المستخدمين العالقين"""
+        current_time = time.time()
+        timeout_seconds = timeout_minutes * 60
+        
+        return {
+            user_id for user_id, timestamp in self.stuck_users.items()
+            if current_time - timestamp > timeout_seconds
+        }
+        
+    def cleanup_stuck_users(self, timeout_minutes: int = 30):
+        """تنظيف المستخدمين العالقين"""
+        stuck_users = self.get_stuck_users(timeout_minutes)
+        
+        for user_id in stuck_users:
+            try:
+                db.log_action(user_id, "auto_unstuck", "System auto-cleanup")
+                self.stuck_users.pop(user_id, None)
+                logger.info(f"Auto-cleaned stuck user: {user_id}")
+            except Exception as e:
+                logger.error(f"Failed to cleanup stuck user {user_id}: {e}")
+                
+    def get_health_status(self) -> Dict:
+        """الحصول على حالة صحة البوت"""
+        return {
+            "stuck_users_count": len(self.stuck_users),
+            "timeout_conversations": len(self.conversation_timeouts),
+            "error_count": self.error_count,
+            "last_activity": datetime.fromtimestamp(self.last_activity),
+            "uptime_minutes": (time.time() - self.last_activity) / 60
+        }
+    
+    async def start_monitoring(self):
+        """بدء مراقبة صحة البوت"""
+        logger.info("Starting bot health monitoring...")
+        
+        # تشغيل روتين الفحص في الخلفية
+        asyncio.create_task(health_check_routine())
+        
+        # تسجيل بداية المراقبة
+        self.last_activity = time.time()
+        logger.info("Bot health monitoring started successfully")
+
+# إنشاء مراقب الصحة
+health_monitor = BotHealthMonitor()
+
+# دالة مراقبة تعمل كل 10 دقائق
+async def health_check_routine():
+    """روتين فحص الصحة"""
+    while True:
+        try:
+            await asyncio.sleep(600)  # 10 دقائق
+            
+            # تنظيف المستخدمين العالقين
+            health_monitor.cleanup_stuck_users()
+            
+            # فحص حالة قاعدة البيانات
+            try:
+                db.execute_query("SELECT 1")
+            except Exception as db_error:
+                logger.critical(f"Database connection lost: {db_error}")
+                
+            # تسجيل حالة الصحة
+            health_status = health_monitor.get_health_status()
+            if health_status["stuck_users_count"] > 0:
+                logger.warning(f"Health check: {health_status}")
+                
+        except Exception as e:
+            logger.error(f"Health check routine failed: {e}")
+
+# دالة timeout للعمليات الطويلة
+def timeout_handler(seconds=300):  # 5 دقائق
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            try:
+                return await asyncio.wait_for(func(*args, **kwargs), timeout=seconds)
+            except asyncio.TimeoutError:
+                logger.warning(f"Operation timeout: {func.__name__}")
+                # تسجيل timeout للمستخدم إذا أمكن
+                if args and hasattr(args[0], 'effective_user') and args[0].effective_user:
+                    user_id = args[0].effective_user.id
+                    health_monitor.mark_conversation_timeout(user_id)
+                    # تنظيف البيانات المؤقتة للمستخدم
+                    if len(args) > 1 and hasattr(args[1], 'user_data'):
+                        try:
+                            await cleanup_incomplete_operations(args[1], user_id, "timeout")
+                        except Exception as cleanup_error:
+                            logger.error(f"Cleanup error after timeout: {cleanup_error}")
+                return ConversationHandler.END
+            except Exception as e:
+                logger.error(f"Error in {func.__name__}: {e}")
+                # تسجيل الخطأ في health monitor
+                health_monitor.increment_error()
+                return ConversationHandler.END
+        return wrapper
+    return decorator
+
 async def initialize_cleanup_scheduler(application):
     """تهيئة جدولة التنظيف التلقائي"""
     try:
@@ -7112,15 +7348,17 @@ async def initialize_cleanup_scheduler(application):
             while True:
                 await asyncio.sleep(3600)  # كل ساعة
                 try:
-                    # هنا يمكن إضافة تنظيف تلقائي للعمليات المنتهية الصلاحية
                     logger.info("Running scheduled cleanup...")
                     await cleanup_old_orders()  # الدالة الموجودة مسبقاً
+                    health_monitor.cleanup_stuck_users()
                 except Exception as e:
                     logger.error(f"Error in scheduled cleanup: {e}")
         
         # تشغيل التنظيف في الخلفية
         application.create_task(scheduled_cleanup())
-        logger.info("Cleanup scheduler initialized successfully")
+        # تشغيل مراقب الصحة
+        application.create_task(health_check_routine())
+        logger.info("Cleanup scheduler and health monitor initialized successfully")
         
     except Exception as e:
         logger.error(f"Failed to initialize cleanup scheduler: {e}")
@@ -7195,6 +7433,24 @@ def setup_bot():
     print("🔧 إضافة معالجات الرسائل...")
     application.add_handler(CallbackQueryHandler(handle_callback_query))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
+    
+    # إضافة معالج الأخطاء الشامل
+    print("🔧 إضافة معالج الأخطاء الشامل...")
+    application.add_error_handler(global_error_handler)
+    
+    # تهيئة نظام مراقبة الصحة
+    print("🔧 تهيئة نظام مراقبة الصحة...")
+    try:
+        # تهيئة جدولة التنظيف التلقائي
+        async def post_init(app):
+            await initialize_cleanup_scheduler(app)
+            await health_monitor.start_monitoring()
+            
+        application.post_init = post_init
+        print("✅ تم تهيئة نظام مراقبة الصحة")
+    except Exception as e:
+        print(f"⚠️ خطأ في تهيئة نظام مراقبة الصحة: {e}")
+    
     print("✅ تم إضافة جميع المعالجات")
     
     print("📊 قاعدة البيانات جاهزة")
@@ -7562,10 +7818,20 @@ process_order_conv_handler = ConversationHandler(
         ]
     },
     fallbacks=[
+        # الأوامر الأساسية
+        CommandHandler("start", start),
         CommandHandler("cancel", lambda u, c: ConversationHandler.END),
         CommandHandler("reset", handle_reset_command),
         CommandHandler("cleanup", handle_cleanup_command),
-        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+        CommandHandler("help", start),
+        # معالجة كلمات الإلغاء
+        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation),
+        # معالجة أي callback query غير متوقع
+        CallbackQueryHandler(handle_stuck_conversation),
+        # معالجة أي رسالة نصية أو أمر غير متوقع
+        MessageHandler(filters.TEXT | filters.COMMAND, handle_stuck_conversation),
+        # معالجة الملفات والوسائط غير المرغوبة
+        MessageHandler(filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.AUDIO, handle_stuck_conversation)
     ]
 )
 
@@ -7579,10 +7845,20 @@ password_change_conv_handler = ConversationHandler(
         ],
     },
     fallbacks=[
+        # الأوامر الأساسية
+        CommandHandler("start", start),
         CommandHandler("cancel", lambda u, c: ConversationHandler.END),
         CommandHandler("reset", handle_reset_command),
         CommandHandler("cleanup", handle_cleanup_command),
-        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+        CommandHandler("help", start),
+        # معالجة كلمات الإلغاء
+        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation),
+        # معالجة أي callback query غير متوقع
+        CallbackQueryHandler(handle_stuck_conversation),
+        # معالجة أي رسالة نصية أو أمر غير متوقع
+        MessageHandler(filters.TEXT | filters.COMMAND, handle_stuck_conversation),
+        # معالجة الملفات والوسائط غير المرغوبة
+        MessageHandler(filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.AUDIO, handle_stuck_conversation)
     ]
 )
 
@@ -7622,10 +7898,20 @@ admin_functions_conv_handler = ConversationHandler(
         QUIET_HOURS: [CallbackQueryHandler(handle_quiet_hours_selection, pattern="^quiet_")]
     },
     fallbacks=[
+        # الأوامر الأساسية
+        CommandHandler("start", start),
         CommandHandler("cancel", lambda u, c: ConversationHandler.END),
         CommandHandler("reset", handle_reset_command),
         CommandHandler("cleanup", handle_cleanup_command),
-        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+        CommandHandler("help", start),
+        # معالجة كلمات الإلغاء
+        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation),
+        # معالجة أي callback query غير متوقع
+        CallbackQueryHandler(handle_stuck_conversation),
+        # معالجة أي رسالة نصية أو أمر غير متوقع
+        MessageHandler(filters.TEXT | filters.COMMAND, handle_stuck_conversation),
+        # معالجة الملفات والوسائط غير المرغوبة
+        MessageHandler(filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.AUDIO, handle_stuck_conversation)
     ]
 )
 
@@ -7636,10 +7922,20 @@ admin_conv_handler = ConversationHandler(
         ADMIN_MENU: [CallbackQueryHandler(handle_admin_menu_actions)]
     },
     fallbacks=[
+        # الأوامر الأساسية
+        CommandHandler("start", start),
         CommandHandler("cancel", lambda u, c: ConversationHandler.END),
         CommandHandler("reset", handle_reset_command),
         CommandHandler("cleanup", handle_cleanup_command),
-        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+        CommandHandler("help", start),
+        # معالجة كلمات الإلغاء
+        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation),
+        # معالجة أي callback query غير متوقع
+        CallbackQueryHandler(handle_stuck_conversation),
+        # معالجة أي رسالة نصية أو أمر غير متوقع
+        MessageHandler(filters.TEXT | filters.COMMAND, handle_stuck_conversation),
+        # معالجة الملفات والوسائط غير المرغوبة
+        MessageHandler(filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.AUDIO, handle_stuck_conversation)
     ]
 )
     
@@ -7653,10 +7949,20 @@ payment_conv_handler = ConversationHandler(
         ],
     },
     fallbacks=[
+        # الأوامر الأساسية
+        CommandHandler("start", start),
         CommandHandler("cancel", lambda u, c: ConversationHandler.END),
         CommandHandler("reset", handle_reset_command),
         CommandHandler("cleanup", handle_cleanup_command),
-        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+        CommandHandler("help", start),
+        # معالجة كلمات الإلغاء
+        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation),
+        # معالجة أي callback query غير متوقع
+        CallbackQueryHandler(handle_stuck_conversation),
+        # معالجة أي رسالة نصية أو أمر غير متوقع
+        MessageHandler(filters.TEXT | filters.COMMAND, handle_stuck_conversation),
+        # معالجة الملفات والوسائط غير المرغوبة
+        MessageHandler(filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.AUDIO, handle_stuck_conversation)
     ]
 )
     
@@ -7680,12 +7986,86 @@ broadcast_conv_handler = ConversationHandler(
 
     },
     fallbacks=[
+        # الأوامر الأساسية
+        CommandHandler("start", start),
         CommandHandler("cancel", lambda u, c: ConversationHandler.END),
         CommandHandler("reset", handle_reset_command),
         CommandHandler("cleanup", handle_cleanup_command),
-        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation)
+        CommandHandler("help", start),
+        # معالجة كلمات الإلغاء
+        MessageHandler(filters.Regex("^(إلغاء|cancel|خروج|exit|stop)$"), handle_stuck_conversation),
+        # معالجة أي callback query غير متوقع
+        CallbackQueryHandler(handle_stuck_conversation),
+        # معالجة أي رسالة نصية أو أمر غير متوقع
+        MessageHandler(filters.TEXT | filters.COMMAND, handle_stuck_conversation),
+        # معالجة الملفات والوسائط غير المرغوبة
+        MessageHandler(filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.AUDIO, handle_stuck_conversation)
     ]
 )
+
+# ===== معالج الأخطاء الشامل =====
+async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالج شامل لجميع الأخطاء غير المتوقعة"""
+    try:
+        user_id = None
+        error_context = "unknown"
+        
+        # محاولة الحصول على معرف المستخدم
+        if isinstance(update, Update):
+            if update.effective_user:
+                user_id = update.effective_user.id
+                error_context = f"user_{user_id}"
+            elif update.callback_query and update.callback_query.from_user:
+                user_id = update.callback_query.from_user.id
+                error_context = f"callback_{user_id}"
+            elif update.message and update.message.from_user:
+                user_id = update.message.from_user.id
+                error_context = f"message_{user_id}"
+        
+        # تسجيل الخطأ
+        error_msg = f"Global error in {error_context}: {context.error}"
+        logger.error(error_msg, exc_info=context.error)
+        
+        # تسجيل المستخدم كعالق إذا كان معروف
+        if user_id:
+            health_monitor.mark_user_stuck(user_id, f"global_error_{type(context.error).__name__}")
+            
+            # تنظيف البيانات المؤقتة للمستخدم
+            await cleanup_incomplete_operations(context, user_id, "all")
+            
+            # محاولة إرسال رسالة للمستخدم
+            try:
+                if isinstance(update, Update) and update.effective_chat:
+                    await context.bot.send_message(
+                        update.effective_chat.id,
+                        "⚠️ حدث خطأ غير متوقع. تم إعادة تعيين حالتك.\n"
+                        "يرجى استخدام /start لإعادة تشغيل البوت.",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+            except Exception as send_error:
+                logger.error(f"Failed to send error message to user {user_id}: {send_error}")
+        
+        # إحصائيات الأخطاء
+        error_type = type(context.error).__name__
+        if not hasattr(global_error_handler, 'error_stats'):
+            global_error_handler.error_stats = {}
+        
+        global_error_handler.error_stats[error_type] = global_error_handler.error_stats.get(error_type, 0) + 1
+        
+        # إذا كان هناك أكثر من 10 أخطاء من نفس النوع، أرسل تنبيه للأدمن
+        if global_error_handler.error_stats[error_type] == 10:
+            try:
+                await context.bot.send_message(
+                    ADMIN_CHAT_ID,
+                    f"🚨 تحذير: تم تسجيل 10 أخطاء من نوع {error_type}\n"
+                    f"آخر خطأ: {str(context.error)[:200]}..."
+                )
+            except:
+                pass
+                
+    except Exception as handler_error:
+        # إذا فشل معالج الأخطاء نفسه
+        logger.critical(f"Error in global error handler: {handler_error}", exc_info=handler_error)
 
 def main():
     """الدالة الرئيسية لتشغيل البوت"""
