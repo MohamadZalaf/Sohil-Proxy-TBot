@@ -2182,21 +2182,27 @@ async def handle_socks_proxy_request(update: Update, context: ContextTypes.DEFAU
         reply_markup=reply_markup
     )
 
+@timeout_handler(60)  # timeout بعد دقيقة واحدة  
 async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة اختيار الدولة"""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = update.effective_user.id
-    language = get_user_language(user_id)
-    
-    # تسجيل نشاط المستخدم
-    health_monitor.mark_user_activity(user_id)
-    
-    # تسجيل الإجراء
-    logger.info(f"User {user_id} selected: {query.data}")
-    
-    if query.data == "manual_country":
+    try:
+        query = update.callback_query
+        user_id = update.effective_user.id
+        
+        # تسجيل نشاط المستخدم
+        health_monitor.mark_user_activity(user_id)
+        
+        # تسجيل الإجراء
+        logger.info(f"User {user_id} selected: {query.data}")
+        
+        try:
+            await query.answer()
+        except Exception as answer_error:
+            logger.warning(f"Failed to answer country callback for user {user_id}: {answer_error}")
+        
+        language = get_user_language(user_id)
+        
+        if query.data == "manual_country":
         # الإدخال اليدوي للدولة
         keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -2254,44 +2260,114 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
             state_name = state_code
         context.user_data['selected_state'] = state_name
         await show_payment_methods(query, context, language)
+    
+    except Exception as e:
+        logger.error(f"Error in handle_country_selection for user {user_id}: {e}")
+        health_monitor.increment_error()
+        
+        try:
+            # محاولة إرسال رسالة خطأ للمستخدم
+            if 'query' in locals() and query and query.message:
+                await query.message.reply_text(
+                    "⚠️ حدث خطأ في معالجة اختيارك. تم إعادة تعيين حالتك.\n"
+                    "يرجى استخدام /start لإعادة المحاولة.",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+            else:
+                # إذا لم تكن query متاحة، استخدم update
+                await update.message.reply_text(
+                    "⚠️ حدث خطأ في معالجة اختيارك. تم إعادة تعيين حالتك.\n"
+                    "يرجى استخدام /start لإعادة المحاولة.",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+            
+            # تنظيف البيانات المؤقتة
+            await cleanup_incomplete_operations(context, user_id, "all")
+            
+        except Exception as recovery_error:
+            logger.error(f"Failed to send error message in country selection: {recovery_error}")
 
 async def show_payment_methods(query, context: ContextTypes.DEFAULT_TYPE, language: str) -> None:
     """عرض طرق الدفع"""
-    keyboard = [
-        [InlineKeyboardButton("💳 شام كاش", callback_data="payment_shamcash")],
-        [InlineKeyboardButton("💳 سيرياتيل كاش", callback_data="payment_syriatel")],
-        [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
-        [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
-        [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
-    ]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(
-        MESSAGES[language]['payment_methods'],
-        reply_markup=reply_markup
-    )
+    try:
+        keyboard = [
+            [InlineKeyboardButton("💳 شام كاش", callback_data="payment_shamcash")],
+            [InlineKeyboardButton("💳 سيرياتيل كاش", callback_data="payment_syriatel")],
+            [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
+            [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
+            [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            MESSAGES[language]['payment_methods'],
+            reply_markup=reply_markup
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in show_payment_methods: {e}")
+        health_monitor.increment_error()
+        
+        try:
+            # محاولة إرسال رسالة خطأ بسيطة
+            await query.message.reply_text(
+                "⚠️ حدث خطأ في عرض طرق الدفع. يرجى استخدام /start لإعادة المحاولة.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+        except Exception as recovery_error:
+            logger.error(f"Failed to send error message in show_payment_methods: {recovery_error}")
 
+@timeout_handler(60)  # timeout بعد دقيقة واحدة
 async def handle_payment_method_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة اختيار طريقة الدفع"""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = update.effective_user.id
-    language = get_user_language(user_id)
-    
-    payment_method = query.data.replace("payment_", "")
-    context.user_data['payment_method'] = payment_method
-    
-    # إضافة زر الإلغاء
-    keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_payment_proof")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(
-        MESSAGES[language]['send_payment_proof'],
-        reply_markup=reply_markup
-    )
-    
-    return PAYMENT_PROOF
+    try:
+        query = update.callback_query
+        user_id = update.effective_user.id
+        
+        # تسجيل نشاط المستخدم
+        health_monitor.mark_user_activity(user_id)
+        
+        # تسجيل الإجراء
+        logger.info(f"User {user_id} selected payment method: {query.data}")
+        
+        try:
+            await query.answer()
+        except Exception as answer_error:
+            logger.warning(f"Failed to answer payment callback for user {user_id}: {answer_error}")
+        
+        language = get_user_language(user_id)
+        
+        payment_method = query.data.replace("payment_", "")
+        context.user_data['payment_method'] = payment_method
+        
+        # إضافة زر الإلغاء
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_payment_proof")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            MESSAGES[language]['send_payment_proof'],
+            reply_markup=reply_markup
+        )
+        
+        return PAYMENT_PROOF
+        
+    except Exception as e:
+        logger.error(f"Error in handle_payment_method_selection for user {user_id}: {e}")
+        health_monitor.increment_error()
+        
+        try:
+            await update.callback_query.message.reply_text(
+                "⚠️ حدث خطأ في معالجة طريقة الدفع. تم إعادة تعيين حالتك.\n"
+                "يرجى استخدام /start لإعادة المحاولة.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            # تنظيف البيانات المؤقتة
+            await cleanup_incomplete_operations(context, user_id, "all")
+            
+        except Exception as recovery_error:
+            logger.error(f"Failed to send error message in payment method selection: {recovery_error}")
+        
+        return ConversationHandler.END
 
 async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة إثبات الدفع"""
@@ -3267,52 +3343,96 @@ Please use /start command to reload menus
     
     await query.edit_message_text(message)
 
+@timeout_handler(60)  # timeout بعد دقيقة واحدة
 async def handle_user_quantity_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة اختيار الكمية من قبل المستخدم"""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = update.effective_user.id
-    language = get_user_language(user_id)
-    
-    # تسجيل نشاط المستخدم
-    health_monitor.mark_user_activity(user_id)
-    
-    # تسجيل الإجراء
-    logger.info(f"User {user_id} selected quantity: {query.data}")
-    
-    if query.data in ["quantity_single_static", "quantity_single_socks"]:
-        context.user_data['user_quantity'] = 'single'
-        # الانتقال لاختيار الدولة
-        await show_country_selection_for_user(query, context, language)
+    try:
+        query = update.callback_query
+        user_id = update.effective_user.id
         
-    elif query.data in ["quantity_package_static", "quantity_package_socks"]:
-        context.user_data['user_quantity'] = 'package'
-        # الانتقال لاختيار الدولة
-        await show_country_selection_for_user(query, context, language)
+        # تسجيل نشاط المستخدم
+        health_monitor.mark_user_activity(user_id)
+        
+        # تسجيل الإجراء
+        logger.info(f"User {user_id} selected quantity: {query.data}")
+        
+        try:
+            await query.answer()
+        except Exception as answer_error:
+            logger.warning(f"Failed to answer quantity callback for user {user_id}: {answer_error}")
+        
+        language = get_user_language(user_id)
+        
+        if query.data in ["quantity_single_static", "quantity_single_socks"]:
+            context.user_data['user_quantity'] = 'single'
+            # الانتقال لاختيار الدولة
+            await show_country_selection_for_user(query, context, language)
+            
+        elif query.data in ["quantity_package_static", "quantity_package_socks"]:
+            context.user_data['user_quantity'] = 'package'
+            # الانتقال لاختيار الدولة
+            await show_country_selection_for_user(query, context, language)
+        else:
+            # معالجة قيمة غير متوقعة
+            logger.warning(f"Unknown quantity selection: {query.data} from user {user_id}")
+            await query.message.reply_text(
+                "⚠️ اختيار غير صالح. يرجى المحاولة مرة أخرى أو استخدام /start",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            # تنظيف البيانات والعودة للقائمة الرئيسية
+            await cleanup_incomplete_operations(context, user_id, "user")
+            
+    except Exception as e:
+        logger.error(f"Error in handle_user_quantity_selection for user {user_id}: {e}")
+        health_monitor.increment_error()
+        
+        try:
+            await update.callback_query.message.reply_text(
+                "⚠️ حدث خطأ في معالجة اختيارك. تم إعادة تعيين حالتك.\n"
+                "يرجى استخدام /start لإعادة المحاولة.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            # تنظيف البيانات المؤقتة
+            await cleanup_incomplete_operations(context, user_id, "all")
+        except Exception as recovery_error:
+            logger.error(f"Failed to send error message in quantity selection: {recovery_error}")
 
 async def show_country_selection_for_user(query, context: ContextTypes.DEFAULT_TYPE, language: str) -> None:
     """عرض اختيار الدولة للمستخدم مع زر إلغاء"""
-    proxy_type = context.user_data.get('proxy_type', 'static')
-    
-    if proxy_type == 'socks':
-        countries = SOCKS_COUNTRIES[language]
-    else:
-        countries = STATIC_COUNTRIES[language]
-    
-    keyboard = []
-    for code, name in countries.items():
-        keyboard.append([InlineKeyboardButton(name, callback_data=f"country_{code}")])
-    
-    # إضافة أزرار الإدخال اليدوي والإلغاء
-    keyboard.append([InlineKeyboardButton(MESSAGES[language]['manual_input'], callback_data="manual_country")])
-    keyboard.append([InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_proxy_request")])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(
-        MESSAGES[language]['select_country'],
-        reply_markup=reply_markup
-    )
+    try:
+        proxy_type = context.user_data.get('proxy_type', 'static')
+        
+        if proxy_type == 'socks':
+            countries = SOCKS_COUNTRIES.get(language, SOCKS_COUNTRIES['ar'])
+        else:
+            countries = STATIC_COUNTRIES.get(language, STATIC_COUNTRIES['ar'])
+        
+        keyboard = []
+        for code, name in countries.items():
+            keyboard.append([InlineKeyboardButton(name, callback_data=f"country_{code}")])
+        
+        # إضافة أزرار الإدخال اليدوي والإلغاء
+        keyboard.append([InlineKeyboardButton(MESSAGES[language]['manual_input'], callback_data="manual_country")])
+        keyboard.append([InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_proxy_request")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            MESSAGES[language]['select_country'],
+            reply_markup=reply_markup
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in show_country_selection_for_user: {e}")
+        health_monitor.increment_error()
+        
+        try:
+            # محاولة إرسال رسالة خطأ بسيطة
+            await query.message.reply_text(
+                "⚠️ حدث خطأ في عرض قائمة الدول. يرجى استخدام /start لإعادة المحاولة.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+        except Exception as recovery_error:
+            logger.error(f"Failed to send error message in show_country_selection_for_user: {recovery_error}")
 
 async def handle_cancel_user_proxy_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة إلغاء طلب البروكسي من قبل المستخدم"""
