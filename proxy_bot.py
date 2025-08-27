@@ -51,6 +51,34 @@ import time
 from typing import Dict, Set
 from functools import wraps
 
+# دالة timeout للعمليات الطويلة
+def timeout_handler(seconds=300):  # 5 دقائق
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            try:
+                return await asyncio.wait_for(func(*args, **kwargs), timeout=seconds)
+            except asyncio.TimeoutError:
+                logger.warning(f"Operation timeout: {func.__name__}")
+                # تسجيل timeout للمستخدم إذا أمكن
+                if args and hasattr(args[0], 'effective_user') and args[0].effective_user:
+                    user_id = args[0].effective_user.id
+                    health_monitor.mark_conversation_timeout(user_id)
+                    # تنظيف البيانات المؤقتة للمستخدم
+                    if len(args) > 1 and hasattr(args[1], 'user_data'):
+                        try:
+                            await cleanup_incomplete_operations(args[1], user_id, "timeout")
+                        except Exception as cleanup_error:
+                            logger.error(f"Cleanup error after timeout: {cleanup_error}")
+                return ConversationHandler.END
+            except Exception as e:
+                logger.error(f"Error in {func.__name__}: {e}")
+                # تسجيل الخطأ في health monitor
+                health_monitor.increment_error()
+                return ConversationHandler.END
+        return wrapper
+    return decorator
+
 # الإعدادات الثابتة
 ADMIN_PASSWORD = "sohilSOHIL"
 TOKEN = "8408804784:AAG8cSTsDQfycDaXOX9YMmc_OB3wABez7LA"
@@ -7336,34 +7364,6 @@ async def health_check_routine():
                 
         except Exception as e:
             logger.error(f"Health check routine failed: {e}")
-
-# دالة timeout للعمليات الطويلة
-def timeout_handler(seconds=300):  # 5 دقائق
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            try:
-                return await asyncio.wait_for(func(*args, **kwargs), timeout=seconds)
-            except asyncio.TimeoutError:
-                logger.warning(f"Operation timeout: {func.__name__}")
-                # تسجيل timeout للمستخدم إذا أمكن
-                if args and hasattr(args[0], 'effective_user') and args[0].effective_user:
-                    user_id = args[0].effective_user.id
-                    health_monitor.mark_conversation_timeout(user_id)
-                    # تنظيف البيانات المؤقتة للمستخدم
-                    if len(args) > 1 and hasattr(args[1], 'user_data'):
-                        try:
-                            await cleanup_incomplete_operations(args[1], user_id, "timeout")
-                        except Exception as cleanup_error:
-                            logger.error(f"Cleanup error after timeout: {cleanup_error}")
-                return ConversationHandler.END
-            except Exception as e:
-                logger.error(f"Error in {func.__name__}: {e}")
-                # تسجيل الخطأ في health monitor
-                health_monitor.increment_error()
-                return ConversationHandler.END
-        return wrapper
-    return decorator
 
 async def initialize_cleanup_scheduler(application):
     """تهيئة جدولة التنظيف التلقائي"""
