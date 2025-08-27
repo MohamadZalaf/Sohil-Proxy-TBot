@@ -7448,45 +7448,7 @@ def setup_bot():
         print(f"❌ خطأ في إنشاء التطبيق أو الاتصال: {e}")
         return None
     
-    # إضافة المعالجات
-    print("🔧 إضافة معالجات الأوامر...")
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("about", handle_about_command))
-    application.add_handler(CommandHandler("reset", handle_reset_command))
-    application.add_handler(CommandHandler("cleanup", handle_cleanup_command))
-    application.add_handler(CommandHandler("status", handle_status_command))
-
-    
-    print("🔧 إضافة معالجات المحادثات...")
-    application.add_handler(admin_conv_handler)
-    application.add_handler(password_change_conv_handler)
-    application.add_handler(admin_functions_conv_handler)
-    application.add_handler(process_order_conv_handler)
-    application.add_handler(broadcast_conv_handler)
-    application.add_handler(payment_conv_handler)
-    
-    print("🔧 إضافة معالجات الرسائل...")
-    application.add_handler(CallbackQueryHandler(handle_callback_query))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
-    
-    # إضافة معالج الأخطاء الشامل
-    print("🔧 إضافة معالج الأخطاء الشامل...")
-    application.add_error_handler(global_error_handler)
-    
-    # تهيئة نظام مراقبة الصحة
-    print("🔧 تهيئة نظام مراقبة الصحة...")
-    try:
-        # تهيئة جدولة التنظيف التلقائي
-        async def post_init(app):
-            await initialize_cleanup_scheduler(app)
-            await health_monitor.start_monitoring()
-            
-        application.post_init = post_init
-        print("✅ تم تهيئة نظام مراقبة الصحة")
-    except Exception as e:
-        print(f"⚠️ خطأ في تهيئة نظام مراقبة الصحة: {e}")
-    
-    print("✅ تم إضافة جميع المعالجات")
+    # المعالجات ستتم إضافتها في setup_bot()
     
     print("📊 قاعدة البيانات جاهزة")
     print("⚡ البوت يعمل الآن!")
@@ -8140,25 +8102,40 @@ def setup_bot():
         
         # إضافة المعالجات
         print("🔧 إضافة معالجات الأوامر...")
-        
-        # أوامر عامة  
         application.add_handler(CommandHandler("start", start))
-        
-        # معالجات أساسية
-        
+        application.add_handler(CommandHandler("about", handle_about_command))
+        application.add_handler(CommandHandler("reset", handle_reset_command))
+        application.add_handler(CommandHandler("cleanup", handle_cleanup_command))
+        application.add_handler(CommandHandler("status", handle_status_command))
+
         print("🔧 إضافة معالجات المحادثات...")
-        print("⚠️ معالجات المحادثات معطلة مؤقتاً للاختبار")
+        application.add_handler(admin_conv_handler)
+        application.add_handler(password_change_conv_handler)
+        application.add_handler(admin_functions_conv_handler)
+        application.add_handler(process_order_conv_handler)
+        application.add_handler(broadcast_conv_handler)
+        application.add_handler(payment_conv_handler)
         
         print("🔧 إضافة معالجات الرسائل...")
+        application.add_handler(CallbackQueryHandler(handle_callback_query))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
         
-        # معالجات عامة
-        print("⚠️ المعالجات الأساسية فقط للاختبار")
-        
+        # إضافة معالج الأخطاء الشامل
         print("🔧 إضافة معالج الأخطاء الشامل...")
-        print("⚠️ معالج الأخطاء معطل مؤقتاً للاختبار")
+        application.add_error_handler(global_error_handler)
         
+        # تهيئة نظام مراقبة الصحة
         print("🔧 تهيئة نظام مراقبة الصحة...")
-        print("✅ تم تهيئة نظام مراقبة الصحة")
+        try:
+            # تهيئة جدولة التنظيف التلقائي
+            async def post_init(app):
+                print("🔧 تهيئة المهام المجدولة...")
+                await health_monitor.start_monitoring()
+                
+            application.post_init = post_init
+            print("✅ تم تهيئة نظام مراقبة الصحة")
+        except Exception as e:
+            print(f"⚠️ تحذير: فشل في تهيئة نظام مراقبة الصحة: {e}")
         
         print("✅ تم إضافة جميع المعالجات")
         print("📊 قاعدة البيانات جاهزة")
