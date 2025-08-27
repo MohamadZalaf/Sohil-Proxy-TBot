@@ -16,6 +16,8 @@ import pandas as pd
 import io
 import csv
 import openpyxl
+import fcntl
+import atexit
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 
@@ -8047,6 +8049,12 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
                 user_id = update.message.from_user.id
                 error_context = f"message_{user_id}"
         
+        # معالجة خاصة لخطأ التعارض في getUpdates
+        if "Conflict: terminated by other getUpdates request" in str(context.error):
+            logger.warning("Detected multiple bot instances conflict. Bot will continue with retry logic.")
+            # لا نحتاج لفعل شيء خاص، فالبوت سيعيد المحاولة تلقائياً
+            return
+            
         # تسجيل الخطأ
         error_msg = f"Global error in {error_context}: {context.error}"
         logger.error(error_msg, exc_info=context.error)
@@ -8161,10 +8169,36 @@ def setup_bot():
 
 def main():
     """الدالة الرئيسية لتشغيل البوت"""
+    # إنشاء ملف قفل لمنع تشغيل أكثر من نسخة
+    lock_file = None
     try:
         print("=" * 50)
         print("🤖 تشغيل بوت البروكسي")
         print("=" * 50)
+        
+        # إنشاء ملف قفل
+        lock_file = open('bot.lock', 'w')
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            print("🔒 تم الحصول على قفل البوت بنجاح")
+        except IOError:
+            print("❌ يوجد بوت آخر يعمل بالفعل!")
+            print("⚠️ يرجى إيقاف البوت الآخر أولاً أو استخدام:")
+            print("   pkill -f proxy_bot.py")
+            return
+            
+        # تسجيل دالة تنظيف عند إغلاق البرنامج
+        def cleanup_lock():
+            if lock_file:
+                try:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                    lock_file.close()
+                    os.unlink('bot.lock')
+                    print("🔓 تم تحرير قفل البوت")
+                except:
+                    pass
+        
+        atexit.register(cleanup_lock)
         
         # إعداد البوت
         application = setup_bot()
@@ -8186,6 +8220,15 @@ def main():
         import traceback
         traceback.print_exc()
     finally:
+        # تنظيف ملف القفل
+        if lock_file:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                lock_file.close()
+                os.unlink('bot.lock')
+                print("🔓 تم تحرير قفل البوت")
+            except:
+                pass
         print("✅ تم إيقاف البوت بنجاح")
 
 if __name__ == '__main__':
