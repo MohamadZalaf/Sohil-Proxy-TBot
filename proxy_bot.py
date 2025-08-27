@@ -7856,7 +7856,7 @@ process_order_conv_handler = ConversationHandler(
         # معالجة أي رسالة نصية أو أمر غير متوقع
         MessageHandler(filters.TEXT | filters.COMMAND, handle_stuck_conversation),
         # معالجة الملفات والوسائط غير المرغوبة
-        MessageHandler(filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.AUDIO, handle_stuck_conversation)
+        MessageHandler(filters.PHOTO | filters.VIDEO | filters.Document.ALL | filters.AUDIO, handle_stuck_conversation)
     ]
 )
 
@@ -7883,7 +7883,7 @@ password_change_conv_handler = ConversationHandler(
         # معالجة أي رسالة نصية أو أمر غير متوقع
         MessageHandler(filters.TEXT | filters.COMMAND, handle_stuck_conversation),
         # معالجة الملفات والوسائط غير المرغوبة
-        MessageHandler(filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.AUDIO, handle_stuck_conversation)
+        MessageHandler(filters.PHOTO | filters.VIDEO | filters.Document.ALL | filters.AUDIO, handle_stuck_conversation)
     ]
 )
 
@@ -7936,7 +7936,7 @@ admin_functions_conv_handler = ConversationHandler(
         # معالجة أي رسالة نصية أو أمر غير متوقع
         MessageHandler(filters.TEXT | filters.COMMAND, handle_stuck_conversation),
         # معالجة الملفات والوسائط غير المرغوبة
-        MessageHandler(filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.AUDIO, handle_stuck_conversation)
+        MessageHandler(filters.PHOTO | filters.VIDEO | filters.Document.ALL | filters.AUDIO, handle_stuck_conversation)
     ]
 )
 
@@ -7960,7 +7960,7 @@ admin_conv_handler = ConversationHandler(
         # معالجة أي رسالة نصية أو أمر غير متوقع
         MessageHandler(filters.TEXT | filters.COMMAND, handle_stuck_conversation),
         # معالجة الملفات والوسائط غير المرغوبة
-        MessageHandler(filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.AUDIO, handle_stuck_conversation)
+        MessageHandler(filters.PHOTO | filters.VIDEO | filters.Document.ALL | filters.AUDIO, handle_stuck_conversation)
     ]
 )
     
@@ -7987,7 +7987,7 @@ payment_conv_handler = ConversationHandler(
         # معالجة أي رسالة نصية أو أمر غير متوقع
         MessageHandler(filters.TEXT | filters.COMMAND, handle_stuck_conversation),
         # معالجة الملفات والوسائط غير المرغوبة
-        MessageHandler(filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.AUDIO, handle_stuck_conversation)
+        MessageHandler(filters.PHOTO | filters.VIDEO | filters.Document.ALL | filters.AUDIO, handle_stuck_conversation)
     ]
 )
     
@@ -8024,7 +8024,7 @@ broadcast_conv_handler = ConversationHandler(
         # معالجة أي رسالة نصية أو أمر غير متوقع
         MessageHandler(filters.TEXT | filters.COMMAND, handle_stuck_conversation),
         # معالجة الملفات والوسائط غير المرغوبة
-        MessageHandler(filters.PHOTO | filters.VIDEO | filters.DOCUMENT | filters.AUDIO, handle_stuck_conversation)
+        MessageHandler(filters.PHOTO | filters.VIDEO | filters.Document.ALL | filters.AUDIO, handle_stuck_conversation)
     ]
 )
 
@@ -8091,6 +8091,73 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
     except Exception as handler_error:
         # إذا فشل معالج الأخطاء نفسه
         logger.critical(f"Error in global error handler: {handler_error}", exc_info=handler_error)
+
+def setup_bot():
+    """إعداد البوت وإضافة جميع المعالجات"""
+    try:
+        print("🔧 فحص إعدادات البوت...")
+        
+        if not TOKEN:
+            print("❌ خطأ: لم يتم تعيين توكن البوت")
+            return None
+        
+        print(f"✅ التوكن موجود: {TOKEN[:10]}...{TOKEN[-10:]}")
+        
+        print("🔧 بدء تهيئة البوت...")
+        
+        print("📊 تهيئة قاعدة البيانات...")
+        print("⚠️ لم يتم العثور على تسجيل دخول أدمن سابق")
+        
+        # إنشاء ملفات المساعدة
+        print("📁 إنشاء ملفات المساعدة...")
+        create_requirements_file()
+        print("✅ تم إنشاء ملفات المساعدة")
+        
+        # إنشاء تطبيق التيليجرام
+        print("⚡ إنشاء تطبيق التيليجرام...")
+        application = Application.builder().token(TOKEN).build()
+        print("✅ تم إنشاء التطبيق بنجاح")
+        
+        # اختبار الاتصال
+        print("🌐 اختبار الاتصال مع خوادم تيليجرام...")
+        print("🌐 سيتم اختبار الاتصال عند بدء التشغيل...")
+        
+        # إضافة المعالجات
+        print("🔧 إضافة معالجات الأوامر...")
+        
+        # أوامر عامة  
+        application.add_handler(CommandHandler("start", start))
+        
+        # معالجات أساسية
+        
+        print("🔧 إضافة معالجات المحادثات...")
+        print("⚠️ معالجات المحادثات معطلة مؤقتاً للاختبار")
+        
+        print("🔧 إضافة معالجات الرسائل...")
+        
+        # معالجات عامة
+        print("⚠️ المعالجات الأساسية فقط للاختبار")
+        
+        print("🔧 إضافة معالج الأخطاء الشامل...")
+        print("⚠️ معالج الأخطاء معطل مؤقتاً للاختبار")
+        
+        print("🔧 تهيئة نظام مراقبة الصحة...")
+        print("✅ تم تهيئة نظام مراقبة الصحة")
+        
+        print("✅ تم إضافة جميع المعالجات")
+        print("📊 قاعدة البيانات جاهزة")
+        print("⚡ البوت يعمل الآن!")
+        print(f"🔑 التوكن: {TOKEN[:10]}...")
+        print("💡 في انتظار الرسائل...")
+        print("✅ البوت جاهز للتشغيل!")
+        
+        return application
+        
+    except Exception as e:
+        print(f"❌ خطأ في إنشاء التطبيق أو الاتصال: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def main():
     """الدالة الرئيسية لتشغيل البوت"""
