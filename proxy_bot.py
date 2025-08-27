@@ -8141,21 +8141,61 @@ def setup_bot():
         # أوامر عامة  
         application.add_handler(CommandHandler("start", start))
         
-        # إضافة أمر admin_login
-        application.add_handler(CommandHandler("admin", admin_login))
+        # إضافة أوامر أساسية أخرى
+        try:
+            application.add_handler(CommandHandler("help", help_command))
+        except NameError:
+            pass
+        try:    
+            application.add_handler(CommandHandler("balance", balance_command))
+        except NameError:
+            pass
+        try:
+            application.add_handler(CommandHandler("admin", admin_command))
+        except NameError:
+            pass
+        
+        # إضافة أمر admin_login  
+        application.add_handler(CommandHandler("admin_login", admin_login))
         
         # معالجات أساسية
         
         print("🔧 إضافة معالجات المحادثات...")
         
-        # معالجات المحادثات المهمة
-        application.add_handler(admin_conv_handler)
+        # معالجات المحادثات المهمة (فقط المتوفرة)
+        try:
+            application.add_handler(admin_conv_handler)
+            print("✅ تم إضافة معالج admin")
+        except NameError:
+            print("⚠️ معالج admin غير متوفر")
+            
+        # إضافة معالجات أخرى إذا كانت متوفرة
+        try:
+            application.add_handler(payment_conv_handler)
+            print("✅ تم إضافة معالج payment")
+        except NameError:
+            print("⚠️ معالج payment غير متوفر")
+            
+        try:
+            application.add_handler(process_order_conv_handler)
+            print("✅ تم إضافة معالج orders")
+        except NameError:
+            print("⚠️ معالج orders غير متوفر")
         
         print("🔧 إضافة معالجات الرسائل...")
         
         # معالجات عامة
-        application.add_handler(CallbackQueryHandler(handle_callback_query))
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
+        try:
+            application.add_handler(CallbackQueryHandler(handle_callback_query))
+            print("✅ تم إضافة معالج callback")
+        except NameError:
+            print("⚠️ معالج callback غير متوفر")
+            
+        try:
+            application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
+            print("✅ تم إضافة معالج النصوص")
+        except NameError:
+            print("⚠️ معالج النصوص غير متوفر")
         
         print("🔧 إضافة معالج الأخطاء الشامل...")
         
