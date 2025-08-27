@@ -20,9 +20,9 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 
 from telegram import (
-    Update, 
-    InlineKeyboardButton, 
-    InlineKeyboardMarkup, 
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
     ReplyKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardRemove
