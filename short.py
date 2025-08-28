@@ -3014,6 +3014,95 @@ async def handle_view_order_details(update: Update, context: ContextTypes.DEFAUL
         except Exception as e:
             print(f"خطأ في إرسال إثبات الدفع: {e}")
 
+async def handle_view_pending_order_details(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """عرض تفاصيل الطلب المعلق مع التوثيق"""
+    query = update.callback_query
+    await query.answer()
+    
+    order_id = query.data.replace("view_pending_order_", "")
+    
+    # الحصول على تفاصيل الطلب
+    order_query = """
+        SELECT o.*, u.first_name, u.last_name, u.username 
+        FROM orders o 
+        JOIN users u ON o.user_id = u.user_id 
+        WHERE o.id = ?
+    """
+    result = db.execute_query(order_query, (order_id,))
+    
+    if not result:
+        await query.edit_message_text("❌ لم يتم العثور على الطلب")
+        return
+    
+    order = result[0]
+    
+    # تحديد طريقة الدفع باللغة العربية
+    payment_methods_ar = {
+        'shamcash': 'شام كاش',
+        'syriatel': 'سيرياتيل كاش',
+        'coinex': 'Coinex',
+        'binance': 'Binance',
+        'payeer': 'Payeer'
+    }
+    
+    payment_method_ar = payment_methods_ar.get(order[5], order[5])
+    
+    message = f"""📋 تفاصيل الطلب الكاملة مع التوثيق
+
+👤 الاسم: `{order[14]} {order[15] or ''}`
+📱 اسم المستخدم: @{order[16] or 'غير محدد'}
+🆔 معرف المستخدم: `{order[1]}`
+
+━━━━━━━━━━━━━━━
+📦 تفاصيل الطلب:
+📊 الكمية: {order[8]}
+🔧 نوع البروكسي: {order[2]}
+🌍 الدولة: {order[3]}
+🏠 الولاية: {order[4]}
+
+━━━━━━━━━━━━━━━
+💳 تفاصيل الدفع:
+💰 طريقة الدفع: {payment_method_ar}
+💵 قيمة الطلب: `{order[6]}$`
+📄 إثبات الدفع: {"✅ مرفق" if order[7] else "❌ غير مرفق"}
+
+━━━━━━━━━━━━━━━
+🔗 معرف الطلب: `{order_id}`
+📅 تاريخ الطلب: {order[9]}
+📊 الحالة: ⏳ معلق"""
+
+    # إنشاء أزرار الإجراءات (معالجة مباشرة بدون سؤال التحقق)
+    keyboard = [
+        [InlineKeyboardButton("✅ معالجة الطلب", callback_data=f"direct_process_{order_id}")],
+        [InlineKeyboardButton("🔙 العودة للطلبات المعلقة", callback_data="back_to_pending_orders")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(message, reply_markup=reply_markup, parse_mode='Markdown')
+    
+    # إرسال إثبات الدفع كرد على رسالة الطلب إذا كان موجوداً
+    if order[7]:  # payment_proof
+        try:
+            if order[7].startswith("photo:"):
+                file_id = order[7].replace("photo:", "")
+                await context.bot.send_photo(
+                    update.effective_chat.id,
+                    photo=file_id,
+                    caption=f"📸 إثبات دفع للطلب بمعرف: `{order_id}`",
+                    parse_mode='Markdown',
+                    reply_to_message_id=query.message.message_id
+                )
+            elif order[7].startswith("text:"):
+                text_proof = order[7].replace("text:", "")
+                await context.bot.send_message(
+                    update.effective_chat.id,
+                    f"📝 إثبات دفع للطلب بمعرف: `{order_id}`\n\nالنص:\n{text_proof}",
+                    parse_mode='Markdown',
+                    reply_to_message_id=query.message.message_id
+                )
+        except Exception as e:
+            print(f"خطأ في إرسال إثبات الدفع: {e}")
+
 async def handle_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة قسم الإحالات"""
     user_id = update.effective_user.id
@@ -3444,6 +3533,18 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         elif query.data.startswith("quantity_"):
             logger.info(f"Routing to quantity selection: {query.data} for user {user_id}")
             await handle_user_quantity_selection(update, context)
+        elif query.data.startswith("view_pending_order_"):
+            logger.info(f"Routing to pending order details for user {user_id}")
+            await handle_view_pending_order_details(update, context)
+        elif query.data.startswith("direct_process_"):
+            logger.info(f"Routing to direct order processing for user {user_id}")
+            await handle_direct_process_order(update, context)
+        elif query.data == "back_to_pending_orders":
+            logger.info(f"Routing back to pending orders for user {user_id}")
+            await handle_back_to_pending_orders(update, context)
+        elif query.data.startswith("view_order_"):
+            logger.info(f"Routing to order details for user {user_id}")
+            await handle_view_order_details(update, context)
         elif query.data == "cancel_user_proxy_request":
             await handle_cancel_user_proxy_request(update, context)
         # تم نقل معالجة process_ إلى process_order_conv_handler
@@ -4202,6 +4303,75 @@ async def handle_process_order(update: Update, context: ContextTypes.DEFAULT_TYP
     )
     
     return PROCESS_ORDER
+
+async def handle_direct_process_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة الطلب مباشرة بدون سؤال التحقق من الدفع"""
+    query = update.callback_query
+    await query.answer()
+    
+    # التحقق من وجود طلب قيد المعالجة
+    current_processing_order = context.user_data.get('processing_order_id')
+    if current_processing_order:
+        # إظهار مربع حوار تحذيري
+        keyboard = [
+            [InlineKeyboardButton("✅ فهمت", callback_data="understood_current_processing")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            f"⚠️ **تحذير: يوجد طلب قيد المعالجة حالياً**\n\n"
+            f"🆔 معرف الطلب الحالي: `{current_processing_order}`\n\n"
+            f"📋 **أنهِ الطلب الحالي أولاً** قبل معالجة طلب آخر:\n"
+            f"• إما إتمام الطلب بنجاح (إرسال البروكسي للمستخدم)\n"
+            f"• أو الضغط على زر الإلغاء في أي مرحلة\n\n"
+            f"💡 هذا يضمن عدم تداخل العمليات وجودة الخدمة",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        return ConversationHandler.END
+    
+    order_id = query.data.replace("direct_process_", "")
+    
+    # تسجيل بداية معالجة طلب جديد
+    context.user_data['processing_order_id'] = order_id
+    context.user_data['admin_processing_active'] = True
+    
+    # حفظ الرسالة الأصلية قبل التعديل
+    context.user_data['original_order_message'] = query.message.text
+    
+    # معالجة مباشرة للطلب (تجاوز سؤال التحقق)
+    return await handle_payment_success(update, context)
+
+async def handle_back_to_pending_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """العودة إلى قائمة الطلبات المعلقة"""
+    query = update.callback_query
+    await query.answer()
+    
+    # إعادة عرض الطلبات المعلقة
+    pending_orders = db.get_pending_orders()
+    
+    if not pending_orders:
+        await query.edit_message_text("✅ لا توجد طلبات معلقة حالياً.")
+        return
+    
+    total_orders = len(pending_orders)
+    
+    # إنشاء أزرار لعرض تفاصيل كل طلب
+    keyboard = []
+    for i, order in enumerate(pending_orders[:20], 1):  # عرض أول 20 طلب لتجنب تجاوز حدود التيليجرام
+        # عرض معلومات مختصرة في النص
+        button_text = f"{i}. {order[0][:8]}... ({order[2]} - {order[6]}$)"
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_pending_order_{order[0]}")])
+    
+    # إضافة زر لعرض المزيد إذا كان هناك أكثر من 20 طلب
+    if total_orders > 20:
+        keyboard.append([InlineKeyboardButton(f"عرض المزيد... ({total_orders - 20} طلب إضافي)", callback_data="show_more_pending")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    message = f"📋 **الطلبات المعلقة** - المجموع: {total_orders} طلب\n\n🔽 اختر طلباً لعرض تفاصيله الكاملة مع إثبات الدفع:"
+    
+    await query.edit_message_text(message, parse_mode='Markdown', reply_markup=reply_markup)
 
 async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة نجاح الدفع والبدء في جمع معلومات البروكسي"""
@@ -5071,7 +5241,7 @@ async def return_to_user_mode(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 async def show_pending_orders_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """عرض الطلبات المعلقة للأدمن مع تقسيم الرسائل"""
+    """عرض الطلبات المعلقة للأدمن مع إمكانية اختيار الطلب لعرض التفاصيل"""
     pending_orders = db.get_pending_orders()
     
     if not pending_orders:
@@ -5079,41 +5249,22 @@ async def show_pending_orders_admin(update: Update, context: ContextTypes.DEFAUL
         return
     
     total_orders = len(pending_orders)
-    batch_size = 10  # عرض 10 طلبات في كل مجموعة
     
-    await update.message.reply_text(f"📋 **الطلبات المعلقة** - المجموع: {total_orders} طلب\n\n⏳ سيتم عرض الطلبات مقسمة إلى مجموعات...", parse_mode='Markdown')
+    await update.message.reply_text(f"📋 **الطلبات المعلقة** - المجموع: {total_orders} طلب\n\n🔽 اختر طلباً لعرض تفاصيله الكاملة مع إثبات الدفع:", parse_mode='Markdown')
     
-    # تقسيم الطلبات إلى مجموعات من 10
-    for batch_num, i in enumerate(range(0, total_orders, batch_size), 1):
-        batch_orders = pending_orders[i:i + batch_size]
-        
-        message = f"📦 **المجموعة {batch_num} - الطلبات {i+1} إلى {min(i+batch_size, total_orders)}:**\n\n"
-        
-        for j, order in enumerate(batch_orders, 1):
-            global_index = i + j
-            message += f"{global_index}. 🆔 `{order[0]}`\n"
-            message += f"   📦 النوع: {order[2]}\n"
-            message += f"   🌍 الدولة: {order[3]}\n"
-            message += f"   💰 المبلغ: {order[6]}$\n"
-            message += f"   📅 التاريخ: {order[9]}\n\n"
-        
-        # إنشاء أزرار للطلبات في هذه المجموعة
-        keyboard = []
-        for order in batch_orders[:5]:  # أول 5 طلبات من المجموعة
-            keyboard.append([InlineKeyboardButton(f"معالجة {order[0][:8]}...", callback_data=f"process_{order[0]}")])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-        
-        # إرسال المجموعة مع فاصل زمني قصير
-        await update.message.reply_text(message, parse_mode='Markdown', reply_markup=reply_markup)
-        
-        # فاصل زمني بين المجموعات (إلا للمجموعة الأخيرة)
-        if i + batch_size < total_orders:
-            import asyncio
-            await asyncio.sleep(1)  # فاصل ثانية واحدة
+    # إنشاء أزرار لعرض تفاصيل كل طلب
+    keyboard = []
+    for i, order in enumerate(pending_orders[:20], 1):  # عرض أول 20 طلب لتجنب تجاوز حدود التيليجرام
+        # عرض معلومات مختصرة في النص
+        button_text = f"{i}. {order[0][:8]}... ({order[2]} - {order[6]}$)"
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_pending_order_{order[0]}")])
     
-    # رسالة نهاية
-    await update.message.reply_text(f"✅ **تم عرض جميع الطلبات المعلقة**\n📊 المجموع: {total_orders} طلب", parse_mode='Markdown')
+    # إضافة زر لعرض المزيد إذا كان هناك أكثر من 20 طلب
+    if total_orders > 20:
+        keyboard.append([InlineKeyboardButton(f"عرض المزيد... ({total_orders - 20} طلب إضافي)", callback_data="show_more_pending")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("📋 **قائمة الطلبات المعلقة:**", parse_mode='Markdown', reply_markup=reply_markup)
 
 async def delete_failed_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """حذف الطلبات الفاشلة الأحدث من 48 ساعة"""
