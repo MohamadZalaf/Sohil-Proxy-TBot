@@ -5644,8 +5644,9 @@ async def return_to_user_mode(update: Update, context: ContextTypes.DEFAULT_TYPE
     keyboard = [
         [KeyboardButton(MESSAGES[language]['main_menu_buttons'][0])],
         [KeyboardButton(MESSAGES[language]['main_menu_buttons'][1])],
-        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2]), 
-         KeyboardButton(MESSAGES[language]['main_menu_buttons'][3])]
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2])],
+        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][3]), 
+         KeyboardButton(MESSAGES[language]['main_menu_buttons'][4])]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
@@ -5862,6 +5863,15 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         
         language = get_user_language(user_id)
         is_admin = context.user_data.get('is_admin', False)
+        
+        # التحقق من أن المستخدم مُسجل في قاعدة البيانات
+        if not is_admin and not db.get_user(user_id):
+            print(f"⚠️ مستخدم غير مُسجل يحاول الوصول: {user_id}")
+            await update.message.reply_text(
+                "مرحباً! يرجى البدء بالضغط على /start لتسجيل حسابك أولاً.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return
     except Exception as e:
         logger.error(f"Error in handle_text_messages initialization: {e}")
         try:
@@ -6030,6 +6040,21 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             await handle_order_reminder(update, context)
         elif text == MESSAGES[language]['main_menu_buttons'][4]:  # الإعدادات
             await handle_settings(update, context)
+        else:
+            # زر غير معروف للمستخدم العادي
+            print(f"⚠️ زر غير معروف من المستخدم {user_id}: '{text}'")
+            print(f"   اللغة: {language}")
+            print(f"   الأزرار المتوقعة: {MESSAGES[language]['main_menu_buttons']}")
+            
+            # إرسال رسالة تحفيظية للمستخدم
+            await update.message.reply_text(
+                "⚠️ هذا الزر غير معروف. يرجى استخدام الأزرار الموجودة في القائمة.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            
+            # إعادة إرسال القائمة الصحيحة
+            await start(update, context)
+            return
         
     except Exception as e:
         logger.error(f"Error in handle_text_messages: {e}")
