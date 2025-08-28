@@ -1355,13 +1355,29 @@ class DatabaseManager:
     
     def execute_query(self, query: str, params: tuple = ()) -> List[tuple]:
         """تنفيذ استعلام قاعدة البيانات"""
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        cursor.execute(query, params)
-        result = cursor.fetchall()
-        conn.commit()
-        conn.close()
-        return result
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_file, timeout=30.0)
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            result = cursor.fetchall()
+            conn.commit()
+            return result
+        except sqlite3.Error as e:
+            logger.error(f"Database error in execute_query: {e}")
+            logger.error(f"Query: {query}")
+            logger.error(f"Params: {params}")
+            if conn:
+                conn.rollback()
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error in execute_query: {e}")
+            if conn:
+                conn.rollback()
+            return []
+        finally:
+            if conn:
+                conn.close()
     
     def add_user(self, user_id: int, username: str, first_name: str, last_name: str, referred_by: int = None):
         """إضافة مستخدم جديد"""
@@ -1397,8 +1413,14 @@ class DatabaseManager:
     
     def get_pending_orders(self) -> List[tuple]:
         """الحصول على الطلبات المعلقة"""
-        query = "SELECT * FROM orders WHERE status = 'pending'"
-        return self.execute_query(query)
+        try:
+            query = "SELECT * FROM orders WHERE status = 'pending' ORDER BY created_at DESC"
+            result = self.execute_query(query)
+            return result if result else []
+        except Exception as e:
+            logger.error(f"Error in get_pending_orders: {e}")
+            print(f"❌ خطأ في استعلام الطلبات المعلقة: {e}")
+            return []
     
     def log_action(self, user_id: int, action: str, details: str = ""):
         """تسجيل إجراء في السجل"""
@@ -1412,6 +1434,69 @@ class DatabaseManager:
     def get_unprocessed_orders(self) -> List[tuple]:
         """الحصول على الطلبات غير المعالجة فعلياً (بغض النظر عن الحالة)"""
         return self.execute_query("SELECT * FROM orders WHERE truly_processed = FALSE OR truly_processed IS NULL")
+    
+    def validate_database_integrity(self) -> dict:
+        """فحص سلامة قاعدة البيانات"""
+        try:
+            validation_results = {
+                'database_accessible': True,
+                'tables_exist': True,
+                'data_integrity': True,
+                'errors': []
+            }
+            
+            # فحص إمكانية الوصول لقاعدة البيانات
+            try:
+                conn = sqlite3.connect(self.db_file, timeout=10.0)
+                conn.close()
+            except Exception as e:
+                validation_results['database_accessible'] = False
+                validation_results['errors'].append(f"Database access error: {e}")
+                return validation_results
+            
+            # فحص وجود الجداول المطلوبة
+            required_tables = ['users', 'orders', 'referrals', 'settings', 'transactions', 'logs']
+            existing_tables = self.execute_query("SELECT name FROM sqlite_master WHERE type='table'")
+            existing_table_names = [table[0] for table in existing_tables]
+            
+            for table in required_tables:
+                if table not in existing_table_names:
+                    validation_results['tables_exist'] = False
+                    validation_results['errors'].append(f"Missing table: {table}")
+            
+            # فحص سلامة البيانات
+            try:
+                # فحص الطلبات بدون مستخدمين
+                orphaned_orders = self.execute_query("""
+                    SELECT COUNT(*) FROM orders 
+                    WHERE user_id NOT IN (SELECT user_id FROM users)
+                """)
+                if orphaned_orders and orphaned_orders[0][0] > 0:
+                    validation_results['data_integrity'] = False
+                    validation_results['errors'].append(f"Orphaned orders: {orphaned_orders[0][0]}")
+                
+                # فحص الطلبات التالفة
+                corrupt_orders = self.execute_query("""
+                    SELECT COUNT(*) FROM orders 
+                    WHERE id IS NULL OR user_id IS NULL OR proxy_type IS NULL
+                """)
+                if corrupt_orders and corrupt_orders[0][0] > 0:
+                    validation_results['data_integrity'] = False
+                    validation_results['errors'].append(f"Corrupt orders: {corrupt_orders[0][0]}")
+                    
+            except Exception as e:
+                validation_results['data_integrity'] = False
+                validation_results['errors'].append(f"Data integrity check failed: {e}")
+            
+            return validation_results
+            
+        except Exception as e:
+            return {
+                'database_accessible': False,
+                'tables_exist': False,
+                'data_integrity': False,
+                'errors': [f"Validation failed: {e}"]
+            }
 
 # إنشاء مدير قاعدة البيانات
 db = DatabaseManager(DATABASE_FILE)
@@ -2142,17 +2227,32 @@ async def handle_static_proxy_request(update: Update, context: ContextTypes.DEFA
     db.log_action(user_id, "static_proxy_request_started")
     
     # عرض رسالة الحزمة بدون معرف الطلب
-    package_message = MESSAGES[language]['static_package'].replace('معرف الطلب: `{}`', 'سيتم إنشاء معرف الطلب بعد إرسال إثبات الدفع')
+    if language == 'ar':
+        replacement_text = 'سيتم إنشاء معرف الطلب بعد إرسال إثبات الدفع'
+    else:
+        replacement_text = 'Order ID will be generated after sending payment proof'
+    
+    package_message = MESSAGES[language]['static_package'].replace('معرف الطلب: `{}`' if language == 'ar' else 'Order ID: `{}`', replacement_text)
     await update.message.reply_text(package_message, parse_mode='Markdown')
     
     # عرض أزرار الكمية أولاً
-    keyboard = [
-        [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single_static")],
-        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package_static")],
-        [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_proxy_request")]
-    ]
+    if language == 'ar':
+        keyboard = [
+            [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single_static")],
+            [InlineKeyboardButton("📦 باكج", callback_data="quantity_package_static")],
+            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_proxy_request")]
+        ]
+        quantity_text = "اختر الكمية المطلوبة:"
+    else:
+        keyboard = [
+            [InlineKeyboardButton("🔗 Single Proxy", callback_data="quantity_single_static")],
+            [InlineKeyboardButton("📦 Package", callback_data="quantity_package_static")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_user_proxy_request")]
+        ]
+        quantity_text = "Choose the required quantity:"
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("اختر الكمية المطلوبة:", reply_markup=reply_markup)
+    await update.message.reply_text(quantity_text, reply_markup=reply_markup)
     context.user_data['proxy_type'] = 'static'
     return
 
@@ -2167,17 +2267,32 @@ async def handle_socks_proxy_request(update: Update, context: ContextTypes.DEFAU
     db.log_action(user_id, "socks_proxy_request_started")
     
     # عرض رسالة الحزمة بدون معرف الطلب
-    package_message = MESSAGES[language]['socks_package'].replace('معرف الطلب: `{}`', 'سيتم إنشاء معرف الطلب بعد إرسال إثبات الدفع')
+    if language == 'ar':
+        replacement_text = 'سيتم إنشاء معرف الطلب بعد إرسال إثبات الدفع'
+    else:
+        replacement_text = 'Order ID will be generated after sending payment proof'
+    
+    package_message = MESSAGES[language]['socks_package'].replace('معرف الطلب: `{}`' if language == 'ar' else 'Order ID: `{}`', replacement_text)
     await update.message.reply_text(package_message, parse_mode='Markdown')
     
     # عرض أزرار الكمية أولاً (مثل الستاتيك)
-    keyboard = [
-        [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single_socks")],
-        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package_socks")],
-        [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_proxy_request")]
-    ]
+    if language == 'ar':
+        keyboard = [
+            [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single_socks")],
+            [InlineKeyboardButton("📦 باكج", callback_data="quantity_package_socks")],
+            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_proxy_request")]
+        ]
+        quantity_text = "اختر الكمية المطلوبة:"
+    else:
+        keyboard = [
+            [InlineKeyboardButton("🔗 Single Proxy", callback_data="quantity_single_socks")],
+            [InlineKeyboardButton("📦 Package", callback_data="quantity_package_socks")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_user_proxy_request")]
+        ]
+        quantity_text = "Choose the required quantity:"
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("اختر الكمية المطلوبة:", reply_markup=reply_markup)
+    await update.message.reply_text(quantity_text, reply_markup=reply_markup)
     context.user_data['proxy_type'] = 'socks'
     return
 
@@ -2199,17 +2314,27 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
         
         if query.data == "manual_country":
             # الإدخال اليدوي للدولة
-            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
+            if language == 'ar':
+                keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
+                manual_text = "يرجى إدخال اسم الدولة يدوياً:"
+            else:
+                keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_manual_input")]]
+                manual_text = "Please enter country name manually:"
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("يرجى إدخال اسم الدولة يدوياً:", reply_markup=reply_markup)
+            await query.edit_message_text(manual_text, reply_markup=reply_markup)
             context.user_data['waiting_for'] = 'manual_country'
             return
         
         elif query.data == "manual_state":
             # الإدخال اليدوي للولاية
-            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
+            if language == 'ar':
+                keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
+                manual_text = "يرجى إدخال اسم الولاية/المنطقة يدوياً:"
+            else:
+                keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_manual_input")]]
+                manual_text = "Please enter state/region name manually:"
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("يرجى إدخال اسم الولاية/المنطقة يدوياً:", reply_markup=reply_markup)
+            await query.edit_message_text(manual_text, reply_markup=reply_markup)
             context.user_data['waiting_for'] = 'manual_state'
             return
         
@@ -2284,13 +2409,22 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
 async def show_payment_methods(query, context: ContextTypes.DEFAULT_TYPE, language: str) -> None:
     """عرض طرق الدفع"""
     try:
-        keyboard = [
-            [InlineKeyboardButton("💳 شام كاش", callback_data="payment_shamcash")],
-            [InlineKeyboardButton("💳 سيرياتيل كاش", callback_data="payment_syriatel")],
-            [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
-            [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
-            [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
-        ]
+        if language == 'ar':
+            keyboard = [
+                [InlineKeyboardButton("💳 شام كاش", callback_data="payment_shamcash")],
+                [InlineKeyboardButton("💳 سيرياتيل كاش", callback_data="payment_syriatel")],
+                [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
+                [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
+                [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
+            ]
+        else:
+            keyboard = [
+                [InlineKeyboardButton("💳 Sham Cash", callback_data="payment_shamcash")],
+                [InlineKeyboardButton("💳 Syriatel Cash", callback_data="payment_syriatel")],
+                [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
+                [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
+                [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
+            ]
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
@@ -2330,7 +2464,10 @@ async def handle_payment_method_selection(update: Update, context: ContextTypes.
         context.user_data['payment_method'] = payment_method
         
         # إضافة زر الإلغاء
-        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_payment_proof")]]
+        if language == 'ar':
+            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_payment_proof")]]
+        else:
+            keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_payment_proof")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
@@ -3680,6 +3817,18 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await handle_view_order_details(update, context)
         elif query.data.startswith("send_direct_message_"):
             await handle_send_direct_message(update, context)
+        elif query.data == "retry_pending_orders":
+            # إعادة محاولة تحميل الطلبات المعلقة
+            await query.answer("🔄 جاري إعادة المحاولة...")
+            await show_pending_orders_admin(update, context)
+        elif query.data == "admin_database_menu":
+            # انتقال لقائمة إدارة قاعدة البيانات
+            await query.answer()
+            await database_management_menu(update, context)
+        elif query.data == "validate_database":
+            # فحص سلامة قاعدة البيانات
+            await query.answer("🔍 جاري فحص قاعدة البيانات...")
+            await validate_database_status(update, context)
         else:
             # معالجة الأزرار غير المعروفة أو المنتهية الصلاحية
             logger.warning(f"Unknown or expired callback action: {query.data} from user {user_id}")
@@ -4562,34 +4711,67 @@ async def handle_withdrawal_approval_direct(query, context: ContextTypes.DEFAULT
 
 async def handle_back_to_pending_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """العودة إلى قائمة الطلبات المعلقة"""
-    query = update.callback_query
-    await query.answer()
-    
-    # إعادة عرض الطلبات المعلقة
-    pending_orders = db.get_pending_orders()
-    
-    if not pending_orders:
-        await query.edit_message_text("✅ لا توجد طلبات معلقة حالياً.")
-        return
-    
-    total_orders = len(pending_orders)
-    
-    # إنشاء أزرار لعرض تفاصيل كل طلب
-    keyboard = []
-    for i, order in enumerate(pending_orders[:20], 1):  # عرض أول 20 طلب لتجنب تجاوز حدود التيليجرام
-        # عرض معلومات مختصرة في النص
-        button_text = f"{i}. {order[0][:8]}... ({order[2]} - {order[6]}$)"
-        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_pending_order_{order[0]}")])
-    
-    # إضافة زر لعرض المزيد إذا كان هناك أكثر من 20 طلب
-    if total_orders > 20:
-        keyboard.append([InlineKeyboardButton(f"عرض المزيد... ({total_orders - 20} طلب إضافي)", callback_data="show_more_pending")])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    message = f"📋 **الطلبات المعلقة** - المجموع: {total_orders} طلب\n\n🔽 اختر طلباً لعرض تفاصيله الكاملة مع إثبات الدفع:"
-    
-    await query.edit_message_text(message, parse_mode='Markdown', reply_markup=reply_markup)
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        # إعادة عرض الطلبات المعلقة
+        pending_orders = db.get_pending_orders()
+        
+        if not pending_orders:
+            await query.edit_message_text("✅ لا توجد طلبات معلقة حالياً.")
+            return
+        
+        total_orders = len(pending_orders)
+        
+        # إنشاء أزرار لعرض تفاصيل كل طلب
+        keyboard = []
+        for i, order in enumerate(pending_orders[:20], 1):  # عرض أول 20 طلب لتجنب تجاوز حدود التيليجرام
+            try:
+                # التحقق من صحة بيانات الطلب قبل المعالجة
+                order_id = str(order[0]) if order[0] else "unknown"
+                proxy_type = str(order[2]) if len(order) > 2 and order[2] else "unknown"
+                amount = str(order[6]) if len(order) > 6 and order[6] else "0"
+                
+                # عرض معلومات مختصرة في النص
+                button_text = f"{i}. {order_id[:8]}... ({proxy_type} - {amount}$)"
+                keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_pending_order_{order_id}")])
+            except Exception as order_error:
+                logger.error(f"Error processing pending order {i} in back navigation: {order_error}")
+                # إضافة زر للطلب التالف مع معلومات أساسية
+                keyboard.append([InlineKeyboardButton(f"{i}. طلب تالف - إصلاح مطلوب", callback_data=f"fix_order_{i}")])
+        
+        # إضافة زر لعرض المزيد إذا كان هناك أكثر من 20 طلب
+        if total_orders > 20:
+            keyboard.append([InlineKeyboardButton(f"عرض المزيد... ({total_orders - 20} طلب إضافي)", callback_data="show_more_pending")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        message = f"📋 **الطلبات المعلقة** - المجموع: {total_orders} طلب\n\n🔽 اختر طلباً لعرض تفاصيله الكاملة مع إثبات الدفع:"
+        
+        await query.edit_message_text(message, parse_mode='Markdown', reply_markup=reply_markup)
+        
+    except Exception as e:
+        logger.error(f"Error in handle_back_to_pending_orders: {e}")
+        print(f"❌ خطأ في العودة للطلبات المعلقة: {e}")
+        
+        # محاولة إرسال رسالة خطأ مع خيارات
+        try:
+            keyboard = [
+                [InlineKeyboardButton("🔄 إعادة المحاولة", callback_data="retry_pending_orders")],
+                [InlineKeyboardButton("🗃️ إدارة قاعدة البيانات", callback_data="admin_database_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                "❌ حدث خطأ في تحميل الطلبات المعلقة\n\n"
+                "الرجاء اختيار إجراء:",
+                reply_markup=reply_markup
+            )
+        except Exception as msg_error:
+            logger.error(f"Failed to send error message in back navigation: {msg_error}")
+            # العودة للوحة الأدمن الرئيسية كحل أخير
+            await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ في النظام. عودة للقائمة الرئيسية...")
 
 async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة نجاح الدفع والبدء في جمع معلومات البروكسي"""
@@ -5472,29 +5654,66 @@ async def return_to_user_mode(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def show_pending_orders_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """عرض الطلبات المعلقة للأدمن مع إمكانية اختيار الطلب لعرض التفاصيل"""
-    pending_orders = db.get_pending_orders()
-    
-    if not pending_orders:
-        await update.message.reply_text("✅ لا توجد طلبات معلقة حالياً.")
-        return
-    
-    total_orders = len(pending_orders)
-    
-    await update.message.reply_text(f"📋 **الطلبات المعلقة** - المجموع: {total_orders} طلب\n\n🔽 اختر طلباً لعرض تفاصيله الكاملة مع إثبات الدفع:", parse_mode='Markdown')
-    
-    # إنشاء أزرار لعرض تفاصيل كل طلب
-    keyboard = []
-    for i, order in enumerate(pending_orders[:20], 1):  # عرض أول 20 طلب لتجنب تجاوز حدود التيليجرام
-        # عرض معلومات مختصرة في النص
-        button_text = f"{i}. {order[0][:8]}... ({order[2]} - {order[6]}$)"
-        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_pending_order_{order[0]}")])
-    
-    # إضافة زر لعرض المزيد إذا كان هناك أكثر من 20 طلب
-    if total_orders > 20:
-        keyboard.append([InlineKeyboardButton(f"عرض المزيد... ({total_orders - 20} طلب إضافي)", callback_data="show_more_pending")])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("📋 **قائمة الطلبات المعلقة:**", parse_mode='Markdown', reply_markup=reply_markup)
+    try:
+        pending_orders = db.get_pending_orders()
+        
+        if not pending_orders:
+            await update.message.reply_text("✅ لا توجد طلبات معلقة حالياً.")
+            return
+        
+        total_orders = len(pending_orders)
+        
+        await update.message.reply_text(f"📋 **الطلبات المعلقة** - المجموع: {total_orders} طلب\n\n🔽 اختر طلباً لعرض تفاصيله الكاملة مع إثبات الدفع:", parse_mode='Markdown')
+        
+        # إنشاء أزرار لعرض تفاصيل كل طلب
+        keyboard = []
+        for i, order in enumerate(pending_orders[:20], 1):  # عرض أول 20 طلب لتجنب تجاوز حدود التيليجرام
+            try:
+                # التحقق من صحة بيانات الطلب قبل المعالجة
+                order_id = str(order[0]) if order[0] else "unknown"
+                proxy_type = str(order[2]) if len(order) > 2 and order[2] else "unknown"
+                amount = str(order[6]) if len(order) > 6 and order[6] else "0"
+                
+                # عرض معلومات مختصرة في النص
+                button_text = f"{i}. {order_id[:8]}... ({proxy_type} - {amount}$)"
+                keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_pending_order_{order_id}")])
+            except Exception as order_error:
+                logger.error(f"Error processing pending order {i}: {order_error}")
+                # إضافة زر للطلب التالف مع معلومات أساسية
+                keyboard.append([InlineKeyboardButton(f"{i}. طلب تالف - إصلاح مطلوب", callback_data=f"fix_order_{i}")])
+        
+        # إضافة زر لعرض المزيد إذا كان هناك أكثر من 20 طلب
+        if total_orders > 20:
+            keyboard.append([InlineKeyboardButton(f"عرض المزيد... ({total_orders - 20} طلب إضافي)", callback_data="show_more_pending")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("📋 **قائمة الطلبات المعلقة:**", parse_mode='Markdown', reply_markup=reply_markup)
+        
+    except Exception as e:
+        logger.error(f"Error in show_pending_orders_admin: {e}")
+        print(f"❌ خطأ في عرض الطلبات المعلقة: {e}")
+        
+        # إرسال رسالة خطأ للأدمن مع خيارات
+        try:
+            keyboard = [
+                [InlineKeyboardButton("🔄 إعادة المحاولة", callback_data="retry_pending_orders")],
+                [InlineKeyboardButton("🗃️ إدارة قاعدة البيانات", callback_data="admin_database_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                "❌ حدث خطأ في تحميل الطلبات المعلقة\n\n"
+                "قد يكون السبب:\n"
+                "• مشكلة في قاعدة البيانات\n"
+                "• بيانات تالفة في الطلبات\n"
+                "• نفاد الذاكرة\n\n"
+                "الرجاء اختيار إجراء:",
+                reply_markup=reply_markup
+            )
+        except Exception as msg_error:
+            logger.error(f"Failed to send error message: {msg_error}")
+            # العودة للوحة الأدمن الرئيسية كحل أخير
+            await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ في النظام. عودة للقائمة الرئيسية...")
 
 async def delete_failed_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """حذف الطلبات الفاشلة الأحدث من 48 ساعة"""
@@ -5573,6 +5792,7 @@ async def show_sales_statistics(update: Update, context: ContextTypes.DEFAULT_TY
 async def database_management_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """قائمة إدارة قاعدة البيانات"""
     keyboard = [
+        [KeyboardButton("🔍 فحص قاعدة البيانات")],
         [KeyboardButton("📊 تحميل قاعدة البيانات")],
         [KeyboardButton("🗑️ تفريغ قاعدة البيانات")],
         [KeyboardButton("🔙 العودة للقائمة الرئيسية")]
@@ -5648,189 +5868,241 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             pass
         return
     
-    # التحقق من الأوامر الخاصة للتنظيف وإعادة التعيين
-    if text.lower() in ['/reset', '🔄 إعادة تعيين', 'reset']:
-        await handle_reset_command(update, context)
-        return
-    elif text.lower() in ['/cleanup', '🧹 تنظيف', 'cleanup']:
-        await handle_cleanup_command(update, context)
-        return
-    elif text.lower() in ['/status', '📊 الحالة', 'status']:
-        await handle_status_command(update, context)
-        return
-    elif text.lower() in ['إلغاء', 'cancel', 'خروج', 'exit', 'stop']:
-        # تنظيف العمليات المعلقة والعودة للقائمة الرئيسية
-        context.user_data.clear()  # تبسيط التنظيف
-        await update.message.reply_text("✅ تم إلغاء العملية والعودة للقائمة الرئيسية")
-        await start(update, context)
-        return
-    
-    # معالجة الإدخال اليدوي للدول والولايات
-    waiting_for = context.user_data.get('waiting_for')
-    if waiting_for == 'manual_country':
-        context.user_data['selected_country'] = text
-        context.user_data.pop('waiting_for', None)
-        await update.message.reply_text(f"تم اختيار الدولة: {text}\nيرجى إدخال اسم المنطقة/الولاية:")
-        context.user_data['waiting_for'] = 'manual_state'
-        return
-    
-    elif waiting_for == 'manual_state':
-        context.user_data['selected_state'] = text
-        context.user_data.pop('waiting_for', None)
-        await update.message.reply_text(f"تم اختيار المنطقة: {text}")
+    try:
+        # التحقق من الأوامر الخاصة للتنظيف وإعادة التعيين
+        if text.lower() in ['/reset', '🔄 إعادة تعيين', 'reset']:
+            await handle_reset_command(update, context)
+            return
+        elif text.lower() in ['/cleanup', '🧹 تنظيف', 'cleanup']:
+            await handle_cleanup_command(update, context)
+            return
+        elif text.lower() in ['/status', '📊 الحالة', 'status']:
+            await handle_status_command(update, context)
+            return
+        elif text.lower() in ['إلغاء', 'cancel', 'خروج', 'exit', 'stop']:
+            # تنظيف العمليات المعلقة والعودة للقائمة الرئيسية
+            context.user_data.clear()  # تبسيط التنظيف
+            await update.message.reply_text("✅ تم إلغاء العملية والعودة للقائمة الرئيسية")
+            await start(update, context)
+            return
         
-        # الانتقال لطرق الدفع
-        keyboard = [
-            [InlineKeyboardButton("💳 شام كاش", callback_data="payment_shamcash")],
-            [InlineKeyboardButton("💳 سيرياتيل كاش", callback_data="payment_syriatel")],
-            [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
-            [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
-            [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
-        ]
+        # معالجة الإدخال اليدوي للدول والولايات
+        waiting_for = context.user_data.get('waiting_for')
+        if waiting_for == 'manual_country':
+            context.user_data['selected_country'] = text
+            context.user_data.pop('waiting_for', None)
+            if language == 'ar':
+                reply_text = f"تم اختيار الدولة: {text}\nيرجى إدخال اسم المنطقة/الولاية:"
+            else:
+                reply_text = f"Country selected: {text}\nPlease enter state/region name:"
+            await update.message.reply_text(reply_text)
+            context.user_data['waiting_for'] = 'manual_state'
+            return
+        
+        elif waiting_for == 'manual_state':
+            context.user_data['selected_state'] = text
+            context.user_data.pop('waiting_for', None)
+            if language == 'ar':
+                reply_text = f"تم اختيار المنطقة: {text}"
+            else:
+                reply_text = f"State/region selected: {text}"
+            await update.message.reply_text(reply_text)
+            
+            # الانتقال لطرق الدفع
+            if language == 'ar':
+                keyboard = [
+                    [InlineKeyboardButton("💳 شام كاش", callback_data="payment_shamcash")],
+                    [InlineKeyboardButton("💳 سيرياتيل كاش", callback_data="payment_syriatel")],
+                    [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
+                    [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
+                    [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
+                ]
+            else:
+                keyboard = [
+                    [InlineKeyboardButton("💳 Sham Cash", callback_data="payment_shamcash")],
+                    [InlineKeyboardButton("💳 Syriatel Cash", callback_data="payment_syriatel")],
+                    [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
+                    [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
+                    [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
+                ]
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                MESSAGES[language]['payment_methods'],
+                reply_markup=reply_markup
+            )
+            return
+        
+        # التحقق من حالة انتظار رسالة مباشرة من الأدمن (للمعالجة المباشرة)
+        if is_admin and context.user_data.get('waiting_for_direct_admin_message'):
+            order_id = context.user_data.get('processing_order_id')
+            if order_id:
+                try:
+                    # استدعاء دالة إرسال البروكسي مع الرسالة المخصصة
+                    await send_proxy_with_custom_message_direct(update, context, text)
+                    
+                    # رسالة تأكيد للأدمن
+                    await update.message.reply_text(
+                        f"✅ تم إرسال البروكسي والرسالة للمستخدم بنجاح!\n\n🆔 معرف الطلب: `{order_id}`",
+                        parse_mode='Markdown'
+                    )
+                    
+                    # إعادة تفعيل كيبورد الأدمن
+                    await restore_admin_keyboard(context, update.effective_chat.id)
+                    
+                except Exception as e:
+                    logger.error(f"خطأ في إرسال البروكسي: {e}")
+                    await update.message.reply_text(
+                        f"❌ حدث خطأ أثناء إرسال البروكسي\n\nالخطأ: {str(e)}"
+                    )
+                return
+        
+        # أزرار الأدمن
+        if is_admin:
+            # القوائم الرئيسية للأدمن
+            if text == "📋 إدارة الطلبات":
+                await handle_admin_orders_menu(update, context)
+            elif text == "💰 إدارة الأموال":
+                await handle_admin_money_menu(update, context)
+            elif text == "👥 الإحالات":
+                await handle_admin_referrals_menu(update, context)
+            elif text == "⚙️ الإعدادات":
+                await handle_admin_settings_menu(update, context)
+            elif text == "🚪 تسجيل الخروج":
+                await admin_logout_confirmation(update, context)
+            return
+        
+        # التحقق من الأزرار الرئيسية للمستخدم
+        if text == MESSAGES[language]['main_menu_buttons'][0]:  # طلب بروكسي ستاتيك
+            await handle_static_proxy_request(update, context)
+        elif text == MESSAGES[language]['main_menu_buttons'][1]:  # طلب بروكسي سوكس
+            await handle_socks_proxy_request(update, context)
+        elif text == MESSAGES[language]['main_menu_buttons'][2]:  # إحالاتي
+            await handle_referrals(update, context)
+        elif text == MESSAGES[language]['main_menu_buttons'][3]:  # تذكير بطلباتي
+            await handle_order_reminder(update, context)
+        elif text == MESSAGES[language]['main_menu_buttons'][4]:  # الإعدادات
+            await handle_settings(update, context)
+        
+    except Exception as e:
+        logger.error(f"Error in handle_text_messages: {e}")
+        print(f"❌ خطأ في معالجة رسالة نصية من المستخدم {user_id}: {e}")
+        print(f"   النص: {text}")
+    
+    # محاولة إعادة التوجيه للمستخدم
+    try:
+        user_id = update.effective_user.id
+        if context.user_data.get('is_admin') or user_id == ADMIN_CHAT_ID:
+            await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ. عودة للقائمة الرئيسية...")
+        else:
+            await update.message.reply_text(
+                "❌ حدث خطأ في معالجة طلبك. تم إعادة توجيهك للقائمة الرئيسية.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            await start(update, context)
+    except Exception as redirect_error:
+        logger.error(f"Failed to redirect user after text message error: {redirect_error}")
+        # محاولة أخيرة بسيطة
+        try:
+            await context.bot.send_message(
+                user_id,
+                "❌ حدث خطأ. يرجى استخدام /start لإعادة تشغيل البوت"
+            )
+        except:
+            pass
+    
+    # تنظيف البيانات المؤقتة في حالة الخطأ
+    try:
+        clean_user_data_preserve_admin(context)
+    except:
+        pass
+
+async def validate_database_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """عرض تقرير فحص سلامة قاعدة البيانات"""
+    try:
+        # إجراء فحص سلامة قاعدة البيانات
+        validation_results = db.validate_database_integrity()
+        
+        # تكوين الرسالة
+        status_icon = "✅" if all([
+            validation_results['database_accessible'],
+            validation_results['tables_exist'], 
+            validation_results['data_integrity']
+        ]) else "❌"
+        
+        message = f"""{status_icon} **تقرير فحص قاعدة البيانات**
+
+🔍 **حالة قاعدة البيانات:**
+{"✅" if validation_results['database_accessible'] else "❌"} إمكانية الوصول: {"متاحة" if validation_results['database_accessible'] else "غير متاحة"}
+{"✅" if validation_results['tables_exist'] else "❌"} الجداول: {"موجودة" if validation_results['tables_exist'] else "مفقودة"}
+{"✅" if validation_results['data_integrity'] else "❌"} سلامة البيانات: {"سليمة" if validation_results['data_integrity'] else "تالفة"}
+
+"""
+        
+        if validation_results['errors']:
+            message += f"⚠️ **الأخطاء المكتشفة:**\n"
+            for i, error in enumerate(validation_results['errors'][:5], 1):  # عرض أول 5 أخطاء
+                message += f"{i}. {error}\n"
+            
+            if len(validation_results['errors']) > 5:
+                message += f"... و {len(validation_results['errors']) - 5} خطأ إضافي\n"
+        else:
+            message += "🎉 **لا توجد أخطاء!** قاعدة البيانات تعمل بشكل طبيعي"
+        
+        message += f"\n📊 **إحصائيات سريعة:**"
+        
+        try:
+            # إحصائيات سريعة
+            stats = {
+                'users': db.execute_query("SELECT COUNT(*) FROM users"),
+                'orders': db.execute_query("SELECT COUNT(*) FROM orders"),
+                'pending_orders': db.execute_query("SELECT COUNT(*) FROM orders WHERE status = 'pending'")
+            }
+            
+            message += f"""
+👥 المستخدمين: {stats['users'][0][0] if stats['users'] else 'غير معروف'}
+📦 إجمالي الطلبات: {stats['orders'][0][0] if stats['orders'] else 'غير معروف'}
+⏳ الطلبات المعلقة: {stats['pending_orders'][0][0] if stats['pending_orders'] else 'غير معروف'}"""
+        except:
+            message += "\n⚠️ تعذر الحصول على الإحصائيات"
+        
+        # إنشاء أزرار الإجراءات
+        keyboard = []
+        
+        if not all([validation_results['database_accessible'], validation_results['tables_exist']]):
+            keyboard.append([InlineKeyboardButton("🔧 إصلاح قاعدة البيانات", callback_data="repair_database")])
+        
+        keyboard.extend([
+            [InlineKeyboardButton("🔄 إعادة الفحص", callback_data="validate_database")],
+            [InlineKeyboardButton("📊 تحميل قاعدة البيانات", callback_data="admin_db_export")],
+            [InlineKeyboardButton("🔙 العودة", callback_data="admin_database_menu")]
+        ])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            MESSAGES[language]['payment_methods'],
-            reply_markup=reply_markup
-        )
-        return
-    
-    # التحقق من حالة انتظار رسالة مباشرة من الأدمن (للمعالجة المباشرة)
-    if is_admin and context.user_data.get('waiting_for_direct_admin_message'):
-        order_id = context.user_data.get('processing_order_id')
-        if order_id:
-            try:
-                # استدعاء دالة إرسال البروكسي مع الرسالة المخصصة
-                await send_proxy_with_custom_message_direct(update, context, text)
-                
-                # رسالة تأكيد للأدمن
-                await update.message.reply_text(
-                    f"✅ تم إرسال البروكسي والرسالة للمستخدم بنجاح!\n\n🆔 معرف الطلب: `{order_id}`",
-                    parse_mode='Markdown'
-                )
-                
-                # إعادة تفعيل كيبورد الأدمن
-                await restore_admin_keyboard(context, update.effective_chat.id)
-                
-            except Exception as e:
-                logger.error(f"خطأ في إرسال البروكسي: {e}")
-                await update.message.reply_text(
-                    f"❌ حدث خطأ أثناء إرسال البروكسي\n\nالخطأ: {str(e)}"
-                )
-            return
-    
-    # التحقق من حالة انتظار رسالة مباشرة من الأدمن
-    if is_admin and context.user_data.get('waiting_for_admin_message'):
-        order_id = context.user_data.get('direct_message_order_id')
-        if order_id:
-            # إرسال الرسالة للمستخدم
-            user_query = "SELECT user_id FROM orders WHERE id = ?"
-            user_result = db.execute_query(user_query, (order_id,))
+        
+        if hasattr(update, 'callback_query') and update.callback_query:
+            await update.callback_query.edit_message_text(message, reply_markup=reply_markup, parse_mode='Markdown')
+        else:
+            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='Markdown')
             
-            if user_result:
-                user_id_target = user_result[0][0]
-                
-                # إرسال الرسالة للمستخدم
-                user_message = f"""📩 رسالة من الإدارة
+    except Exception as e:
+        error_message = f"""❌ **فشل فحص قاعدة البيانات**
 
-{text}
+حدث خطأ أثناء محاولة فحص قاعدة البيانات:
+`{str(e)}`
 
-━━━━━━━━━━━━━━━
-🆔 بخصوص الطلب: `{order_id}`"""
-                
-                try:
-                    await context.bot.send_message(user_id_target, user_message, parse_mode='Markdown')
-                    await update.message.reply_text(f"✅ تم إرسال رسالتك للمستخدم بنجاح!\n\n📋 الطلب: `{order_id}`\n📝 الرسالة: {text[:50]}...", parse_mode='Markdown')
-                except Exception as e:
-                    await update.message.reply_text(f"❌ فشل في إرسال الرسالة: {str(e)}")
-            else:
-                await update.message.reply_text("❌ لم يتم العثور على المستخدم")
-            
-            # تنظيف البيانات المؤقتة
-            context.user_data.pop('direct_message_order_id', None)
-            context.user_data.pop('waiting_for_admin_message', None)
-            
-            # إعادة تفعيل كيبورد الأدمن
-            await restore_admin_keyboard(context, update.effective_chat.id)
-            return
-    
-    # أزرار الأدمن
-    if is_admin:
-        # القوائم الرئيسية للأدمن
-        if text == "📋 إدارة الطلبات":
-            await handle_admin_orders_menu(update, context)
-        elif text == "💰 إدارة الأموال":
-            await handle_admin_money_menu(update, context)
-        elif text == "👥 الإحالات":
-            await handle_admin_referrals_menu(update, context)
-        elif text == "⚙️ الإعدادات":
-            await handle_admin_settings_menu(update, context)
-        # تم نقل معالجة الاستعلام عن مستخدم إلى admin_functions_conv_handler
-        elif text == "🚪 تسجيل الخروج":
-            await admin_logout_confirmation(update, context)
+هذا قد يشير إلى مشكلة خطيرة في النظام."""
         
-        # إدارة الطلبات
-        elif text == "📋 الطلبات المعلقة":
-            await show_pending_orders_admin(update, context)
-        # تم نقل معالجة الاستعلام عن طلب إلى admin_functions_conv_handler
-        elif text == "🗑️ حذف الطلبات الفاشلة":
-            await delete_failed_orders(update, context)
-        elif text == "🗑️ حذف الطلبات المكتملة":
-            await delete_completed_orders(update, context)
+        keyboard = [
+            [InlineKeyboardButton("🔄 إعادة المحاولة", callback_data="validate_database")],
+            [InlineKeyboardButton("🔙 العودة", callback_data="admin_database_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # إدارة الأموال
-        elif text == "📊 إحصاء المبيعات":
-            await show_sales_statistics(update, context)
-        elif text == "💲 إدارة الأسعار":
-            await manage_prices_menu(update, context)
-        # تم نقل معالجة تعديل الأسعار إلى admin_functions_conv_handler
-        
-        # إدارة الإحالات
-        # تم نقل معالجة تحديد قيمة الإحالة إلى admin_functions_conv_handler
-        elif text == "📊 إحصائيات المستخدمين":
-            await show_user_statistics(update, context)
-        # تم نقل معالجة تصفير رصيد مستخدم إلى admin_functions_conv_handler
-        
-        # إعدادات الأدمن
-        elif text == "🌐 تغيير اللغة":
-            await handle_settings(update, context)
-        elif text == "🔐 تغيير كلمة المرور":
-            await change_admin_password(update, context)
-        # تم نقل معالجة ساعات الهدوء إلى admin_functions_conv_handler
-        elif text == "🗃️ إدارة قاعدة البيانات":
-            await database_management_menu(update, context)
-        
-        # معالجة إدارة قاعدة البيانات
-        elif text == "📊 تحميل قاعدة البيانات" and is_admin:
-            await database_export_menu(update, context)
-        elif text == "🗑️ تفريغ قاعدة البيانات":
-            await confirm_database_clear(update, context)
-        
-        # معالجة تصدير قاعدة البيانات
-        elif text == "📊 Excel":
-            await export_database_excel(update, context)
-        elif text == "📄 CSV":
-            await export_database_csv(update, context)
-        elif text == "🗃️ SQLite Database":
-            await export_database_sqlite(update, context)
-        
-        # العودة للقائمة الرئيسية
-        elif text == "🔙 العودة للقائمة الرئيسية":
-            await restore_admin_keyboard(context, update.effective_chat.id, "🔧 لوحة الأدمن الرئيسية\nاختر الخدمة المطلوبة:")
-        
-        return
-    
-    # التحقق من الأزرار الرئيسية للمستخدم
-    if text == MESSAGES[language]['main_menu_buttons'][0]:  # طلب بروكسي ستاتيك
-        await handle_static_proxy_request(update, context)
-    elif text == MESSAGES[language]['main_menu_buttons'][1]:  # طلب بروكسي سوكس
-        await handle_socks_proxy_request(update, context)
-    elif text == MESSAGES[language]['main_menu_buttons'][2]:  # إحالاتي
-        await handle_referrals(update, context)
-    elif text == MESSAGES[language]['main_menu_buttons'][3]:  # تذكير بطلباتي
-        await handle_order_reminder(update, context)
-    elif text == MESSAGES[language]['main_menu_buttons'][4]:  # الإعدادات
-        await handle_settings(update, context)
+        if hasattr(update, 'callback_query') and update.callback_query:
+            await update.callback_query.edit_message_text(error_message, reply_markup=reply_markup, parse_mode='Markdown')
+        else:
+            await update.message.reply_text(error_message, reply_markup=reply_markup, parse_mode='Markdown')
 
 # ==== الوظائف المفقودة ====
 
@@ -8228,16 +8500,29 @@ async def handle_back_to_quantity(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     await query.answer()
     
+    # تحديد لغة الأدمن (افتراضياً العربية للأدمن)
+    admin_language = get_user_language(query.from_user.id)
+    
     # إعادة عرض خيارات الكمية
-    keyboard = [
-        [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single")],
-        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package")],
-        [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")]
-    ]
+    if admin_language == 'ar':
+        keyboard = [
+            [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single")],
+            [InlineKeyboardButton("📦 باكج", callback_data="quantity_package")],
+            [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")]
+        ]
+        quantity_text = "1️⃣ اختر الكمية المطلوبة:"
+    else:
+        keyboard = [
+            [InlineKeyboardButton("🔗 Single Proxy", callback_data="quantity_single")],
+            [InlineKeyboardButton("📦 Package", callback_data="quantity_package")],
+            [InlineKeyboardButton("❌ Cancel Processing", callback_data="cancel_processing")]
+        ]
+        quantity_text = "1️⃣ Choose the required quantity:"
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await query.edit_message_text(
-        "1️⃣ اختر الكمية المطلوبة:",
+        quantity_text,
         reply_markup=reply_markup
     )
     
