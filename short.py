@@ -5868,197 +5868,110 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             pass
         return
     
-    # التحقق من الأوامر الخاصة للتنظيف وإعادة التعيين
-    if text.lower() in ['/reset', '🔄 إعادة تعيين', 'reset']:
-        await handle_reset_command(update, context)
-        return
-    elif text.lower() in ['/cleanup', '🧹 تنظيف', 'cleanup']:
-        await handle_cleanup_command(update, context)
-        return
-    elif text.lower() in ['/status', '📊 الحالة', 'status']:
-        await handle_status_command(update, context)
-        return
-    elif text.lower() in ['إلغاء', 'cancel', 'خروج', 'exit', 'stop']:
-        # تنظيف العمليات المعلقة والعودة للقائمة الرئيسية
-        context.user_data.clear()  # تبسيط التنظيف
-        await update.message.reply_text("✅ تم إلغاء العملية والعودة للقائمة الرئيسية")
-        await start(update, context)
-        return
-    
-    # معالجة الإدخال اليدوي للدول والولايات
-    waiting_for = context.user_data.get('waiting_for')
-    if waiting_for == 'manual_country':
-        context.user_data['selected_country'] = text
-        context.user_data.pop('waiting_for', None)
-        if language == 'ar':
-            reply_text = f"تم اختيار الدولة: {text}\nيرجى إدخال اسم المنطقة/الولاية:"
-        else:
-            reply_text = f"Country selected: {text}\nPlease enter state/region name:"
-        await update.message.reply_text(reply_text)
-        context.user_data['waiting_for'] = 'manual_state'
-        return
-    
-    elif waiting_for == 'manual_state':
-        context.user_data['selected_state'] = text
-        context.user_data.pop('waiting_for', None)
-        if language == 'ar':
-            reply_text = f"تم اختيار المنطقة: {text}"
-        else:
-            reply_text = f"State/region selected: {text}"
-        await update.message.reply_text(reply_text)
-        
-        # الانتقال لطرق الدفع
-        if language == 'ar':
-            keyboard = [
-                [InlineKeyboardButton("💳 شام كاش", callback_data="payment_shamcash")],
-                [InlineKeyboardButton("💳 سيرياتيل كاش", callback_data="payment_syriatel")],
-                [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
-                [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
-                [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
-            ]
-        else:
-            keyboard = [
-                [InlineKeyboardButton("💳 Sham Cash", callback_data="payment_shamcash")],
-                [InlineKeyboardButton("💳 Syriatel Cash", callback_data="payment_syriatel")],
-                [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
-                [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
-                [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
-            ]
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            MESSAGES[language]['payment_methods'],
-            reply_markup=reply_markup
-        )
-        return
-    
-    # التحقق من حالة انتظار رسالة مباشرة من الأدمن (للمعالجة المباشرة)
-    if is_admin and context.user_data.get('waiting_for_direct_admin_message'):
-        order_id = context.user_data.get('processing_order_id')
-        if order_id:
-            try:
-                # استدعاء دالة إرسال البروكسي مع الرسالة المخصصة
-                await send_proxy_with_custom_message_direct(update, context, text)
-                
-                # رسالة تأكيد للأدمن
-                await update.message.reply_text(
-                    f"✅ تم إرسال البروكسي والرسالة للمستخدم بنجاح!\n\n🆔 معرف الطلب: `{order_id}`",
-                    parse_mode='Markdown'
-                )
-                
-                # إعادة تفعيل كيبورد الأدمن
-                await restore_admin_keyboard(context, update.effective_chat.id)
-                
-            except Exception as e:
-                logger.error(f"خطأ في إرسال البروكسي: {e}")
-                await update.message.reply_text(
-                    f"❌ حدث خطأ أثناء إرسال البروكسي\n\nالخطأ: {str(e)}"
-                )
+    try:
+        # التحقق من الأوامر الخاصة للتنظيف وإعادة التعيين
+        if text.lower() in ['/reset', '🔄 إعادة تعيين', 'reset']:
+            await handle_reset_command(update, context)
             return
-    
-    # التحقق من حالة انتظار رسالة مباشرة من الأدمن
-    if is_admin and context.user_data.get('waiting_for_admin_message'):
-        order_id = context.user_data.get('direct_message_order_id')
-        if order_id:
-            # إرسال الرسالة للمستخدم
-            user_query = "SELECT user_id FROM orders WHERE id = ?"
-            user_result = db.execute_query(user_query, (order_id,))
-            
-            if user_result:
-                user_id_target = user_result[0][0]
-                
-                # إرسال الرسالة للمستخدم
-                user_message = f"""📩 رسالة من الإدارة
-
-{text}
-
-━━━━━━━━━━━━━━━
-🆔 بخصوص الطلب: `{order_id}`"""
-                
-                try:
-                    await context.bot.send_message(user_id_target, user_message, parse_mode='Markdown')
-                    await update.message.reply_text(f"✅ تم إرسال رسالتك للمستخدم بنجاح!\n\n📋 الطلب: `{order_id}`\n📝 الرسالة: {text[:50]}...", parse_mode='Markdown')
-                except Exception as e:
-                    await update.message.reply_text(f"❌ فشل في إرسال الرسالة: {str(e)}")
+        elif text.lower() in ['/cleanup', '🧹 تنظيف', 'cleanup']:
+            await handle_cleanup_command(update, context)
+            return
+        elif text.lower() in ['/status', '📊 الحالة', 'status']:
+            await handle_status_command(update, context)
+            return
+        elif text.lower() in ['إلغاء', 'cancel', 'خروج', 'exit', 'stop']:
+            # تنظيف العمليات المعلقة والعودة للقائمة الرئيسية
+            context.user_data.clear()  # تبسيط التنظيف
+            await update.message.reply_text("✅ تم إلغاء العملية والعودة للقائمة الرئيسية")
+            await start(update, context)
+            return
+        
+        # معالجة الإدخال اليدوي للدول والولايات
+        waiting_for = context.user_data.get('waiting_for')
+        if waiting_for == 'manual_country':
+            context.user_data['selected_country'] = text
+            context.user_data.pop('waiting_for', None)
+            if language == 'ar':
+                reply_text = f"تم اختيار الدولة: {text}\nيرجى إدخال اسم المنطقة/الولاية:"
             else:
-                await update.message.reply_text("❌ لم يتم العثور على المستخدم")
-            
-            # تنظيف البيانات المؤقتة
-            context.user_data.pop('direct_message_order_id', None)
-            context.user_data.pop('waiting_for_admin_message', None)
-            
-            # إعادة تفعيل كيبورد الأدمن
-            await restore_admin_keyboard(context, update.effective_chat.id)
+                reply_text = f"Country selected: {text}\nPlease enter state/region name:"
+            await update.message.reply_text(reply_text)
+            context.user_data['waiting_for'] = 'manual_state'
             return
-    
-    # أزرار الأدمن
-    if is_admin:
-        # القوائم الرئيسية للأدمن
-        if text == "📋 إدارة الطلبات":
-            await handle_admin_orders_menu(update, context)
-        elif text == "💰 إدارة الأموال":
-            await handle_admin_money_menu(update, context)
-        elif text == "👥 الإحالات":
-            await handle_admin_referrals_menu(update, context)
-        elif text == "⚙️ الإعدادات":
-            await handle_admin_settings_menu(update, context)
-        # تم نقل معالجة الاستعلام عن مستخدم إلى admin_functions_conv_handler
-        elif text == "🚪 تسجيل الخروج":
-            await admin_logout_confirmation(update, context)
         
-        # إدارة الطلبات
-        elif text == "📋 الطلبات المعلقة":
-            await show_pending_orders_admin(update, context)
-        # تم نقل معالجة الاستعلام عن طلب إلى admin_functions_conv_handler
-        elif text == "🗑️ حذف الطلبات الفاشلة":
-            await delete_failed_orders(update, context)
-        elif text == "🗑️ حذف الطلبات المكتملة":
-            await delete_completed_orders(update, context)
+        elif waiting_for == 'manual_state':
+            context.user_data['selected_state'] = text
+            context.user_data.pop('waiting_for', None)
+            if language == 'ar':
+                reply_text = f"تم اختيار المنطقة: {text}"
+            else:
+                reply_text = f"State/region selected: {text}"
+            await update.message.reply_text(reply_text)
+            
+            # الانتقال لطرق الدفع
+            if language == 'ar':
+                keyboard = [
+                    [InlineKeyboardButton("💳 شام كاش", callback_data="payment_shamcash")],
+                    [InlineKeyboardButton("💳 سيرياتيل كاش", callback_data="payment_syriatel")],
+                    [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
+                    [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
+                    [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
+                ]
+            else:
+                keyboard = [
+                    [InlineKeyboardButton("💳 Sham Cash", callback_data="payment_shamcash")],
+                    [InlineKeyboardButton("💳 Syriatel Cash", callback_data="payment_syriatel")],
+                    [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
+                    [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
+                    [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
+                ]
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                MESSAGES[language]['payment_methods'],
+                reply_markup=reply_markup
+            )
+            return
         
-        # إدارة الأموال
-        elif text == "📊 إحصاء المبيعات":
-            await show_sales_statistics(update, context)
-        elif text == "💲 إدارة الأسعار":
-            await manage_prices_menu(update, context)
-        # تم نقل معالجة تعديل الأسعار إلى admin_functions_conv_handler
+        # التحقق من حالة انتظار رسالة مباشرة من الأدمن (للمعالجة المباشرة)
+        if is_admin and context.user_data.get('waiting_for_direct_admin_message'):
+            order_id = context.user_data.get('processing_order_id')
+            if order_id:
+                try:
+                    # استدعاء دالة إرسال البروكسي مع الرسالة المخصصة
+                    await send_proxy_with_custom_message_direct(update, context, text)
+                    
+                    # رسالة تأكيد للأدمن
+                    await update.message.reply_text(
+                        f"✅ تم إرسال البروكسي والرسالة للمستخدم بنجاح!\n\n🆔 معرف الطلب: `{order_id}`",
+                        parse_mode='Markdown'
+                    )
+                    
+                    # إعادة تفعيل كيبورد الأدمن
+                    await restore_admin_keyboard(context, update.effective_chat.id)
+                    
+                except Exception as e:
+                    logger.error(f"خطأ في إرسال البروكسي: {e}")
+                    await update.message.reply_text(
+                        f"❌ حدث خطأ أثناء إرسال البروكسي\n\nالخطأ: {str(e)}"
+                    )
+                return
         
-        # إدارة الإحالات
-        # تم نقل معالجة تحديد قيمة الإحالة إلى admin_functions_conv_handler
-        elif text == "📊 إحصائيات المستخدمين":
-            await show_user_statistics(update, context)
-        # تم نقل معالجة تصفير رصيد مستخدم إلى admin_functions_conv_handler
+        # أزرار الأدمن
+        if is_admin:
+            # القوائم الرئيسية للأدمن
+            if text == "📋 إدارة الطلبات":
+                await handle_admin_orders_menu(update, context)
+            elif text == "💰 إدارة الأموال":
+                await handle_admin_money_menu(update, context)
+            elif text == "👥 الإحالات":
+                await handle_admin_referrals_menu(update, context)
+            elif text == "⚙️ الإعدادات":
+                await handle_admin_settings_menu(update, context)
+            elif text == "🚪 تسجيل الخروج":
+                await admin_logout_confirmation(update, context)
+            return
         
-        # إعدادات الأدمن
-        elif text == "🌐 تغيير اللغة":
-            await handle_settings(update, context)
-        elif text == "🔐 تغيير كلمة المرور":
-            await change_admin_password(update, context)
-        # تم نقل معالجة ساعات الهدوء إلى admin_functions_conv_handler
-        elif text == "🗃️ إدارة قاعدة البيانات":
-            await database_management_menu(update, context)
-        
-        # معالجة إدارة قاعدة البيانات
-        elif text == "🔍 فحص قاعدة البيانات" and is_admin:
-            await validate_database_status(update, context)
-        elif text == "📊 تحميل قاعدة البيانات" and is_admin:
-            await database_export_menu(update, context)
-        elif text == "🗑️ تفريغ قاعدة البيانات":
-            await confirm_database_clear(update, context)
-        
-        # معالجة تصدير قاعدة البيانات
-        elif text == "📊 Excel":
-            await export_database_excel(update, context)
-        elif text == "📄 CSV":
-            await export_database_csv(update, context)
-        elif text == "🗃️ SQLite Database":
-            await export_database_sqlite(update, context)
-        
-        # العودة للقائمة الرئيسية
-        elif text == "🔙 العودة للقائمة الرئيسية":
-            await restore_admin_keyboard(context, update.effective_chat.id, "🔧 لوحة الأدمن الرئيسية\nاختر الخدمة المطلوبة:")
-        
-        return
-    
         # التحقق من الأزرار الرئيسية للمستخدم
         if text == MESSAGES[language]['main_menu_buttons'][0]:  # طلب بروكسي ستاتيك
             await handle_static_proxy_request(update, context)
@@ -6075,34 +5988,34 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.error(f"Error in handle_text_messages: {e}")
         print(f"❌ خطأ في معالجة رسالة نصية من المستخدم {user_id}: {e}")
         print(f"   النص: {text}")
-        
-        # محاولة إعادة التوجيه للمستخدم
+    
+    # محاولة إعادة التوجيه للمستخدم
+    try:
+        user_id = update.effective_user.id
+        if context.user_data.get('is_admin') or user_id == ADMIN_CHAT_ID:
+            await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ. عودة للقائمة الرئيسية...")
+        else:
+            await update.message.reply_text(
+                "❌ حدث خطأ في معالجة طلبك. تم إعادة توجيهك للقائمة الرئيسية.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            await start(update, context)
+    except Exception as redirect_error:
+        logger.error(f"Failed to redirect user after text message error: {redirect_error}")
+        # محاولة أخيرة بسيطة
         try:
-            user_id = update.effective_user.id
-            if context.user_data.get('is_admin') or user_id == ADMIN_CHAT_ID:
-                await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ. عودة للقائمة الرئيسية...")
-            else:
-                await update.message.reply_text(
-                    "❌ حدث خطأ في معالجة طلبك. تم إعادة توجيهك للقائمة الرئيسية.",
-                    reply_markup=ReplyKeyboardRemove()
-                )
-                await start(update, context)
-        except Exception as redirect_error:
-            logger.error(f"Failed to redirect user after text message error: {redirect_error}")
-            # محاولة أخيرة بسيطة
-            try:
-                await context.bot.send_message(
-                    user_id,
-                    "❌ حدث خطأ. يرجى استخدام /start لإعادة تشغيل البوت"
-                )
-            except:
-                pass
-        
-        # تنظيف البيانات المؤقتة في حالة الخطأ
-        try:
-            clean_user_data_preserve_admin(context)
+            await context.bot.send_message(
+                user_id,
+                "❌ حدث خطأ. يرجى استخدام /start لإعادة تشغيل البوت"
+            )
         except:
             pass
+    
+    # تنظيف البيانات المؤقتة في حالة الخطأ
+    try:
+        clean_user_data_preserve_admin(context)
+    except:
+        pass
 
 async def validate_database_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """عرض تقرير فحص سلامة قاعدة البيانات"""
