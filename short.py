@@ -1355,13 +1355,29 @@ class DatabaseManager:
     
     def execute_query(self, query: str, params: tuple = ()) -> List[tuple]:
         """تنفيذ استعلام قاعدة البيانات"""
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        cursor.execute(query, params)
-        result = cursor.fetchall()
-        conn.commit()
-        conn.close()
-        return result
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_file, timeout=30.0)
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            result = cursor.fetchall()
+            conn.commit()
+            return result
+        except sqlite3.Error as e:
+            logger.error(f"Database error in execute_query: {e}")
+            logger.error(f"Query: {query}")
+            logger.error(f"Params: {params}")
+            if conn:
+                conn.rollback()
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error in execute_query: {e}")
+            if conn:
+                conn.rollback()
+            return []
+        finally:
+            if conn:
+                conn.close()
     
     def add_user(self, user_id: int, username: str, first_name: str, last_name: str, referred_by: int = None):
         """إضافة مستخدم جديد"""
@@ -1397,8 +1413,14 @@ class DatabaseManager:
     
     def get_pending_orders(self) -> List[tuple]:
         """الحصول على الطلبات المعلقة"""
-        query = "SELECT * FROM orders WHERE status = 'pending'"
-        return self.execute_query(query)
+        try:
+            query = "SELECT * FROM orders WHERE status = 'pending' ORDER BY created_at DESC"
+            result = self.execute_query(query)
+            return result if result else []
+        except Exception as e:
+            logger.error(f"Error in get_pending_orders: {e}")
+            print(f"❌ خطأ في استعلام الطلبات المعلقة: {e}")
+            return []
     
     def log_action(self, user_id: int, action: str, details: str = ""):
         """تسجيل إجراء في السجل"""
@@ -1412,6 +1434,69 @@ class DatabaseManager:
     def get_unprocessed_orders(self) -> List[tuple]:
         """الحصول على الطلبات غير المعالجة فعلياً (بغض النظر عن الحالة)"""
         return self.execute_query("SELECT * FROM orders WHERE truly_processed = FALSE OR truly_processed IS NULL")
+    
+    def validate_database_integrity(self) -> dict:
+        """فحص سلامة قاعدة البيانات"""
+        try:
+            validation_results = {
+                'database_accessible': True,
+                'tables_exist': True,
+                'data_integrity': True,
+                'errors': []
+            }
+            
+            # فحص إمكانية الوصول لقاعدة البيانات
+            try:
+                conn = sqlite3.connect(self.db_file, timeout=10.0)
+                conn.close()
+            except Exception as e:
+                validation_results['database_accessible'] = False
+                validation_results['errors'].append(f"Database access error: {e}")
+                return validation_results
+            
+            # فحص وجود الجداول المطلوبة
+            required_tables = ['users', 'orders', 'referrals', 'settings', 'transactions', 'logs']
+            existing_tables = self.execute_query("SELECT name FROM sqlite_master WHERE type='table'")
+            existing_table_names = [table[0] for table in existing_tables]
+            
+            for table in required_tables:
+                if table not in existing_table_names:
+                    validation_results['tables_exist'] = False
+                    validation_results['errors'].append(f"Missing table: {table}")
+            
+            # فحص سلامة البيانات
+            try:
+                # فحص الطلبات بدون مستخدمين
+                orphaned_orders = self.execute_query("""
+                    SELECT COUNT(*) FROM orders 
+                    WHERE user_id NOT IN (SELECT user_id FROM users)
+                """)
+                if orphaned_orders and orphaned_orders[0][0] > 0:
+                    validation_results['data_integrity'] = False
+                    validation_results['errors'].append(f"Orphaned orders: {orphaned_orders[0][0]}")
+                
+                # فحص الطلبات التالفة
+                corrupt_orders = self.execute_query("""
+                    SELECT COUNT(*) FROM orders 
+                    WHERE id IS NULL OR user_id IS NULL OR proxy_type IS NULL
+                """)
+                if corrupt_orders and corrupt_orders[0][0] > 0:
+                    validation_results['data_integrity'] = False
+                    validation_results['errors'].append(f"Corrupt orders: {corrupt_orders[0][0]}")
+                    
+            except Exception as e:
+                validation_results['data_integrity'] = False
+                validation_results['errors'].append(f"Data integrity check failed: {e}")
+            
+            return validation_results
+            
+        except Exception as e:
+            return {
+                'database_accessible': False,
+                'tables_exist': False,
+                'data_integrity': False,
+                'errors': [f"Validation failed: {e}"]
+            }
 
 # إنشاء مدير قاعدة البيانات
 db = DatabaseManager(DATABASE_FILE)
@@ -3680,6 +3765,18 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await handle_view_order_details(update, context)
         elif query.data.startswith("send_direct_message_"):
             await handle_send_direct_message(update, context)
+        elif query.data == "retry_pending_orders":
+            # إعادة محاولة تحميل الطلبات المعلقة
+            await query.answer("🔄 جاري إعادة المحاولة...")
+            await show_pending_orders_admin(update, context)
+        elif query.data == "admin_database_menu":
+            # انتقال لقائمة إدارة قاعدة البيانات
+            await query.answer()
+            await database_management_menu(update, context)
+        elif query.data == "validate_database":
+            # فحص سلامة قاعدة البيانات
+            await query.answer("🔍 جاري فحص قاعدة البيانات...")
+            await validate_database_status(update, context)
         else:
             # معالجة الأزرار غير المعروفة أو المنتهية الصلاحية
             logger.warning(f"Unknown or expired callback action: {query.data} from user {user_id}")
@@ -4562,34 +4659,67 @@ async def handle_withdrawal_approval_direct(query, context: ContextTypes.DEFAULT
 
 async def handle_back_to_pending_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """العودة إلى قائمة الطلبات المعلقة"""
-    query = update.callback_query
-    await query.answer()
-    
-    # إعادة عرض الطلبات المعلقة
-    pending_orders = db.get_pending_orders()
-    
-    if not pending_orders:
-        await query.edit_message_text("✅ لا توجد طلبات معلقة حالياً.")
-        return
-    
-    total_orders = len(pending_orders)
-    
-    # إنشاء أزرار لعرض تفاصيل كل طلب
-    keyboard = []
-    for i, order in enumerate(pending_orders[:20], 1):  # عرض أول 20 طلب لتجنب تجاوز حدود التيليجرام
-        # عرض معلومات مختصرة في النص
-        button_text = f"{i}. {order[0][:8]}... ({order[2]} - {order[6]}$)"
-        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_pending_order_{order[0]}")])
-    
-    # إضافة زر لعرض المزيد إذا كان هناك أكثر من 20 طلب
-    if total_orders > 20:
-        keyboard.append([InlineKeyboardButton(f"عرض المزيد... ({total_orders - 20} طلب إضافي)", callback_data="show_more_pending")])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    message = f"📋 **الطلبات المعلقة** - المجموع: {total_orders} طلب\n\n🔽 اختر طلباً لعرض تفاصيله الكاملة مع إثبات الدفع:"
-    
-    await query.edit_message_text(message, parse_mode='Markdown', reply_markup=reply_markup)
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        # إعادة عرض الطلبات المعلقة
+        pending_orders = db.get_pending_orders()
+        
+        if not pending_orders:
+            await query.edit_message_text("✅ لا توجد طلبات معلقة حالياً.")
+            return
+        
+        total_orders = len(pending_orders)
+        
+        # إنشاء أزرار لعرض تفاصيل كل طلب
+        keyboard = []
+        for i, order in enumerate(pending_orders[:20], 1):  # عرض أول 20 طلب لتجنب تجاوز حدود التيليجرام
+            try:
+                # التحقق من صحة بيانات الطلب قبل المعالجة
+                order_id = str(order[0]) if order[0] else "unknown"
+                proxy_type = str(order[2]) if len(order) > 2 and order[2] else "unknown"
+                amount = str(order[6]) if len(order) > 6 and order[6] else "0"
+                
+                # عرض معلومات مختصرة في النص
+                button_text = f"{i}. {order_id[:8]}... ({proxy_type} - {amount}$)"
+                keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_pending_order_{order_id}")])
+            except Exception as order_error:
+                logger.error(f"Error processing pending order {i} in back navigation: {order_error}")
+                # إضافة زر للطلب التالف مع معلومات أساسية
+                keyboard.append([InlineKeyboardButton(f"{i}. طلب تالف - إصلاح مطلوب", callback_data=f"fix_order_{i}")])
+        
+        # إضافة زر لعرض المزيد إذا كان هناك أكثر من 20 طلب
+        if total_orders > 20:
+            keyboard.append([InlineKeyboardButton(f"عرض المزيد... ({total_orders - 20} طلب إضافي)", callback_data="show_more_pending")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        message = f"📋 **الطلبات المعلقة** - المجموع: {total_orders} طلب\n\n🔽 اختر طلباً لعرض تفاصيله الكاملة مع إثبات الدفع:"
+        
+        await query.edit_message_text(message, parse_mode='Markdown', reply_markup=reply_markup)
+        
+    except Exception as e:
+        logger.error(f"Error in handle_back_to_pending_orders: {e}")
+        print(f"❌ خطأ في العودة للطلبات المعلقة: {e}")
+        
+        # محاولة إرسال رسالة خطأ مع خيارات
+        try:
+            keyboard = [
+                [InlineKeyboardButton("🔄 إعادة المحاولة", callback_data="retry_pending_orders")],
+                [InlineKeyboardButton("🗃️ إدارة قاعدة البيانات", callback_data="admin_database_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                "❌ حدث خطأ في تحميل الطلبات المعلقة\n\n"
+                "الرجاء اختيار إجراء:",
+                reply_markup=reply_markup
+            )
+        except Exception as msg_error:
+            logger.error(f"Failed to send error message in back navigation: {msg_error}")
+            # العودة للوحة الأدمن الرئيسية كحل أخير
+            await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ في النظام. عودة للقائمة الرئيسية...")
 
 async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة نجاح الدفع والبدء في جمع معلومات البروكسي"""
@@ -5472,29 +5602,66 @@ async def return_to_user_mode(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def show_pending_orders_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """عرض الطلبات المعلقة للأدمن مع إمكانية اختيار الطلب لعرض التفاصيل"""
-    pending_orders = db.get_pending_orders()
-    
-    if not pending_orders:
-        await update.message.reply_text("✅ لا توجد طلبات معلقة حالياً.")
-        return
-    
-    total_orders = len(pending_orders)
-    
-    await update.message.reply_text(f"📋 **الطلبات المعلقة** - المجموع: {total_orders} طلب\n\n🔽 اختر طلباً لعرض تفاصيله الكاملة مع إثبات الدفع:", parse_mode='Markdown')
-    
-    # إنشاء أزرار لعرض تفاصيل كل طلب
-    keyboard = []
-    for i, order in enumerate(pending_orders[:20], 1):  # عرض أول 20 طلب لتجنب تجاوز حدود التيليجرام
-        # عرض معلومات مختصرة في النص
-        button_text = f"{i}. {order[0][:8]}... ({order[2]} - {order[6]}$)"
-        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_pending_order_{order[0]}")])
-    
-    # إضافة زر لعرض المزيد إذا كان هناك أكثر من 20 طلب
-    if total_orders > 20:
-        keyboard.append([InlineKeyboardButton(f"عرض المزيد... ({total_orders - 20} طلب إضافي)", callback_data="show_more_pending")])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("📋 **قائمة الطلبات المعلقة:**", parse_mode='Markdown', reply_markup=reply_markup)
+    try:
+        pending_orders = db.get_pending_orders()
+        
+        if not pending_orders:
+            await update.message.reply_text("✅ لا توجد طلبات معلقة حالياً.")
+            return
+        
+        total_orders = len(pending_orders)
+        
+        await update.message.reply_text(f"📋 **الطلبات المعلقة** - المجموع: {total_orders} طلب\n\n🔽 اختر طلباً لعرض تفاصيله الكاملة مع إثبات الدفع:", parse_mode='Markdown')
+        
+        # إنشاء أزرار لعرض تفاصيل كل طلب
+        keyboard = []
+        for i, order in enumerate(pending_orders[:20], 1):  # عرض أول 20 طلب لتجنب تجاوز حدود التيليجرام
+            try:
+                # التحقق من صحة بيانات الطلب قبل المعالجة
+                order_id = str(order[0]) if order[0] else "unknown"
+                proxy_type = str(order[2]) if len(order) > 2 and order[2] else "unknown"
+                amount = str(order[6]) if len(order) > 6 and order[6] else "0"
+                
+                # عرض معلومات مختصرة في النص
+                button_text = f"{i}. {order_id[:8]}... ({proxy_type} - {amount}$)"
+                keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_pending_order_{order_id}")])
+            except Exception as order_error:
+                logger.error(f"Error processing pending order {i}: {order_error}")
+                # إضافة زر للطلب التالف مع معلومات أساسية
+                keyboard.append([InlineKeyboardButton(f"{i}. طلب تالف - إصلاح مطلوب", callback_data=f"fix_order_{i}")])
+        
+        # إضافة زر لعرض المزيد إذا كان هناك أكثر من 20 طلب
+        if total_orders > 20:
+            keyboard.append([InlineKeyboardButton(f"عرض المزيد... ({total_orders - 20} طلب إضافي)", callback_data="show_more_pending")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("📋 **قائمة الطلبات المعلقة:**", parse_mode='Markdown', reply_markup=reply_markup)
+        
+    except Exception as e:
+        logger.error(f"Error in show_pending_orders_admin: {e}")
+        print(f"❌ خطأ في عرض الطلبات المعلقة: {e}")
+        
+        # إرسال رسالة خطأ للأدمن مع خيارات
+        try:
+            keyboard = [
+                [InlineKeyboardButton("🔄 إعادة المحاولة", callback_data="retry_pending_orders")],
+                [InlineKeyboardButton("🗃️ إدارة قاعدة البيانات", callback_data="admin_database_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                "❌ حدث خطأ في تحميل الطلبات المعلقة\n\n"
+                "قد يكون السبب:\n"
+                "• مشكلة في قاعدة البيانات\n"
+                "• بيانات تالفة في الطلبات\n"
+                "• نفاد الذاكرة\n\n"
+                "الرجاء اختيار إجراء:",
+                reply_markup=reply_markup
+            )
+        except Exception as msg_error:
+            logger.error(f"Failed to send error message: {msg_error}")
+            # العودة للوحة الأدمن الرئيسية كحل أخير
+            await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ في النظام. عودة للقائمة الرئيسية...")
 
 async def delete_failed_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """حذف الطلبات الفاشلة الأحدث من 48 ساعة"""
@@ -5573,6 +5740,7 @@ async def show_sales_statistics(update: Update, context: ContextTypes.DEFAULT_TY
 async def database_management_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """قائمة إدارة قاعدة البيانات"""
     keyboard = [
+        [KeyboardButton("🔍 فحص قاعدة البيانات")],
         [KeyboardButton("📊 تحميل قاعدة البيانات")],
         [KeyboardButton("🗑️ تفريغ قاعدة البيانات")],
         [KeyboardButton("🔙 العودة للقائمة الرئيسية")]
@@ -5801,6 +5969,8 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             await database_management_menu(update, context)
         
         # معالجة إدارة قاعدة البيانات
+        elif text == "🔍 فحص قاعدة البيانات" and is_admin:
+            await validate_database_status(update, context)
         elif text == "📊 تحميل قاعدة البيانات" and is_admin:
             await database_export_menu(update, context)
         elif text == "🗑️ تفريغ قاعدة البيانات":
@@ -5820,17 +5990,137 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         
         return
     
-    # التحقق من الأزرار الرئيسية للمستخدم
-    if text == MESSAGES[language]['main_menu_buttons'][0]:  # طلب بروكسي ستاتيك
-        await handle_static_proxy_request(update, context)
-    elif text == MESSAGES[language]['main_menu_buttons'][1]:  # طلب بروكسي سوكس
-        await handle_socks_proxy_request(update, context)
-    elif text == MESSAGES[language]['main_menu_buttons'][2]:  # إحالاتي
-        await handle_referrals(update, context)
-    elif text == MESSAGES[language]['main_menu_buttons'][3]:  # تذكير بطلباتي
-        await handle_order_reminder(update, context)
-    elif text == MESSAGES[language]['main_menu_buttons'][4]:  # الإعدادات
-        await handle_settings(update, context)
+        # التحقق من الأزرار الرئيسية للمستخدم
+        if text == MESSAGES[language]['main_menu_buttons'][0]:  # طلب بروكسي ستاتيك
+            await handle_static_proxy_request(update, context)
+        elif text == MESSAGES[language]['main_menu_buttons'][1]:  # طلب بروكسي سوكس
+            await handle_socks_proxy_request(update, context)
+        elif text == MESSAGES[language]['main_menu_buttons'][2]:  # إحالاتي
+            await handle_referrals(update, context)
+        elif text == MESSAGES[language]['main_menu_buttons'][3]:  # تذكير بطلباتي
+            await handle_order_reminder(update, context)
+        elif text == MESSAGES[language]['main_menu_buttons'][4]:  # الإعدادات
+            await handle_settings(update, context)
+        
+    except Exception as e:
+        logger.error(f"Error in handle_text_messages: {e}")
+        print(f"❌ خطأ في معالجة رسالة نصية من المستخدم {user_id}: {e}")
+        print(f"   النص: {text}")
+        
+        # محاولة إعادة التوجيه للمستخدم
+        try:
+            user_id = update.effective_user.id
+            if context.user_data.get('is_admin') or user_id == ADMIN_CHAT_ID:
+                await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ. عودة للقائمة الرئيسية...")
+            else:
+                await update.message.reply_text(
+                    "❌ حدث خطأ في معالجة طلبك. تم إعادة توجيهك للقائمة الرئيسية.",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+                await start(update, context)
+        except Exception as redirect_error:
+            logger.error(f"Failed to redirect user after text message error: {redirect_error}")
+            # محاولة أخيرة بسيطة
+            try:
+                await context.bot.send_message(
+                    user_id,
+                    "❌ حدث خطأ. يرجى استخدام /start لإعادة تشغيل البوت"
+                )
+            except:
+                pass
+        
+        # تنظيف البيانات المؤقتة في حالة الخطأ
+        try:
+            clean_user_data_preserve_admin(context)
+        except:
+            pass
+
+async def validate_database_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """عرض تقرير فحص سلامة قاعدة البيانات"""
+    try:
+        # إجراء فحص سلامة قاعدة البيانات
+        validation_results = db.validate_database_integrity()
+        
+        # تكوين الرسالة
+        status_icon = "✅" if all([
+            validation_results['database_accessible'],
+            validation_results['tables_exist'], 
+            validation_results['data_integrity']
+        ]) else "❌"
+        
+        message = f"""{status_icon} **تقرير فحص قاعدة البيانات**
+
+🔍 **حالة قاعدة البيانات:**
+{"✅" if validation_results['database_accessible'] else "❌"} إمكانية الوصول: {"متاحة" if validation_results['database_accessible'] else "غير متاحة"}
+{"✅" if validation_results['tables_exist'] else "❌"} الجداول: {"موجودة" if validation_results['tables_exist'] else "مفقودة"}
+{"✅" if validation_results['data_integrity'] else "❌"} سلامة البيانات: {"سليمة" if validation_results['data_integrity'] else "تالفة"}
+
+"""
+        
+        if validation_results['errors']:
+            message += f"⚠️ **الأخطاء المكتشفة:**\n"
+            for i, error in enumerate(validation_results['errors'][:5], 1):  # عرض أول 5 أخطاء
+                message += f"{i}. {error}\n"
+            
+            if len(validation_results['errors']) > 5:
+                message += f"... و {len(validation_results['errors']) - 5} خطأ إضافي\n"
+        else:
+            message += "🎉 **لا توجد أخطاء!** قاعدة البيانات تعمل بشكل طبيعي"
+        
+        message += f"\n📊 **إحصائيات سريعة:**"
+        
+        try:
+            # إحصائيات سريعة
+            stats = {
+                'users': db.execute_query("SELECT COUNT(*) FROM users"),
+                'orders': db.execute_query("SELECT COUNT(*) FROM orders"),
+                'pending_orders': db.execute_query("SELECT COUNT(*) FROM orders WHERE status = 'pending'")
+            }
+            
+            message += f"""
+👥 المستخدمين: {stats['users'][0][0] if stats['users'] else 'غير معروف'}
+📦 إجمالي الطلبات: {stats['orders'][0][0] if stats['orders'] else 'غير معروف'}
+⏳ الطلبات المعلقة: {stats['pending_orders'][0][0] if stats['pending_orders'] else 'غير معروف'}"""
+        except:
+            message += "\n⚠️ تعذر الحصول على الإحصائيات"
+        
+        # إنشاء أزرار الإجراءات
+        keyboard = []
+        
+        if not all([validation_results['database_accessible'], validation_results['tables_exist']]):
+            keyboard.append([InlineKeyboardButton("🔧 إصلاح قاعدة البيانات", callback_data="repair_database")])
+        
+        keyboard.extend([
+            [InlineKeyboardButton("🔄 إعادة الفحص", callback_data="validate_database")],
+            [InlineKeyboardButton("📊 تحميل قاعدة البيانات", callback_data="admin_db_export")],
+            [InlineKeyboardButton("🔙 العودة", callback_data="admin_database_menu")]
+        ])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        if hasattr(update, 'callback_query') and update.callback_query:
+            await update.callback_query.edit_message_text(message, reply_markup=reply_markup, parse_mode='Markdown')
+        else:
+            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='Markdown')
+            
+    except Exception as e:
+        error_message = f"""❌ **فشل فحص قاعدة البيانات**
+
+حدث خطأ أثناء محاولة فحص قاعدة البيانات:
+`{str(e)}`
+
+هذا قد يشير إلى مشكلة خطيرة في النظام."""
+        
+        keyboard = [
+            [InlineKeyboardButton("🔄 إعادة المحاولة", callback_data="validate_database")],
+            [InlineKeyboardButton("🔙 العودة", callback_data="admin_database_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        if hasattr(update, 'callback_query') and update.callback_query:
+            await update.callback_query.edit_message_text(error_message, reply_markup=reply_markup, parse_mode='Markdown')
+        else:
+            await update.message.reply_text(error_message, reply_markup=reply_markup, parse_mode='Markdown')
 
 # ==== الوظائف المفقودة ====
 
