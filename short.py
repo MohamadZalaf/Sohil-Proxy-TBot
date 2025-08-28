@@ -5993,13 +5993,65 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
                 await handle_admin_settings_menu(update, context)
             elif text == "🚪 تسجيل الخروج":
                 await admin_logout_confirmation(update, context)
-            else:
-                # التعامل مع النصوص غير المعروفة للأدمن
-                await update.message.reply_text(
-                    "⚠️ أمر غير معروف. يرجى استخدام الأزرار الموجودة في لوحة الأدمن.",
-                    reply_markup=ReplyKeyboardRemove()
-                )
-                await restore_admin_keyboard(context, update.effective_chat.id)
+            
+            # إدارة الطلبات
+            elif text == "📋 الطلبات المعلقة":
+                await show_pending_orders_admin(update, context)
+            elif text == "🔍 الاستعلام عن طلب":
+                await admin_order_inquiry(update, context)
+            elif text == "🗑️ حذف الطلبات الفاشلة":
+                await delete_failed_orders(update, context)
+            elif text == "🗑️ حذف الطلبات المكتملة":
+                await delete_completed_orders(update, context)
+            
+            # إدارة الأموال
+            elif text == "📊 إحصاء المبيعات":
+                await show_sales_statistics(update, context)
+            elif text == "💲 إدارة الأسعار":
+                await manage_prices_menu(update, context)
+            elif text == "💰 تعديل أسعار ستاتيك":
+                await set_static_prices(update, context)
+            elif text == "💰 تعديل أسعار سوكس":
+                await set_socks_prices(update, context)
+            
+            # إدارة الإحالات
+            elif text == "💵 تحديد قيمة الإحالة":
+                await set_referral_amount(update, context)
+            elif text == "📊 إحصائيات المستخدمين":
+                await show_user_statistics(update, context)
+            elif text == "🗑️ تصفير رصيد مستخدم":
+                await reset_user_balance(update, context)
+            
+            # إعدادات الأدمن
+            elif text == "🌐 تغيير اللغة":
+                await handle_settings(update, context)
+            elif text == "🔐 تغيير كلمة المرور":
+                await change_admin_password(update, context)
+            elif text == "🔕 ساعات الهدوء":
+                await set_quiet_hours(update, context)
+            elif text == "🗃️ إدارة قاعدة البيانات":
+                await database_management_menu(update, context)
+            
+            # معالجة إدارة قاعدة البيانات
+            elif text == "📊 تحميل قاعدة البيانات":
+                await database_export_menu(update, context)
+            elif text == "🗑️ تفريغ قاعدة البيانات":
+                await confirm_database_clear(update, context)
+            
+            # معالجة تصدير قاعدة البيانات
+            elif text == "📊 Excel":
+                await export_database_excel(update, context)
+            elif text == "📄 CSV":
+                await export_database_csv(update, context)
+            elif text == "🗃️ SQLite Database":
+                await export_database_sqlite(update, context)
+            
+            # العودة للقائمة الرئيسية
+            elif text == "🔙 العودة للقائمة الرئيسية":
+                await restore_admin_keyboard(context, update.effective_chat.id, "🔧 لوحة الأدمن الرئيسية\nاختر الخدمة المطلوبة:")
+            
+            # إذا وصلنا هنا فالنص لا يتطابق مع أي زر أدمن معروف
+            # لا نفعل شيئاً - تماماً كما في proxy_bot.py
             return
         
         # التحقق من الأزرار الرئيسية للمستخدم
