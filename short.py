@@ -6002,79 +6002,39 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
                 await restore_admin_keyboard(context, update.effective_chat.id)
             return
         
-        # التحقق من الأزرار الرئيسية للمستخدم مع معالجة مرنة للنصوص
-        # تنظيف النص من المسافات الإضافية والأحرف غير المرئية
-        clean_text = text.strip()
+        # التحقق من الأزرار الرئيسية للمستخدم
+        if text == MESSAGES[language]['main_menu_buttons'][0]:  # طلب بروكسي ستاتيك
+            await handle_static_proxy_request(update, context)
+            return
+        elif text == MESSAGES[language]['main_menu_buttons'][1]:  # طلب بروكسي سوكس
+            await handle_socks_proxy_request(update, context)
+            return
+        elif text == MESSAGES[language]['main_menu_buttons'][2]:  # إحالاتي
+            await handle_referrals(update, context)
+            return
+        elif text == MESSAGES[language]['main_menu_buttons'][3]:  # تذكير بطلباتي
+            await handle_order_reminder(update, context)
+            return
+        elif text == MESSAGES[language]['main_menu_buttons'][4]:  # الإعدادات
+            await handle_settings(update, context)
+            return
+        # إذا وصلنا هنا فالنص لا يتطابق مع أي زر معروف
+        # لا نفعل شيئاً - تماماً كما في proxy_bot.py
         
-        # إنشاء قائمة الأزرار المتوقعة للمقارنة المرنة
-        expected_buttons = MESSAGES[language]['main_menu_buttons']
+    except Exception as e:
+        logger.error(f"Error in handle_text_messages: {e}")
+        print(f"❌ خطأ في معالجة رسالة نصية من المستخدم {user_id}: {e}")
+        print(f"   النص: {text}")
         
-        # البحث عن تطابق مرن
-        button_matched = False
-        
-        # محاولة المقارنة المباشرة أولاً
-        for i, button_text in enumerate(expected_buttons):
-            if clean_text == button_text.strip():
-                button_matched = True
-                try:
-                    if i == 0:  # طلب بروكسي ستاتيك
-                        await handle_static_proxy_request(update, context)
-                    elif i == 1:  # طلب بروكسي سوكس
-                        await handle_socks_proxy_request(update, context)
-                    elif i == 2:  # إحالاتي
-                        await handle_referrals(update, context)
-                    elif i == 3:  # تذكير بطلباتي
-                        await handle_order_reminder(update, context)
-                    elif i == 4:  # الإعدادات
-                        await handle_settings(update, context)
-                except Exception as handler_error:
-                    logger.error(f"Error in button handler {i}: {handler_error}")
-                    # إرسال رسالة خطأ للمستخدم مع الحفاظ على الكيبورد
-                    keyboard = [
-                        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][0])],
-                        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][1])],
-                        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2])],
-                        [KeyboardButton(MESSAGES[language]['main_menu_buttons'][3]), 
-                         KeyboardButton(MESSAGES[language]['main_menu_buttons'][4])]
-                    ]
-                    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-                    
-                    if language == 'ar':
-                        await update.message.reply_text(
-                            f"⚠️ حدث خطأ أثناء معالجة طلبك.\n\n"
-                            f"🔄 يرجى المحاولة مرة أخرى أو استخدام /start لإعادة التشغيل.",
-                            reply_markup=reply_markup
-                        )
-                    else:
-                        await update.message.reply_text(
-                            f"⚠️ An error occurred while processing your request.\n\n"
-                            f"🔄 Please try again or use /start to restart.",
-                            reply_markup=reply_markup
-                        )
-                break
-        
-        # إذا لم يتم العثور على تطابق، جرب المقارنة بالكلمات الرئيسية
-        if not button_matched:
-            # البحث بالكلمات الرئيسية مع معالجة الأخطاء
-            try:
-                if any(keyword in clean_text for keyword in ['ستاتيك', 'Static', 'static']):
-                    await handle_static_proxy_request(update, context)
-                    button_matched = True
-                elif any(keyword in clean_text for keyword in ['سوكس', 'Socks', 'socks']):
-                    await handle_socks_proxy_request(update, context)
-                    button_matched = True
-                elif any(keyword in clean_text for keyword in ['إحالاتي', 'إحالات', 'Referrals', 'referrals']):
-                    await handle_referrals(update, context)
-                    button_matched = True
-                elif any(keyword in clean_text for keyword in ['تذكير', 'طلباتي', 'Reminder', 'reminder']):
-                    await handle_order_reminder(update, context)
-                    button_matched = True
-                elif any(keyword in clean_text for keyword in ['الإعدادات', 'Settings', 'settings']):
-                    await handle_settings(update, context)
-                    button_matched = True
-            except Exception as keyword_handler_error:
-                logger.error(f"Error in keyword handler: {keyword_handler_error}")
-                # إرسال رسالة خطأ للمستخدم مع الحفاظ على الكيبورد
+        # معالجة الخطأ فقط في حالة حدوث استثناء حقيقي
+        try:
+            user_id = update.effective_user.id
+            language = get_user_language(user_id)
+            
+            if context.user_data.get('is_admin') or user_id == ADMIN_CHAT_ID:
+                await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ. عودة للقائمة الرئيسية...")
+            else:
+                # إنشاء الكيبورد من جديد بدلاً من إزالته
                 keyboard = [
                     [KeyboardButton(MESSAGES[language]['main_menu_buttons'][0])],
                     [KeyboardButton(MESSAGES[language]['main_menu_buttons'][1])],
@@ -6086,99 +6046,30 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
                 
                 if language == 'ar':
                     await update.message.reply_text(
-                        f"⚠️ حدث خطأ أثناء معالجة طلبك.\n\n"
-                        f"🔄 يرجى المحاولة مرة أخرى أو استخدام /start لإعادة التشغيل.",
+                        "❌ حدث خطأ في معالجة طلبك.\n\n🔄 تم إعادة إنشاء الأزرار. يرجى المحاولة مرة أخرى:",
                         reply_markup=reply_markup
                     )
                 else:
                     await update.message.reply_text(
-                        f"⚠️ An error occurred while processing your request.\n\n"
-                        f"🔄 Please try again or use /start to restart.",
+                        "❌ An error occurred while processing your request.\n\n🔄 Buttons have been recreated. Please try again:",
                         reply_markup=reply_markup
                     )
-                button_matched = True  # لمنع تنفيذ الكود التالي
+        except Exception as redirect_error:
+            logger.error(f"Failed to redirect user after text message error: {redirect_error}")
+            # محاولة أخيرة بسيطة
+            try:
+                await context.bot.send_message(
+                    user_id,
+                    "❌ حدث خطأ. يرجى استخدام /start لإعادة تشغيل البوت"
+                )
+            except:
+                pass
         
-        # إذا لم يتم العثور على تطابق، اعرض رسالة مفيدة وأعد إنشاء الكيبورد
-        if not button_matched:
-            logger.warning(f"Unknown button text from user {user_id}: '{text}' (cleaned: '{clean_text}')")
-            
-            # إنشاء الكيبورد من جديد بدلاً من إزالته
-            keyboard = [
-                [KeyboardButton(MESSAGES[language]['main_menu_buttons'][0])],
-                [KeyboardButton(MESSAGES[language]['main_menu_buttons'][1])],
-                [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2])],
-                [KeyboardButton(MESSAGES[language]['main_menu_buttons'][3]), 
-                 KeyboardButton(MESSAGES[language]['main_menu_buttons'][4])]
-            ]
-            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-            
-            if language == 'ar':
-                await update.message.reply_text(
-                    f"⚠️ لم أتمكن من فهم الزر الذي ضغطت عليه.\n\n"
-                    f"📝 النص المستلم: `{clean_text}`\n\n"
-                    f"🔄 تم إعادة إنشاء الأزرار. يرجى المحاولة مرة أخرى:",
-                    reply_markup=reply_markup,
-                    parse_mode='Markdown'
-                )
-            else:
-                await update.message.reply_text(
-                    f"⚠️ I couldn't understand the button you pressed.\n\n"
-                    f"📝 Received text: `{clean_text}`\n\n"
-                    f"🔄 Buttons have been recreated. Please try again:",
-                    reply_markup=reply_markup,
-                    parse_mode='Markdown'
-                )
-            return
-        
-    except Exception as e:
-        logger.error(f"Error in handle_text_messages: {e}")
-        print(f"❌ خطأ في معالجة رسالة نصية من المستخدم {user_id}: {e}")
-        print(f"   النص: {text}")
-    
-    # محاولة إعادة التوجيه للمستخدم مع الحفاظ على الكيبورد
-    try:
-        user_id = update.effective_user.id
-        language = get_user_language(user_id)
-        
-        if context.user_data.get('is_admin') or user_id == ADMIN_CHAT_ID:
-            await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ. عودة للقائمة الرئيسية...")
-        else:
-            # إنشاء الكيبورد من جديد بدلاً من إزالته
-            keyboard = [
-                [KeyboardButton(MESSAGES[language]['main_menu_buttons'][0])],
-                [KeyboardButton(MESSAGES[language]['main_menu_buttons'][1])],
-                [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2])],
-                [KeyboardButton(MESSAGES[language]['main_menu_buttons'][3]), 
-                 KeyboardButton(MESSAGES[language]['main_menu_buttons'][4])]
-            ]
-            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-            
-            if language == 'ar':
-                await update.message.reply_text(
-                    "❌ حدث خطأ في معالجة طلبك.\n\n🔄 تم إعادة إنشاء الأزرار. يرجى المحاولة مرة أخرى:",
-                    reply_markup=reply_markup
-                )
-            else:
-                await update.message.reply_text(
-                    "❌ An error occurred while processing your request.\n\n🔄 Buttons have been recreated. Please try again:",
-                    reply_markup=reply_markup
-                )
-    except Exception as redirect_error:
-        logger.error(f"Failed to redirect user after text message error: {redirect_error}")
-        # محاولة أخيرة بسيطة
+        # تنظيف البيانات المؤقتة في حالة الخطأ فقط
         try:
-            await context.bot.send_message(
-                user_id,
-                "❌ حدث خطأ. يرجى استخدام /start لإعادة تشغيل البوت"
-            )
+            clean_user_data_preserve_admin(context)
         except:
             pass
-    
-    # تنظيف البيانات المؤقتة في حالة الخطأ
-    try:
-        clean_user_data_preserve_admin(context)
-    except:
-        pass
 
 async def validate_database_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """عرض تقرير فحص سلامة قاعدة البيانات"""
