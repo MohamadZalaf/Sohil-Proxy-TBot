@@ -2494,6 +2494,177 @@ async def handle_payment_method_selection(update: Update, context: ContextTypes.
         
         return ConversationHandler.END
 
+async def handle_payment_method_selection_direct(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة اختيار طريقة الدفع خارج conversation handler"""
+    try:
+        query = update.callback_query
+        user_id = update.effective_user.id
+        
+        # تسجيل الإجراء
+        logger.info(f"User {user_id} selected payment method: {query.data}")
+        
+        try:
+            await query.answer()
+        except Exception as answer_error:
+            logger.warning(f"Failed to answer payment callback for user {user_id}: {answer_error}")
+        
+        language = get_user_language(user_id)
+        
+        payment_method = query.data.replace("payment_", "")
+        context.user_data['payment_method'] = payment_method
+        
+        # إضافة زر الإلغاء
+        if language == 'ar':
+            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_proxy_request")]]
+        else:
+            keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_user_proxy_request")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            MESSAGES[language]['send_payment_proof'],
+            reply_markup=reply_markup
+        )
+        
+        # تعيين حالة انتظار إثبات الدفع للمستخدم العادي
+        context.user_data['waiting_for_payment_proof'] = True
+        
+    except Exception as e:
+        logger.error(f"Error in handle_payment_method_selection_direct for user {user_id}: {e}")
+        
+        try:
+            await update.callback_query.message.reply_text(
+                "⚠️ حدث خطأ في معالجة طريقة الدفع. يرجى استخدام /start لإعادة المحاولة.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            # تنظيف البيانات المؤقتة
+            context.user_data.clear()
+            await start(update, context)
+            
+        except Exception as recovery_error:
+            logger.error(f"Failed to send error message in payment method selection: {recovery_error}")
+
+async def handle_payment_proof_direct(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة إثبات الدفع للمستخدم العادي خارج conversation handler"""
+    user_id = update.effective_user.id
+    language = get_user_language(user_id)
+    
+    try:
+        # التحقق من البيانات المطلوبة
+        if 'proxy_type' not in context.user_data:
+            await update.message.reply_text(
+                "❌ خطأ: لم يتم العثور على نوع البروكسي. يرجى البدء من جديد بالضغط على /start",
+                parse_mode='Markdown'
+            )
+            context.user_data.clear()
+            await start(update, context)
+            return
+        
+        # إنشاء معرف الطلب الآن فقط عند إرسال إثبات الدفع
+        order_id = generate_order_id()
+        context.user_data['current_order_id'] = order_id
+        
+        # إنشاء الطلب في قاعدة البيانات
+        proxy_type = context.user_data.get('proxy_type', 'static')
+        country = context.user_data.get('selected_country', 'manual')
+        state = context.user_data.get('selected_state', 'manual')
+        payment_method = context.user_data.get('payment_method', 'unknown')
+        quantity = context.user_data.get('user_quantity', 'single')
+        
+        # حساب سعر البروكسي
+        payment_amount = get_proxy_price(proxy_type, country, state)
+        
+        # إنشاء الطلب في قاعدة البيانات
+        print(f"📝 إنشاء طلب جديد: {order_id}")
+        db.create_order(order_id, user_id, proxy_type, country, state, payment_method, payment_amount, quantity)
+        
+        # التحقق من أن الرسالة تحتوي على صورة فقط
+        if not update.message.photo:
+            await update.message.reply_text(
+                "❌ يُسمح بإرسال الصور فقط كإثبات للدفع!\n\n📸 يرجى إرسال صورة واضحة لإثبات الدفع",
+                parse_mode='Markdown'
+            )
+            return
+        
+        # حفظ صورة إثبات الدفع
+        photo = update.message.photo[-1]  # أكبر حجم للصورة
+        photo_file = await photo.get_file()
+        photo_data = await photo_file.download_as_bytearray()
+        
+        # حفظ الصورة في قاعدة البيانات
+        try:
+            db.save_payment_proof(order_id, photo_data)
+            print(f"💾 تم حفظ إثبات الدفع للطلب: {order_id}")
+        except Exception as save_error:
+            print(f"⚠️ خطأ في حفظ إثبات الدفع للطلب {order_id}: {save_error}")
+        
+        # إرسال إشعار للأدمن
+        try:
+            await send_order_notification(context, order_id, user_id, proxy_type, country, state, payment_method, payment_amount, quantity)
+            print(f"📨 تم إرسال إشعار للأدمن للطلب: {order_id}")
+        except Exception as notification_error:
+            print(f"⚠️ خطأ في إرسال الإشعار للطلب {order_id}: {notification_error}")
+        
+        # إرسال رسالة تأكيد للمستخدم
+        try:
+            await update.message.reply_text(MESSAGES[language]['order_received'], parse_mode='Markdown')
+            print(f"✅ تم إرسال رسالة التأكيد للمستخدم للطلب: {order_id}")
+        except Exception as e:
+            print(f"⚠️ خطأ في إرسال رسالة التأكيد للطلب {order_id}: {e}")
+        
+        # تسجيل العملية
+        try:
+            db.log_action(user_id, "payment_proof_submitted", order_id)
+            print(f"📊 تم تسجيل العملية في قاعدة البيانات للطلب: {order_id}")
+        except Exception as e:
+            print(f"⚠️ خطأ في تسجيل العملية للطلب {order_id}: {e}")
+        
+        # تنظيف البيانات المؤقتة
+        context.user_data.clear()
+        print(f"🧹 تم تنظيف البيانات المؤقتة وإنهاء معالجة الطلب: {order_id}")
+        
+        # إعادة إرسال القائمة الرئيسية
+        await start(update, context)
+        
+    except Exception as e:
+        print(f"❌ خطأ عام في معالجة إثبات الدفع للمستخدم {user_id}: {e}")
+        try:
+            await update.message.reply_text(
+                "❌ حدث خطأ أثناء معالجة إثبات الدفع. يرجى المحاولة مرة أخرى أو التواصل مع الدعم.",
+                parse_mode='Markdown'
+            )
+        except:
+            pass
+        
+        # تنظيف البيانات في حالة الخطأ
+        context.user_data.clear()
+        await start(update, context)
+
+async def handle_photo_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة الصور المرسلة من المستخدمين"""
+    try:
+        user_id = update.effective_user.id
+        is_admin = context.user_data.get('is_admin', False)
+        
+        # إذا كان المستخدم العادي في انتظار إثبات الدفع
+        if not is_admin and context.user_data.get('waiting_for_payment_proof'):
+            await handle_payment_proof_direct(update, context)
+            return
+        
+        # إذا كان الأدمن في conversation handler للمعالجة، دع conversation handler يتعامل معها
+        # أو أي حالة أخرى، أرسل رسالة توضيحية
+        language = get_user_language(user_id)
+        await update.message.reply_text(
+            "📸 تم استلام الصورة ولكن لا يُتوقع صورة في هذا الوقت.\n\n💡 إذا كنت تريد طلب بروكسي، استخدم /start أولاً.",
+            parse_mode='Markdown'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in handle_photo_messages for user {user_id}: {e}")
+        try:
+            await update.message.reply_text("⚠️ حدث خطأ في معالجة الصورة. استخدم /start لإعادة التشغيل.")
+        except:
+            pass
+
 async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة إثبات الدفع"""
     user_id = update.effective_user.id
@@ -3643,9 +3814,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         'quiet_8_18', 'quiet_22_6', 'quiet_12_14', 'quiet_20_22', 'quiet_24h'
     ]
     
-    # إضافة أزرار الدفع التي يجب أن تُعالج في payment_conv_handler
-    payment_buttons = [f"payment_{method}" for method in ['shamcash', 'syriatel', 'coinex', 'binance', 'payeer']]
-    conversation_only_buttons.extend(payment_buttons)
+    # إضافة أزرار الدفع - سيتم معالجتها مباشرة هنا بدلاً من conversation handler
+    # payment_buttons = [f"payment_{method}" for method in ['shamcash', 'syriatel', 'coinex', 'binance', 'payeer']]
+    # conversation_only_buttons.extend(payment_buttons)
     
     # إذا كان الزر مُعالج في ConversationHandler، لا تتدخل هنا
     if query.data in conversation_only_buttons:
@@ -3670,6 +3841,10 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         elif query.data.startswith("quantity_"):
             logger.info(f"Routing to quantity selection: {query.data} for user {user_id}")
             await handle_user_quantity_selection(update, context)
+        elif query.data.startswith("payment_"):
+            logger.info(f"Routing to payment method selection for user {user_id}")
+            # معالجة اختيار طريقة الدفع مباشرة (بدون conversation)
+            await handle_payment_method_selection_direct(update, context)
         elif query.data.startswith("view_pending_order_"):
             logger.info(f"Routing to pending order details for user {user_id}")
             await handle_view_pending_order_details(update, context)
@@ -3883,7 +4058,16 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             if context.user_data.get('is_admin') or user_id == ADMIN_CHAT_ID:
                 await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ. عودة للقائمة الرئيسية...")
             else:
-                await start(update, context)
+                # للمستخدم العادي - إرسال رسالة خطأ بسيطة وإعادة البدء
+                try:
+                    await context.bot.send_message(
+                        user_id,
+                        "❌ حدث خطأ. جاري إعادة تحميل القائمة...",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+                    await start(update, context)
+                except:
+                    pass
         except Exception as redirect_error:
             print(f"❌ فشل في إعادة التوجيه: {redirect_error}")
         
@@ -5872,6 +6056,14 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
                 reply_markup=ReplyKeyboardRemove()
             )
             return
+        
+        # التحقق من حالة انتظار إثبات الدفع للمستخدم العادي
+        if not is_admin and context.user_data.get('waiting_for_payment_proof'):
+            await update.message.reply_text(
+                "❌ يُسمح بإرسال الصور فقط كإثبات للدفع!\n\n📸 يرجى إرسال صورة واضحة لإثبات الدفع\n\n💡 أو اضغط /start للإلغاء",
+                parse_mode='Markdown'
+            )
+            return
     except Exception as e:
         logger.error(f"Error in handle_text_messages initialization: {e}")
         try:
@@ -6068,7 +6260,7 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ. عودة للقائمة الرئيسية...")
         else:
             await update.message.reply_text(
-                "❌ حدث خطأ في معالجة طلبك. تم إعادة توجيهك للقائمة الرئيسية.",
+                "❌ حدث خطأ في معالجة طلبك. جاري إعادة تحميل القائمة...",
                 reply_markup=ReplyKeyboardRemove()
             )
             await start(update, context)
@@ -9013,6 +9205,7 @@ def setup_bot():
         
         print("🔧 إضافة معالجات الرسائل...")
         application.add_handler(CallbackQueryHandler(handle_callback_query))
+        application.add_handler(MessageHandler(filters.PHOTO, handle_photo_messages))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
         
         # إضافة معالج الأخطاء الشامل
