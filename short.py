@@ -3499,8 +3499,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         'payment_success', 'payment_failed', 'cancel_processing',
         'quantity_single', 'quantity_package',
         # أزرار أخرى من ConversationHandlers
-        'broadcast_all', 'broadcast_custom', 'confirm_clear_db', 'cancel_clear_db',
-        'confirm_logout', 'cancel_logout', 'understood_current_processing',
+        'broadcast_all', 'broadcast_custom', 'understood_current_processing',
         # أزرار معالجة البروكسي
         'send_custom_message', 'no_custom_message', 'send_proxy_confirm', 'cancel_proxy_send',
         # أزرار أخرى متنوعة
@@ -6085,17 +6084,62 @@ async def handle_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYP
         return ConversationHandler.END
     
     order = result[0]
-    status = order[8]  # حالة الطلب
+    status = order[9]  # حالة الطلب (العمود العاشر: 0-indexed)
+    
+    # إنشاء رسالة تفاصيل الطلب
+    user_name = f"{order[14]} {order[15] or ''}".strip()
+    username = order[16] or 'غير محدد'
+    
+    # تحديد طريقة الدفع
+    payment_methods_ar = {
+        'shamcash': 'شام كاش',
+        'syriatel': 'سيرياتيل كاش',
+        'coinex': 'Coinex',
+        'binance': 'Binance',
+        'payeer': 'Payeer'
+    }
+    payment_method_ar = payment_methods_ar.get(order[5], order[5])
+    
+    # تحديد حالة الطلب
+    status_text = {
+        'pending': '⏳ معلق',
+        'completed': '✅ مكتمل',
+        'failed': '❌ فاشل'
+    }.get(status, status)
+    
+    order_details = f"""📋 تفاصيل الطلب: `{order_id}`
+
+👤 المستخدم:
+📝 الاسم: {user_name}
+📱 اسم المستخدم: @{username}
+🆔 معرف المستخدم: `{order[1]}`
+
+━━━━━━━━━━━━━━━
+📦 تفاصيل الطلب:
+📊 الكمية: {order[8]}
+🔧 نوع البروكسي: {order[2]}
+🌍 الدولة: {order[3]}
+🏠 الولاية: {order[4]}
+
+━━━━━━━━━━━━━━━
+💳 تفاصيل الدفع:
+💰 طريقة الدفع: {payment_method_ar}
+💵 قيمة الطلب: `{order[6]}$`
+📄 إثبات الدفع: {"✅ مرفق" if order[7] else "❌ غير مرفق"}
+
+━━━━━━━━━━━━━━━
+📊 الحالة: {status_text}
+📅 تاريخ الطلب: {order[10]}"""
+
+    if status == 'completed' and order[11]:  # processed_at
+        order_details += f"\n⏰ تاريخ المعالجة: {order[11]}"
+    
+    await update.message.reply_text(order_details, parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
     
     if status == 'pending':
         # إعادة إرسال الطلب مع إثبات الدفع
         await resend_order_notification(update, context, order)
-        await update.message.reply_text("✅ تم إعادة إرسال الطلب مع زر المعالجة", reply_markup=ReplyKeyboardRemove())
-    elif status == 'completed':
-        processed_date = order[10] if order[10] else "غير محدد"
-        await update.message.reply_text(f"ℹ️ الطلب `{order_id}` تم معالجته بالفعل\n📅 تاريخ المعالجة: {processed_date}", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
-    elif status == 'failed':
-        await update.message.reply_text(f"ℹ️ الطلب `{order_id}` فشل ولم يتم معالجته", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("✅ تم إعادة إرسال الطلب للأدمن مع زر المعالجة")
     
     # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
     clean_user_data_preserve_admin(context)
