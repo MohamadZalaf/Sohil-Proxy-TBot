@@ -4002,14 +4002,7 @@ async def send_proxy_with_custom_message(update: Update, context: ContextTypes.D
         user_id, first_name, last_name = user_result[0]
         user_full_name = f"{first_name} {last_name or ''}".strip()
         
-        # إنشاء معلومات البروكسي الوهمية (يجب على الأدمن إدخال البيانات الحقيقية)
-        # في التطبيق الحقيقي، يمكن إضافة واجهة لإدخال معلومات البروكسي
-        proxy_address = "proxy.example.com"
-        proxy_port = "8080"
-        proxy_username = "user123"
-        proxy_password = "pass123"
-        proxy_country = "Unknown"
-        proxy_state = "Unknown"
+        # معلومات البروكسي ستأتي من رسالة الأدمن المخصصة
         
         # الحصول على التاريخ والوقت الحاليين
         from datetime import datetime
@@ -4021,19 +4014,12 @@ async def send_proxy_with_custom_message(update: Update, context: ContextTypes.D
         proxy_message = f"""✅ تم معالجة طلب {user_full_name}
 
 🔐 تفاصيل البروكسي:
-📡 العنوان: `{proxy_address}`
-🔌 البورت: `{proxy_port}`
-👤 اسم المستخدم: `{proxy_username}`
-🔑 كلمة المرور: `{proxy_password}`
+{custom_message}
 
 ━━━━━━━━━━━━━━━
 🆔 معرف الطلب: `{order_id}`
 📅 التاريخ: {current_date}
 🕐 الوقت: {current_time}
-
-━━━━━━━━━━━━━━━
-📩 رسالة من الأدمن:
-"{custom_message}"
 
 ━━━━━━━━━━━━━━━
 ✅ تم إنجاز طلبك بنجاح!"""
@@ -4043,13 +4029,9 @@ async def send_proxy_with_custom_message(update: Update, context: ContextTypes.D
         
         # تحديث حالة الطلب
         proxy_details = {
-            'address': proxy_address,
-            'port': proxy_port,
-            'country': proxy_country,
-            'state': proxy_state,
-            'username': proxy_username,
-            'password': proxy_password,
-            'custom_message': custom_message
+            'admin_message': custom_message,
+            'processed_date': current_date,
+            'processed_time': current_time
         }
         
         # تسجيل الطلب كمكتمل ومعالج فعلياً
@@ -4066,13 +4048,9 @@ async def send_proxy_with_custom_message(update: Update, context: ContextTypes.D
 
 🆔 معرف الطلب: `{order_id}`
 👤 المستخدم: {user_full_name}
-📝 الرسالة المخصصة: "{custom_message}"
 
 🔐 تفاصيل البروكسي المرسلة:
-📡 العنوان: `{proxy_address}`
-🔌 البورت: `{proxy_port}`
-👤 اسم المستخدم: `{proxy_username}`
-🔑 كلمة المرور: `{proxy_password}`
+{custom_message}
 
 ━━━━━━━━━━━━━━━
 ✅ تم إنهاء معالجة الطلب بنجاح"""
@@ -8025,7 +8003,7 @@ process_order_conv_handler = ConversationHandler(
             CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
         ],
         CUSTOM_MESSAGE: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_message_for_proxy),
             CallbackQueryHandler(handle_custom_message_choice, pattern="^(send_custom_message|no_custom_message)$"),
             CallbackQueryHandler(handle_cancel_custom_message, pattern="^cancel_custom_message$"),
             CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
