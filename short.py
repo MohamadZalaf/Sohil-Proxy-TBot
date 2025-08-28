@@ -3636,7 +3636,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         'payment_success', 'payment_failed', 'cancel_processing',
         'quantity_single', 'quantity_package',
         # أزرار أخرى من ConversationHandlers
-        'broadcast_all', 'broadcast_custom', 'understood_current_processing',
+        'broadcast_all', 'broadcast_custom',
         # أزرار معالجة البروكسي
         'send_custom_message', 'no_custom_message', 'send_proxy_confirm', 'cancel_proxy_send',
         # أزرار أخرى متنوعة
@@ -3678,6 +3678,10 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         elif query.data == "back_to_pending_orders":
             logger.info(f"Routing back to pending orders for user {user_id}")
             await handle_back_to_pending_orders(update, context)
+        elif query.data == "admin_main_menu":
+            logger.info(f"Routing to admin main menu for user {user_id}")
+            await query.answer()
+            await restore_admin_keyboard(context, update.effective_chat.id, "🏠 العودة للقائمة الرئيسية")
         elif query.data.startswith("view_order_"):
             logger.info(f"Routing to order details for user {user_id}")
             await handle_view_order_details(update, context)
@@ -4510,26 +4514,29 @@ async def handle_process_order(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     
-    # التحقق من وجود طلب قيد المعالجة
+    # التحقق من وجود طلب قيد المعالجة (إنهاء الطلب السابق تلقائياً)
     current_processing_order = context.user_data.get('processing_order_id')
     if current_processing_order:
-        # إظهار مربع حوار تحذيري
-        keyboard = [
-            [InlineKeyboardButton("✅ فهمت", callback_data="understood_current_processing")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            f"⚠️ **تحذير: يوجد طلب قيد المعالجة حالياً**\n\n"
-            f"🆔 معرف الطلب الحالي: `{current_processing_order}`\n\n"
-            f"📋 **أنهِ الطلب الحالي أولاً** قبل معالجة طلب آخر:\n"
-            f"• إما إتمام الطلب بنجاح (إرسال البروكسي للمستخدم)\n"
-            f"• أو الضغط على زر الإلغاء في أي مرحلة\n\n"
-            f"💡 هذا يضمن عدم تداخل العمليات وجودة الخدمة",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-        return ConversationHandler.END
+        # تنظيف الطلب السابق تلقائياً
+        try:
+            # إعادة الطلب السابق إلى حالة pending إذا لم يكتمل
+            db.execute_query(
+                "UPDATE orders SET status = 'pending' WHERE id = ? AND status != 'completed'",
+                (current_processing_order,)
+            )
+            
+            # تنظيف البيانات المؤقتة للطلب السابق
+            context.user_data.pop('waiting_for_direct_admin_message', None)
+            context.user_data.pop('waiting_for_admin_message', None)
+            context.user_data.pop('direct_processing', None)
+            context.user_data.pop('admin_processing_active', None)
+            
+            logger.info(f"تم تنظيف الطلب السابق {current_processing_order} تلقائياً لبدء طلب جديد")
+        except Exception as e:
+            logger.error(f"خطأ في تنظيف الطلب السابق: {e}")
+            
+        # إشعار بسيط للأدمن (اختياري)
+        await query.answer(f"تم إنهاء الطلب السابق {current_processing_order[:8]}... تلقائياً", show_alert=False)
     
     order_id = query.data.replace("process_", "")
     
@@ -4562,26 +4569,29 @@ async def handle_direct_process_order(update: Update, context: ContextTypes.DEFA
     query = update.callback_query
     await query.answer()
     
-    # التحقق من وجود طلب قيد المعالجة
+    # التحقق من وجود طلب قيد المعالجة (إنهاء الطلب السابق تلقائياً)
     current_processing_order = context.user_data.get('processing_order_id')
     if current_processing_order:
-        # إظهار مربع حوار تحذيري
-        keyboard = [
-            [InlineKeyboardButton("✅ فهمت", callback_data="understood_current_processing")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            f"⚠️ **تحذير: يوجد طلب قيد المعالجة حالياً**\n\n"
-            f"🆔 معرف الطلب الحالي: `{current_processing_order}`\n\n"
-            f"📋 **أنهِ الطلب الحالي أولاً** قبل معالجة طلب آخر:\n"
-            f"• إما إتمام الطلب بنجاح (إرسال البروكسي للمستخدم)\n"
-            f"• أو الضغط على زر الإلغاء في أي مرحلة\n\n"
-            f"💡 هذا يضمن عدم تداخل العمليات وجودة الخدمة",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-        return
+        # تنظيف الطلب السابق تلقائياً
+        try:
+            # إعادة الطلب السابق إلى حالة pending إذا لم يكتمل
+            db.execute_query(
+                "UPDATE orders SET status = 'pending' WHERE id = ? AND status != 'completed'",
+                (current_processing_order,)
+            )
+            
+            # تنظيف البيانات المؤقتة للطلب السابق
+            context.user_data.pop('waiting_for_direct_admin_message', None)
+            context.user_data.pop('waiting_for_admin_message', None)
+            context.user_data.pop('direct_processing', None)
+            context.user_data.pop('admin_processing_active', None)
+            
+            logger.info(f"تم تنظيف الطلب السابق {current_processing_order} تلقائياً لبدء طلب جديد")
+        except Exception as e:
+            logger.error(f"خطأ في تنظيف الطلب السابق: {e}")
+            
+        # إشعار بسيط للأدمن (اختياري)
+        await query.answer(f"تم إنهاء الطلب السابق {current_processing_order[:8]}... تلقائياً", show_alert=False)
     
     order_id = query.data.replace("direct_process_", "")
     
@@ -5957,6 +5967,19 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
                     )
                 return
         
+        # التحقق من حالة انتظار رسالة أدمن عادية
+        if is_admin and context.user_data.get('waiting_for_admin_message'):
+            try:
+                await handle_admin_message_for_proxy(update, context)
+                return
+            except Exception as e:
+                logger.error(f"خطأ في معالجة رسالة الأدمن المخصصة: {e}")
+                await update.message.reply_text(
+                    f"❌ حدث خطأ أثناء معالجة رسالتك\n\nالخطأ: {str(e)}"
+                )
+                await restore_admin_keyboard(context, update.effective_chat.id)
+                return
+        
         # أزرار الأدمن
         if is_admin:
             # القوائم الرئيسية للأدمن
@@ -5970,52 +5993,135 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
                 await handle_admin_settings_menu(update, context)
             elif text == "🚪 تسجيل الخروج":
                 await admin_logout_confirmation(update, context)
+            
+            # إدارة الطلبات
+            elif text == "📋 الطلبات المعلقة":
+                await show_pending_orders_admin(update, context)
+            elif text == "🔍 الاستعلام عن طلب":
+                await admin_order_inquiry(update, context)
+            elif text == "🗑️ حذف الطلبات الفاشلة":
+                await delete_failed_orders(update, context)
+            elif text == "🗑️ حذف الطلبات المكتملة":
+                await delete_completed_orders(update, context)
+            
+            # إدارة الأموال
+            elif text == "📊 إحصاء المبيعات":
+                await show_sales_statistics(update, context)
+            elif text == "💲 إدارة الأسعار":
+                await manage_prices_menu(update, context)
+            elif text == "💰 تعديل أسعار ستاتيك":
+                await set_static_prices(update, context)
+            elif text == "💰 تعديل أسعار سوكس":
+                await set_socks_prices(update, context)
+            
+            # إدارة الإحالات
+            elif text == "💵 تحديد قيمة الإحالة":
+                await set_referral_amount(update, context)
+            elif text == "📊 إحصائيات المستخدمين":
+                await show_user_statistics(update, context)
+            elif text == "🗑️ تصفير رصيد مستخدم":
+                await reset_user_balance(update, context)
+            
+            # إعدادات الأدمن
+            elif text == "🌐 تغيير اللغة":
+                await handle_settings(update, context)
+            elif text == "🔐 تغيير كلمة المرور":
+                await change_admin_password(update, context)
+            elif text == "🔕 ساعات الهدوء":
+                await set_quiet_hours(update, context)
+            elif text == "🗃️ إدارة قاعدة البيانات":
+                await database_management_menu(update, context)
+            
+            # معالجة إدارة قاعدة البيانات
+            elif text == "📊 تحميل قاعدة البيانات":
+                await database_export_menu(update, context)
+            elif text == "🗑️ تفريغ قاعدة البيانات":
+                await confirm_database_clear(update, context)
+            
+            # معالجة تصدير قاعدة البيانات
+            elif text == "📊 Excel":
+                await export_database_excel(update, context)
+            elif text == "📄 CSV":
+                await export_database_csv(update, context)
+            elif text == "🗃️ SQLite Database":
+                await export_database_sqlite(update, context)
+            
+            # العودة للقائمة الرئيسية
+            elif text == "🔙 العودة للقائمة الرئيسية":
+                await restore_admin_keyboard(context, update.effective_chat.id, "🔧 لوحة الأدمن الرئيسية\nاختر الخدمة المطلوبة:")
+            
+            # إذا وصلنا هنا فالنص لا يتطابق مع أي زر أدمن معروف
+            # لا نفعل شيئاً - تماماً كما في proxy_bot.py
             return
         
         # التحقق من الأزرار الرئيسية للمستخدم
         if text == MESSAGES[language]['main_menu_buttons'][0]:  # طلب بروكسي ستاتيك
             await handle_static_proxy_request(update, context)
+            return
         elif text == MESSAGES[language]['main_menu_buttons'][1]:  # طلب بروكسي سوكس
             await handle_socks_proxy_request(update, context)
+            return
         elif text == MESSAGES[language]['main_menu_buttons'][2]:  # إحالاتي
             await handle_referrals(update, context)
+            return
         elif text == MESSAGES[language]['main_menu_buttons'][3]:  # تذكير بطلباتي
             await handle_order_reminder(update, context)
+            return
         elif text == MESSAGES[language]['main_menu_buttons'][4]:  # الإعدادات
             await handle_settings(update, context)
+            return
+        # إذا وصلنا هنا فالنص لا يتطابق مع أي زر معروف
+        # لا نفعل شيئاً - تماماً كما في proxy_bot.py
         
     except Exception as e:
         logger.error(f"Error in handle_text_messages: {e}")
         print(f"❌ خطأ في معالجة رسالة نصية من المستخدم {user_id}: {e}")
         print(f"   النص: {text}")
-    
-    # محاولة إعادة التوجيه للمستخدم
-    try:
-        user_id = update.effective_user.id
-        if context.user_data.get('is_admin') or user_id == ADMIN_CHAT_ID:
-            await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ. عودة للقائمة الرئيسية...")
-        else:
-            await update.message.reply_text(
-                "❌ حدث خطأ في معالجة طلبك. تم إعادة توجيهك للقائمة الرئيسية.",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            await start(update, context)
-    except Exception as redirect_error:
-        logger.error(f"Failed to redirect user after text message error: {redirect_error}")
-        # محاولة أخيرة بسيطة
+        
+        # معالجة الخطأ فقط في حالة حدوث استثناء حقيقي
         try:
-            await context.bot.send_message(
-                user_id,
-                "❌ حدث خطأ. يرجى استخدام /start لإعادة تشغيل البوت"
-            )
+            user_id = update.effective_user.id
+            language = get_user_language(user_id)
+            
+            if context.user_data.get('is_admin') or user_id == ADMIN_CHAT_ID:
+                await restore_admin_keyboard(context, update.effective_chat.id, "❌ حدث خطأ. عودة للقائمة الرئيسية...")
+            else:
+                # إنشاء الكيبورد من جديد بدلاً من إزالته
+                keyboard = [
+                    [KeyboardButton(MESSAGES[language]['main_menu_buttons'][0])],
+                    [KeyboardButton(MESSAGES[language]['main_menu_buttons'][1])],
+                    [KeyboardButton(MESSAGES[language]['main_menu_buttons'][2])],
+                    [KeyboardButton(MESSAGES[language]['main_menu_buttons'][3]), 
+                     KeyboardButton(MESSAGES[language]['main_menu_buttons'][4])]
+                ]
+                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                
+                if language == 'ar':
+                    await update.message.reply_text(
+                        "❌ حدث خطأ في معالجة طلبك.\n\n🔄 تم إعادة إنشاء الأزرار. يرجى المحاولة مرة أخرى:",
+                        reply_markup=reply_markup
+                    )
+                else:
+                    await update.message.reply_text(
+                        "❌ An error occurred while processing your request.\n\n🔄 Buttons have been recreated. Please try again:",
+                        reply_markup=reply_markup
+                    )
+        except Exception as redirect_error:
+            logger.error(f"Failed to redirect user after text message error: {redirect_error}")
+            # محاولة أخيرة بسيطة
+            try:
+                await context.bot.send_message(
+                    user_id,
+                    "❌ حدث خطأ. يرجى استخدام /start لإعادة تشغيل البوت"
+                )
+            except:
+                pass
+        
+        # تنظيف البيانات المؤقتة في حالة الخطأ فقط
+        try:
+            clean_user_data_preserve_admin(context)
         except:
             pass
-    
-    # تنظيف البيانات المؤقتة في حالة الخطأ
-    try:
-        clean_user_data_preserve_admin(context)
-    except:
-        pass
 
 async def validate_database_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """عرض تقرير فحص سلامة قاعدة البيانات"""
@@ -7188,6 +7294,34 @@ async def send_proxy_with_custom_message_direct(update: Update, context: Context
         context.user_data.pop('waiting_for_direct_admin_message', None)
         context.user_data.pop('direct_processing', None)
         clean_user_data_preserve_admin(context)
+        
+        # إرسال رسالة تأكيد للأدمن مع خيار العودة للطلبات المعلقة
+        keyboard = [
+            [InlineKeyboardButton("🔄 معالجة طلب آخر", callback_data="back_to_pending_orders")],
+            [InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="admin_main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        success_message = f"""✅ **تم إنجاز الطلب بنجاح!**
+
+🆔 معرف الطلب: `{order_id}`
+👤 المستخدم: {user_full_name}
+📅 التاريخ: {current_date} - {current_time}
+
+━━━━━━━━━━━━━━━
+✅ تم إرسال البروكسي للمستخدم بنجاح
+✅ تم تحديث حالة الطلب إلى مكتمل
+✅ تمت معالجة رصيد الإحالة (إن وجد)
+
+🎯 **جاهز لمعالجة المزيد من الطلبات!**
+
+💡 **نصيحة:** يمكنك الآن معالجة عدة طلبات متتالية بسرعة دون قيود!"""
+
+        await update.message.reply_text(
+            success_message,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
 
 async def handle_cancel_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة إلغاء البحث عن مستخدم"""
