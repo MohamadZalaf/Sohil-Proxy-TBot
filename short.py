@@ -3499,8 +3499,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         'payment_success', 'payment_failed', 'cancel_processing',
         'quantity_single', 'quantity_package',
         # أزرار أخرى من ConversationHandlers
-        'broadcast_all', 'broadcast_custom', 'confirm_clear_db', 'cancel_clear_db',
-        'confirm_logout', 'cancel_logout', 'understood_current_processing',
+        'broadcast_all', 'broadcast_custom', 'understood_current_processing',
         # أزرار معالجة البروكسي
         'send_custom_message', 'no_custom_message', 'send_proxy_confirm', 'cancel_proxy_send',
         # أزرار أخرى متنوعة
@@ -3650,6 +3649,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await handle_database_clear(update, context)
         elif query.data == "cancel_processing":
             await handle_cancel_processing(update, context)
+        
+        elif query.data == "cancel_direct_processing":
+            await handle_cancel_direct_processing(update, context)
         elif query.data.startswith("withdrawal_success_"):
             await handle_withdrawal_success(update, context)
         elif query.data.startswith("withdrawal_failed_"):
@@ -4002,14 +4004,7 @@ async def send_proxy_with_custom_message(update: Update, context: ContextTypes.D
         user_id, first_name, last_name = user_result[0]
         user_full_name = f"{first_name} {last_name or ''}".strip()
         
-        # إنشاء معلومات البروكسي الوهمية (يجب على الأدمن إدخال البيانات الحقيقية)
-        # في التطبيق الحقيقي، يمكن إضافة واجهة لإدخال معلومات البروكسي
-        proxy_address = "proxy.example.com"
-        proxy_port = "8080"
-        proxy_username = "user123"
-        proxy_password = "pass123"
-        proxy_country = "Unknown"
-        proxy_state = "Unknown"
+        # معلومات البروكسي ستأتي من رسالة الأدمن المخصصة
         
         # الحصول على التاريخ والوقت الحاليين
         from datetime import datetime
@@ -4021,19 +4016,12 @@ async def send_proxy_with_custom_message(update: Update, context: ContextTypes.D
         proxy_message = f"""✅ تم معالجة طلب {user_full_name}
 
 🔐 تفاصيل البروكسي:
-📡 العنوان: `{proxy_address}`
-🔌 البورت: `{proxy_port}`
-👤 اسم المستخدم: `{proxy_username}`
-🔑 كلمة المرور: `{proxy_password}`
+{custom_message}
 
 ━━━━━━━━━━━━━━━
 🆔 معرف الطلب: `{order_id}`
 📅 التاريخ: {current_date}
 🕐 الوقت: {current_time}
-
-━━━━━━━━━━━━━━━
-📩 رسالة من الأدمن:
-"{custom_message}"
 
 ━━━━━━━━━━━━━━━
 ✅ تم إنجاز طلبك بنجاح!"""
@@ -4043,13 +4031,9 @@ async def send_proxy_with_custom_message(update: Update, context: ContextTypes.D
         
         # تحديث حالة الطلب
         proxy_details = {
-            'address': proxy_address,
-            'port': proxy_port,
-            'country': proxy_country,
-            'state': proxy_state,
-            'username': proxy_username,
-            'password': proxy_password,
-            'custom_message': custom_message
+            'admin_message': custom_message,
+            'processed_date': current_date,
+            'processed_time': current_time
         }
         
         # تسجيل الطلب كمكتمل ومعالج فعلياً
@@ -4066,13 +4050,9 @@ async def send_proxy_with_custom_message(update: Update, context: ContextTypes.D
 
 🆔 معرف الطلب: `{order_id}`
 👤 المستخدم: {user_full_name}
-📝 الرسالة المخصصة: "{custom_message}"
 
 🔐 تفاصيل البروكسي المرسلة:
-📡 العنوان: `{proxy_address}`
-🔌 البورت: `{proxy_port}`
-👤 اسم المستخدم: `{proxy_username}`
-🔑 كلمة المرور: `{proxy_password}`
+{custom_message}
 
 ━━━━━━━━━━━━━━━
 ✅ تم إنهاء معالجة الطلب بنجاح"""
@@ -4428,7 +4408,7 @@ async def handle_process_order(update: Update, context: ContextTypes.DEFAULT_TYP
     
     return PROCESS_ORDER
 
-async def handle_direct_process_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def handle_direct_process_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة الطلب مباشرة بدون سؤال التحقق من الدفع"""
     query = update.callback_query
     await query.answer()
@@ -4452,19 +4432,133 @@ async def handle_direct_process_order(update: Update, context: ContextTypes.DEFA
             reply_markup=reply_markup,
             parse_mode='Markdown'
         )
-        return ConversationHandler.END
+        return
     
     order_id = query.data.replace("direct_process_", "")
     
     # تسجيل بداية معالجة طلب جديد
     context.user_data['processing_order_id'] = order_id
     context.user_data['admin_processing_active'] = True
+    context.user_data['direct_processing'] = True  # علامة للمعالجة المباشرة
     
     # حفظ الرسالة الأصلية قبل التعديل
     context.user_data['original_order_message'] = query.message.text
     
-    # معالجة مباشرة للطلب (تجاوز سؤال التحقق)
-    return await handle_payment_success(update, context)
+    # معالجة مباشرة للطلب بدون conversation handler
+    await handle_direct_payment_success(update, context)
+
+async def handle_direct_payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة نجاح الدفع للمعالجة المباشرة (بدون conversation handler)"""
+    query = update.callback_query
+    
+    order_id = context.user_data['processing_order_id']
+    
+    # توليد رقم المعاملة وحفظها (بدون تحديث حالة الطلب)
+    transaction_number = generate_transaction_number('proxy')
+    save_transaction(order_id, transaction_number, 'proxy', 'completed')
+    
+    # إرسال رسالة للمستخدم أن الطلب قيد المعالجة
+    order_query = "SELECT user_id, proxy_type FROM orders WHERE id = ?"
+    order_result = db.execute_query(order_query, (order_id,))
+    if order_result:
+        user_id = order_result[0][0]
+        order_type = order_result[0][1]
+        user_language = get_user_language(user_id)
+        
+        # الحصول على تفاصيل الطلب لإضافة السعر
+        order_details = db.execute_query("SELECT payment_amount FROM orders WHERE id = ?", (order_id,))
+        payment_amount = order_details[0][0] if order_details and order_details[0][0] else 0.0
+        
+        # رسالة للمستخدم مع رقم المعاملة
+        if user_language == 'ar':
+            user_message = f"""✅ تم قبول دفعتك بنجاح!
+
+🆔 معرف الطلب: `{order_id}`
+💳 رقم المعاملة: `{transaction_number}`
+📦 نوع الباكج: {order_type}
+💰 قيمة الطلب: `{payment_amount}$`
+
+🔄 سيتم معالجة طلبك وإرسال البيانات قريباً."""
+        else:
+            user_message = f"""✅ Your payment has been accepted successfully!
+
+🆔 Order ID: `{order_id}`
+💳 Transaction Number: `{transaction_number}`
+📦 Package Type: {order_type}
+💰 Order Value: `{payment_amount}$`
+
+🔄 Your order will be processed and data sent soon."""
+        
+        await context.bot.send_message(user_id, user_message, parse_mode='Markdown')
+        
+        # التحقق من نوع الطلب
+        if order_type == 'withdrawal':
+            # معالجة طلب السحب
+            await handle_withdrawal_approval_direct(query, context, order_id, user_id)
+            return
+    
+    # رسالة للأدمن مع رقم المعاملة ونوع البروكسي
+    proxy_type_ar = "بروكسي ستاتيك" if order_type == "static" else "بروكسي سوكس" if order_type == "socks" else order_type
+    
+    admin_message = f"""✅ تم قبول الدفع للطلب
+
+🆔 معرف الطلب: `{order_id}`
+💳 رقم المعاملة: `{transaction_number}`
+👤 معرف المستخدم: `{user_id}`
+📝 الطلب: {proxy_type_ar}
+💰 قيمة الطلب: `{payment_amount}$`
+
+📋 الطلب جاهز للمعالجة والإرسال للمستخدم."""
+    
+    # تحضير رسالة انتظار الأدمن بدون conversation handler
+    keyboard = [
+        [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_direct_processing")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # استخدام الرسالة الأصلية مع إضافة معلومات الدفع وتحضير للرد المباشر
+    original_message = context.user_data.get('original_order_message', '')
+    combined_message = f"{original_message}\n\n━━━━━━━━━━━━━━━\n{admin_message}\n\n━━━━━━━━━━━━━━━\n📝 **اكتب رسالتك الآن للمستخدم:**\n\n⬇️ *اكتب رسالة نصية وسيتم إرسالها للمستخدم مع تفاصيل البروكسي*"
+    
+    # التحقق من طول الرسالة
+    if len(combined_message) > 4000:  # حد أمان أقل من حد Telegram (4096)
+        # استخدام رسالة مختصرة
+        combined_message = f"✅ تم قبول الدفع للطلب\n\n🆔 معرف الطلب: `{order_id}`\n💰 قيمة الطلب: `{payment_amount}$`\n\n📋 الطلب جاهز للمعالجة والإرسال للمستخدم.\n\n━━━━━━━━━━━━━━━\n📝 **اكتب رسالتك الآن للمستخدم:**\n\n⬇️ *اكتب رسالة نصية وسيتم إرسالها للمستخدم مع تفاصيل البروكسي*"
+    
+    try:
+        await query.edit_message_text(
+            combined_message,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        # محاولة بديلة بدون parse_mode
+        try:
+            await query.edit_message_text(
+                combined_message,
+                reply_markup=reply_markup
+            )
+        except Exception as e2:
+            print(f"❌ خطأ في المحاولة البديلة: {e2}")
+    
+    # تعيين علامة انتظار رسالة الأدمن للمعالجة المباشرة
+    context.user_data['waiting_for_direct_admin_message'] = True
+
+async def handle_withdrawal_approval_direct(query, context: ContextTypes.DEFAULT_TYPE, order_id: str, user_id: int) -> None:
+    """معالجة طلب السحب مع خيارات النجاح/الفشل للمعالجة المباشرة"""
+    
+    # إنشاء أزرار النجاح والفشل
+    keyboard = [
+        [InlineKeyboardButton("✅ تم التسديد", callback_data=f"withdrawal_success_{order_id}")],
+        [InlineKeyboardButton("❌ فشلت المعاملة", callback_data=f"withdrawal_failed_{order_id}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        f"💰 معالجة طلب سحب الرصيد\n\n🆔 معرف الطلب: `{order_id}`\n\nاختر حالة المعاملة:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
 
 async def handle_back_to_pending_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """العودة إلى قائمة الطلبات المعلقة"""
@@ -5601,6 +5695,30 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
     
+    # التحقق من حالة انتظار رسالة مباشرة من الأدمن (للمعالجة المباشرة)
+    if is_admin and context.user_data.get('waiting_for_direct_admin_message'):
+        order_id = context.user_data.get('processing_order_id')
+        if order_id:
+            try:
+                # استدعاء دالة إرسال البروكسي مع الرسالة المخصصة
+                await send_proxy_with_custom_message_direct(update, context, text)
+                
+                # رسالة تأكيد للأدمن
+                await update.message.reply_text(
+                    f"✅ تم إرسال البروكسي والرسالة للمستخدم بنجاح!\n\n🆔 معرف الطلب: `{order_id}`",
+                    parse_mode='Markdown'
+                )
+                
+                # إعادة تفعيل كيبورد الأدمن
+                await restore_admin_keyboard(context, update.effective_chat.id)
+                
+            except Exception as e:
+                logger.error(f"خطأ في إرسال البروكسي: {e}")
+                await update.message.reply_text(
+                    f"❌ حدث خطأ أثناء إرسال البروكسي\n\nالخطأ: {str(e)}"
+                )
+            return
+    
     # التحقق من حالة انتظار رسالة مباشرة من الأدمن
     if is_admin and context.user_data.get('waiting_for_admin_message'):
         order_id = context.user_data.get('direct_message_order_id')
@@ -5966,17 +6084,62 @@ async def handle_order_inquiry(update: Update, context: ContextTypes.DEFAULT_TYP
         return ConversationHandler.END
     
     order = result[0]
-    status = order[8]  # حالة الطلب
+    status = order[9]  # حالة الطلب (العمود العاشر: 0-indexed)
+    
+    # إنشاء رسالة تفاصيل الطلب
+    user_name = f"{order[14]} {order[15] or ''}".strip()
+    username = order[16] or 'غير محدد'
+    
+    # تحديد طريقة الدفع
+    payment_methods_ar = {
+        'shamcash': 'شام كاش',
+        'syriatel': 'سيرياتيل كاش',
+        'coinex': 'Coinex',
+        'binance': 'Binance',
+        'payeer': 'Payeer'
+    }
+    payment_method_ar = payment_methods_ar.get(order[5], order[5])
+    
+    # تحديد حالة الطلب
+    status_text = {
+        'pending': '⏳ معلق',
+        'completed': '✅ مكتمل',
+        'failed': '❌ فاشل'
+    }.get(status, status)
+    
+    order_details = f"""📋 تفاصيل الطلب: `{order_id}`
+
+👤 المستخدم:
+📝 الاسم: {user_name}
+📱 اسم المستخدم: @{username}
+🆔 معرف المستخدم: `{order[1]}`
+
+━━━━━━━━━━━━━━━
+📦 تفاصيل الطلب:
+📊 الكمية: {order[8]}
+🔧 نوع البروكسي: {order[2]}
+🌍 الدولة: {order[3]}
+🏠 الولاية: {order[4]}
+
+━━━━━━━━━━━━━━━
+💳 تفاصيل الدفع:
+💰 طريقة الدفع: {payment_method_ar}
+💵 قيمة الطلب: `{order[6]}$`
+📄 إثبات الدفع: {"✅ مرفق" if order[7] else "❌ غير مرفق"}
+
+━━━━━━━━━━━━━━━
+📊 الحالة: {status_text}
+📅 تاريخ الطلب: {order[10]}"""
+
+    if status == 'completed' and order[11]:  # processed_at
+        order_details += f"\n⏰ تاريخ المعالجة: {order[11]}"
+    
+    await update.message.reply_text(order_details, parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
     
     if status == 'pending':
         # إعادة إرسال الطلب مع إثبات الدفع
         await resend_order_notification(update, context, order)
-        await update.message.reply_text("✅ تم إعادة إرسال الطلب مع زر المعالجة", reply_markup=ReplyKeyboardRemove())
-    elif status == 'completed':
-        processed_date = order[10] if order[10] else "غير محدد"
-        await update.message.reply_text(f"ℹ️ الطلب `{order_id}` تم معالجته بالفعل\n📅 تاريخ المعالجة: {processed_date}", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
-    elif status == 'failed':
-        await update.message.reply_text(f"ℹ️ الطلب `{order_id}` فشل ولم يتم معالجته", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("✅ تم إعادة إرسال الطلب للأدمن مع زر المعالجة")
     
     # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
     clean_user_data_preserve_admin(context)
@@ -6641,6 +6804,118 @@ async def handle_cancel_processing(update: Update, context: ContextTypes.DEFAULT
         await restore_admin_keyboard(context, update.effective_chat.id)
     
     return ConversationHandler.END
+
+async def handle_cancel_direct_processing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة إلغاء المعالجة المباشرة"""
+    query = update.callback_query
+    await query.answer()
+    
+    order_id = context.user_data.get('processing_order_id')
+    if order_id:
+        # الحصول على بيانات المستخدم
+        user_query = "SELECT user_id FROM orders WHERE id = ?"
+        user_result = db.execute_query(user_query, (order_id,))
+        
+        if user_result:
+            user_id = user_result[0][0]
+            user_language = get_user_language(user_id)
+            
+            # إرسال رسالة للمستخدم
+            if user_language == 'ar':
+                message = f"⏸️ تم توقيف معالجة طلبك مؤقتاً رقم `{order_id}`\n\nسيتم استئناف المعالجة لاحقاً من قبل الأدمن."
+            else:
+                message = f"⏸️ Processing of your order `{order_id}` has been temporarily stopped\n\nProcessing will resume later by admin."
+            
+            await context.bot.send_message(user_id, message, parse_mode='Markdown')
+        
+        # رسالة للأدمن
+        await query.edit_message_text(
+            f"⏸️ تم إلغاء معالجة الطلب مؤقتاً\n\n🆔 معرف الطلب: `{order_id}`\n\n📋 الطلب لا يزال في حالة معلق ويمكن استئناف معالجته لاحقاً",
+            parse_mode='Markdown'
+        )
+        
+        # تنظيف البيانات المؤقتة
+        # إعادة الطلب إلى حالة pending (لا نجاح ولا فشل)
+        db.execute_query(
+            "UPDATE orders SET status = 'pending' WHERE id = ?",
+            (order_id,)
+        )
+
+        # تنظيف حالة انتظار رسالة الأدمن
+        context.user_data.pop('waiting_for_direct_admin_message', None)
+        context.user_data.pop('direct_processing', None)
+        
+        clean_user_data_preserve_admin(context)
+        
+        # إعادة تفعيل كيبورد الأدمن
+        await restore_admin_keyboard(context, update.effective_chat.id)
+    
+    else:
+        await query.edit_message_text("❌ لم يتم العثور على طلب لإلغاء معالجته")
+        
+        # إعادة تفعيل كيبورد الأدمن الرئيسي حتى في حالة الخطأ
+        await restore_admin_keyboard(context, update.effective_chat.id)
+
+async def send_proxy_with_custom_message_direct(update: Update, context: ContextTypes.DEFAULT_TYPE, custom_message: str) -> None:
+    """إرسال البروكسي مع الرسالة المخصصة للمعالجة المباشرة"""
+    order_id = context.user_data['processing_order_id']
+    
+    # الحصول على معلومات المستخدم والطلب
+    user_query = """
+        SELECT o.user_id, u.first_name, u.last_name 
+        FROM orders o 
+        JOIN users u ON o.user_id = u.user_id 
+        WHERE o.id = ?
+    """
+    user_result = db.execute_query(user_query, (order_id,))
+    
+    if user_result:
+        user_id, first_name, last_name = user_result[0]
+        user_full_name = f"{first_name} {last_name or ''}".strip()
+        
+        # الحصول على التاريخ والوقت الحاليين
+        from datetime import datetime
+        now = datetime.now()
+        current_date = now.strftime("%Y-%m-%d")
+        current_time = now.strftime("%H:%M:%S")
+        
+        # إنشاء رسالة البروكسي للمستخدم
+        proxy_message = f"""✅ تم معالجة طلب {user_full_name}
+
+🔐 تفاصيل البروكسي:
+{custom_message}
+
+━━━━━━━━━━━━━━━
+🆔 معرف الطلب: `{order_id}`
+📅 التاريخ: {current_date}
+🕐 الوقت: {current_time}
+
+━━━━━━━━━━━━━━━
+✅ تم إنجاز طلبك بنجاح!"""
+        
+        # إرسال البروكسي للمستخدم
+        await context.bot.send_message(user_id, proxy_message, parse_mode='Markdown')
+        
+        # تحديث حالة الطلب
+        proxy_details = {
+            'admin_message': custom_message,
+            'processed_date': current_date,
+            'processed_time': current_time
+        }
+        
+        # تسجيل الطلب كمكتمل ومعالج فعلياً
+        db.execute_query(
+            "UPDATE orders SET status = 'completed', processed_at = CURRENT_TIMESTAMP, proxy_details = ?, truly_processed = TRUE WHERE id = ?",
+            (json.dumps(proxy_details), order_id)
+        )
+        
+        # التحقق من إضافة رصيد الإحالة لأول عملية شراء
+        await check_and_add_referral_bonus(context, user_id, order_id)
+        
+        # تنظيف البيانات المؤقتة
+        context.user_data.pop('waiting_for_direct_admin_message', None)
+        context.user_data.pop('direct_processing', None)
+        clean_user_data_preserve_admin(context)
 
 async def handle_cancel_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة إلغاء البحث عن مستخدم"""
@@ -8025,7 +8300,7 @@ process_order_conv_handler = ConversationHandler(
             CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
         ],
         CUSTOM_MESSAGE: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_message_input),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_message_for_proxy),
             CallbackQueryHandler(handle_custom_message_choice, pattern="^(send_custom_message|no_custom_message)$"),
             CallbackQueryHandler(handle_cancel_custom_message, pattern="^cancel_custom_message$"),
             CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
