@@ -3787,7 +3787,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await handle_database_clear(update, context)
         elif query.data == "cancel_processing":
             await handle_cancel_processing(update, context)
-        
+        elif query.data == "understood_current_processing":
+            await handle_understood_current_processing(update, context)
         elif query.data == "cancel_direct_processing":
             await handle_cancel_direct_processing(update, context)
         elif query.data.startswith("withdrawal_success_"):
@@ -7122,6 +7123,32 @@ async def handle_cancel_processing(update: Update, context: ContextTypes.DEFAULT
         await restore_admin_keyboard(context, update.effective_chat.id)
     
     return ConversationHandler.END
+
+async def handle_understood_current_processing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """معالجة زر "فهمت" عند وجود طلب قيد المعالجة"""
+    query = update.callback_query
+    await query.answer()
+    
+    current_processing_order = context.user_data.get('processing_order_id')
+    
+    if current_processing_order:
+        await query.edit_message_text(
+            f"📋 **يوجد طلب قيد المعالجة حالياً**\n\n"
+            f"🆔 معرف الطلب الحالي: `{current_processing_order}`\n\n"
+            f"💡 **للمتابعة:**\n"
+            f"• أكمل معالجة الطلب الحالي أولاً\n"
+            f"• أو استخدم زر الإلغاء في أي مرحلة لتحرير النظام\n\n"
+            f"🔄 بعدها يمكنك معالجة طلبات أخرى بدون مشاكل",
+            parse_mode='Markdown'
+        )
+    else:
+        await query.edit_message_text(
+            "✅ لا يوجد طلبات قيد المعالجة حالياً\n\n"
+            "🔄 يمكنك الآن معالجة أي طلب من الطلبات المعلقة"
+        )
+    
+    # إعادة تفعيل كيبورد الأدمن الرئيسي
+    await restore_admin_keyboard(context, update.effective_chat.id)
 
 async def handle_cancel_direct_processing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """معالجة إلغاء المعالجة المباشرة"""
