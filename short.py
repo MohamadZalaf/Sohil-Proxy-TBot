@@ -3636,7 +3636,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         'payment_success', 'payment_failed', 'cancel_processing',
         'quantity_single', 'quantity_package',
         # أزرار أخرى من ConversationHandlers
-        'broadcast_all', 'broadcast_custom', 'understood_current_processing',
+        'broadcast_all', 'broadcast_custom',
         # أزرار معالجة البروكسي
         'send_custom_message', 'no_custom_message', 'send_proxy_confirm', 'cancel_proxy_send',
         # أزرار أخرى متنوعة
@@ -4514,26 +4514,29 @@ async def handle_process_order(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     
-    # التحقق من وجود طلب قيد المعالجة
+    # التحقق من وجود طلب قيد المعالجة (إنهاء الطلب السابق تلقائياً)
     current_processing_order = context.user_data.get('processing_order_id')
     if current_processing_order:
-        # إظهار مربع حوار تحذيري
-        keyboard = [
-            [InlineKeyboardButton("✅ فهمت", callback_data="understood_current_processing")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            f"⚠️ **تحذير: يوجد طلب قيد المعالجة حالياً**\n\n"
-            f"🆔 معرف الطلب الحالي: `{current_processing_order}`\n\n"
-            f"📋 **أنهِ الطلب الحالي أولاً** قبل معالجة طلب آخر:\n"
-            f"• إما إتمام الطلب بنجاح (إرسال البروكسي للمستخدم)\n"
-            f"• أو الضغط على زر الإلغاء في أي مرحلة\n\n"
-            f"💡 هذا يضمن عدم تداخل العمليات وجودة الخدمة",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-        return ConversationHandler.END
+        # تنظيف الطلب السابق تلقائياً
+        try:
+            # إعادة الطلب السابق إلى حالة pending إذا لم يكتمل
+            db.execute_query(
+                "UPDATE orders SET status = 'pending' WHERE id = ? AND status != 'completed'",
+                (current_processing_order,)
+            )
+            
+            # تنظيف البيانات المؤقتة للطلب السابق
+            context.user_data.pop('waiting_for_direct_admin_message', None)
+            context.user_data.pop('waiting_for_admin_message', None)
+            context.user_data.pop('direct_processing', None)
+            context.user_data.pop('admin_processing_active', None)
+            
+            logger.info(f"تم تنظيف الطلب السابق {current_processing_order} تلقائياً لبدء طلب جديد")
+        except Exception as e:
+            logger.error(f"خطأ في تنظيف الطلب السابق: {e}")
+            
+        # إشعار بسيط للأدمن (اختياري)
+        await query.answer(f"تم إنهاء الطلب السابق {current_processing_order[:8]}... تلقائياً", show_alert=False)
     
     order_id = query.data.replace("process_", "")
     
