@@ -3643,6 +3643,10 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         'quiet_8_18', 'quiet_22_6', 'quiet_12_14', 'quiet_20_22', 'quiet_24h'
     ]
     
+    # إضافة أزرار الدفع التي يجب أن تُعالج في payment_conv_handler
+    payment_buttons = [f"payment_{method}" for method in ['shamcash', 'syriatel', 'coinex', 'binance', 'payeer']]
+    conversation_only_buttons.extend(payment_buttons)
+    
     # إذا كان الزر مُعالج في ConversationHandler، لا تتدخل هنا
     if query.data in conversation_only_buttons:
         return
@@ -3660,9 +3664,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         if query.data.startswith("country_") or query.data.startswith("state_") or query.data in ["manual_country", "manual_state"]:
             logger.info(f"Routing to country selection for user {user_id}")
             await handle_country_selection(update, context)
-        elif query.data.startswith("payment_"):
-            logger.info(f"Routing to payment selection for user {user_id}")
-            await handle_payment_method_selection(update, context)
         elif query.data.startswith("lang_"):
             logger.info(f"Routing to language change for user {user_id}")
             await handle_language_change(update, context)
@@ -5970,6 +5971,51 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
                 await handle_admin_settings_menu(update, context)
             elif text == "🚪 تسجيل الخروج":
                 await admin_logout_confirmation(update, context)
+            # أزرار القوائم الفرعية للأدمن
+            elif text == "📋 الطلبات المعلقة":
+                await show_pending_orders_admin(update, context)
+            elif text == "🔍 الاستعلام عن طلب":
+                await admin_order_inquiry(update, context)
+            elif text == "🗑️ حذف الطلبات الفاشلة":
+                await delete_failed_orders(update, context)
+            elif text == "🗑️ حذف الطلبات المكتملة":
+                await delete_completed_orders(update, context)
+            elif text == "📊 إحصاء المبيعات":
+                await show_sales_statistics(update, context)
+            elif text == "💲 إدارة الأسعار":
+                await manage_prices_menu(update, context)
+            elif text == "💰 تعديل أسعار ستاتيك":
+                await set_static_prices(update, context)
+            elif text == "💰 تعديل أسعار سوكس":
+                await set_socks_prices(update, context)
+            elif text == "💵 تحديد قيمة الإحالة":
+                await set_referral_amount(update, context)
+            elif text == "📊 إحصائيات المستخدمين":
+                await show_user_statistics(update, context)
+            elif text == "🗑️ تصفير رصيد مستخدم":
+                await reset_user_balance(update, context)
+            elif text == "🌐 تغيير اللغة":
+                await handle_settings(update, context)
+            elif text == "🔐 تغيير كلمة المرور":
+                await change_admin_password(update, context)
+            elif text == "🔕 ساعات الهدوء":
+                await set_quiet_hours(update, context)
+            elif text == "🗃️ إدارة قاعدة البيانات":
+                await database_management_menu(update, context)
+            elif text == "🔍 فحص قاعدة البيانات":
+                await validate_database_status(update, context)
+            elif text == "📊 تحميل قاعدة البيانات":
+                await database_export_menu(update, context)
+            elif text == "🗑️ تفريغ قاعدة البيانات":
+                await confirm_database_clear(update, context)
+            elif text == "📊 Excel":
+                await export_database_excel(update, context)
+            elif text == "📄 CSV":
+                await export_database_csv(update, context)
+            elif text == "🗃️ SQLite Database":
+                await export_database_sqlite(update, context)
+            elif text == "🔙 العودة للقائمة الرئيسية":
+                await return_to_admin_main(update, context)
             return
         
         # التحقق من الأزرار الرئيسية للمستخدم
