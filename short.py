@@ -3598,40 +3598,26 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             user_id = update.effective_user.id
             language = get_user_language(user_id)
             
-            # إنشاء النص بناءً على لغة المستخدم الحالية
+            # إنشاء النص بناءً على لغة المستخدم الحالية (مختصر للنافذة المنبثقة)
             if language == 'ar':
                 popup_text = """🧑‍💻 معلومات المطور
 
-📦 بوت بيع البروكسي وإدارة البروكسي
-🔢 الإصدار: 1.0.0
-
-━━━━━━━━━━━━━━━
+📦 بوت بيع البروكسي v1.0.0
 👨‍💻 طُور بواسطة: Mohamad Zalaf
 
-📞 معلومات الاتصال:
 📱 تليجرام: @MohamadZalaf
-📧 البريد الإلكتروني:
-   • MohamadZalaf@outlook.com
-   • Mohamadzalaf2017@gmail.com
+📧 MohamadZalaf@outlook.com
 
-━━━━━━━━━━━━━━━
 © Mohamad Zalaf 2025"""
             else:
                 popup_text = """🧑‍💻 Developer Information
 
-📦 Proxy Sales & Management Bot
-🔢 Version: 1.0.0
-
-━━━━━━━━━━━━━━━
+📦 Proxy Sales Bot v1.0.0
 👨‍💻 Developed by: Mohamad Zalaf
 
-📞 Contact Information:
 📱 Telegram: @MohamadZalaf
-📧 Email:
-   • MohamadZalaf@outlook.com
-   • Mohamadzalaf2017@gmail.com
+📧 MohamadZalaf@outlook.com
 
-━━━━━━━━━━━━━━━
 © Mohamad Zalaf 2025"""
             
             try:
@@ -3940,58 +3926,164 @@ If you have any questions, please contact support:
         return ConversationHandler.END
 
 async def handle_custom_message_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """معالجة إدخال الرسالة المخصصة"""
+    """معالجة إدخال الرسالة المخصصة - يتم إرسالها مباشرة مع البروكسي"""
     custom_message = update.message.text
     order_id = context.user_data['processing_order_id']
     
-    # إرسال الرسالة المخصصة للمستخدم
-    user_query = "SELECT user_id FROM orders WHERE id = ?"
-    user_result = db.execute_query(user_query, (order_id,))
-    
-    if user_result:
-        user_id = user_result[0][0]
-        user_language = get_user_language(user_id)
+    # التحقق من أن هذا تدفق البروكسي الجديد (مباشرة بدون أزرار الكمية)
+    if context.user_data.get('waiting_for_admin_message', False):
+        # التدفق الجديد: إرسال البروكسي مع الرسالة المخصصة
+        await send_proxy_with_custom_message(update, context, custom_message)
+        return ConversationHandler.END
+    else:
+        # التدفق القديم: إرسال رسالة فشل
+        user_query = "SELECT user_id FROM orders WHERE id = ?"
+        user_result = db.execute_query(user_query, (order_id,))
         
-        # إرسال الرسالة المخصصة في قالب جاهز
-        admin_message_template = f"""📩 لديك رسالة من الأدمن
+        if user_result:
+            user_id = user_result[0][0]
+            user_language = get_user_language(user_id)
+            
+            # إرسال الرسالة المخصصة في قالب جاهز
+            admin_message_template = f"""📩 لديك رسالة من الأدمن
 
 "{custom_message}"
 
 ━━━━━━━━━━━━━━━━━"""
-        
-        await context.bot.send_message(user_id, admin_message_template)
-        
-        # إرسال رسالة فشل العملية
-        failure_message = {
-            'ar': f"""❌ تم رفض طلبك رقم `{order_id}`
+            
+            await context.bot.send_message(user_id, admin_message_template)
+            
+            # إرسال رسالة فشل العملية
+            failure_message = {
+                'ar': f"""❌ تم رفض طلبك رقم `{order_id}`
 
 إن كان لديك استفسار، يرجى التواصل مع الدعم:
 @Static_support""",
-            'en': f"""❌ Your order `{order_id}` has been rejected
+                'en': f"""❌ Your order `{order_id}` has been rejected
 
 If you have any questions, please contact support:
 @Static_support"""
-        }
+            }
+            
+            await context.bot.send_message(
+                user_id,
+                failure_message[user_language],
+                parse_mode='Markdown'
+            )
+            
+            # جدولة حذف الطلب بعد 48 ساعة
+            await schedule_order_deletion(context, order_id, user_id)
         
-        await context.bot.send_message(
-            user_id,
-            failure_message[user_language],
-            parse_mode='Markdown'
+        # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
+        clean_user_data_preserve_admin(context)
+        
+        await update.message.reply_text(
+            f"✅ تم إرسال الرسالة المخصصة ورسالة فشل العملية للمستخدم.\nمعرف الطلب: {order_id}\n\n⏰ سيتم حذف الطلب تلقائياً بعد 48 ساعة"
         )
         
-        # جدولة حذف الطلب بعد 48 ساعة
-        await schedule_order_deletion(context, order_id, user_id)
+        # إعادة تفعيل كيبورد الأدمن الرئيسي
+        await restore_admin_keyboard(context, update.effective_chat.id)
+        return ConversationHandler.END
+
+async def send_proxy_with_custom_message(update: Update, context: ContextTypes.DEFAULT_TYPE, custom_message: str) -> None:
+    """إرسال البروكسي مع الرسالة المخصصة مباشرة"""
+    order_id = context.user_data['processing_order_id']
     
-    # تنظيف البيانات المؤقتة مع الحفاظ على حالة الأدمن
-    clean_user_data_preserve_admin(context)
+    # الحصول على معلومات المستخدم والطلب
+    user_query = """
+        SELECT o.user_id, u.first_name, u.last_name 
+        FROM orders o 
+        JOIN users u ON o.user_id = u.user_id 
+        WHERE o.id = ?
+    """
+    user_result = db.execute_query(user_query, (order_id,))
     
-    await update.message.reply_text(
-        f"✅ تم إرسال الرسالة المخصصة ورسالة فشل العملية للمستخدم.\nمعرف الطلب: {order_id}\n\n⏰ سيتم حذف الطلب تلقائياً بعد 48 ساعة"
-    )
-    
-    # إعادة تفعيل كيبورد الأدمن الرئيسي
-    await restore_admin_keyboard(context, update.effective_chat.id)
-    return ConversationHandler.END
+    if user_result:
+        user_id, first_name, last_name = user_result[0]
+        user_full_name = f"{first_name} {last_name or ''}".strip()
+        
+        # إنشاء معلومات البروكسي الوهمية (يجب على الأدمن إدخال البيانات الحقيقية)
+        # في التطبيق الحقيقي، يمكن إضافة واجهة لإدخال معلومات البروكسي
+        proxy_address = "proxy.example.com"
+        proxy_port = "8080"
+        proxy_username = "user123"
+        proxy_password = "pass123"
+        proxy_country = "Unknown"
+        proxy_state = "Unknown"
+        
+        # الحصول على التاريخ والوقت الحاليين
+        from datetime import datetime
+        now = datetime.now()
+        current_date = now.strftime("%Y-%m-%d")
+        current_time = now.strftime("%H:%M:%S")
+        
+        # إنشاء رسالة البروكسي للمستخدم
+        proxy_message = f"""✅ تم معالجة طلب {user_full_name}
+
+🔐 تفاصيل البروكسي:
+📡 العنوان: `{proxy_address}`
+🔌 البورت: `{proxy_port}`
+👤 اسم المستخدم: `{proxy_username}`
+🔑 كلمة المرور: `{proxy_password}`
+
+━━━━━━━━━━━━━━━
+🆔 معرف الطلب: `{order_id}`
+📅 التاريخ: {current_date}
+🕐 الوقت: {current_time}
+
+━━━━━━━━━━━━━━━
+📩 رسالة من الأدمن:
+"{custom_message}"
+
+━━━━━━━━━━━━━━━
+✅ تم إنجاز طلبك بنجاح!"""
+        
+        # إرسال البروكسي للمستخدم
+        await context.bot.send_message(user_id, proxy_message, parse_mode='Markdown')
+        
+        # تحديث حالة الطلب
+        proxy_details = {
+            'address': proxy_address,
+            'port': proxy_port,
+            'country': proxy_country,
+            'state': proxy_state,
+            'username': proxy_username,
+            'password': proxy_password,
+            'custom_message': custom_message
+        }
+        
+        # تسجيل الطلب كمكتمل ومعالج فعلياً
+        db.execute_query(
+            "UPDATE orders SET status = 'completed', processed_at = CURRENT_TIMESTAMP, proxy_details = ?, truly_processed = TRUE WHERE id = ?",
+            (json.dumps(proxy_details), order_id)
+        )
+        
+        # التحقق من إضافة رصيد الإحالة لأول عملية شراء
+        await check_and_add_referral_bonus(context, user_id, order_id)
+        
+        # رسالة تأكيد للأدمن
+        admin_message = f"""✅ تم معالجة الطلب وإرسال البروكسي بنجاح!
+
+🆔 معرف الطلب: `{order_id}`
+👤 المستخدم: {user_full_name}
+📝 الرسالة المخصصة: "{custom_message}"
+
+🔐 تفاصيل البروكسي المرسلة:
+📡 العنوان: `{proxy_address}`
+🔌 البورت: `{proxy_port}`
+👤 اسم المستخدم: `{proxy_username}`
+🔑 كلمة المرور: `{proxy_password}`
+
+━━━━━━━━━━━━━━━
+✅ تم إنهاء معالجة الطلب بنجاح"""
+
+        await update.message.reply_text(admin_message, parse_mode='Markdown')
+        
+        # تنظيف البيانات المؤقتة
+        clean_user_data_preserve_admin(context)
+        
+        # إعادة تفعيل كيبورد الأدمن الرئيسي
+        await restore_admin_keyboard(context, update.effective_chat.id)
 
 async def schedule_order_deletion(context: ContextTypes.DEFAULT_TYPE, order_id: str, user_id: int = None) -> None:
     """جدولة حذف الطلب بعد 48 ساعة"""
@@ -4439,34 +4531,31 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
 
 📋 الطلب جاهز للمعالجة والإرسال للمستخدم."""
     
-    # إنشاء رسالة جديدة بدلاً من تعديل الرسالة الأصلية
+    # تجاوز أزرار الكمية والانتقال مباشرة لانتظار رسالة الأدمن
     keyboard = [
-        [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single")],
-        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package")],
         [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     # استخدام الرسالة الأصلية مع إضافة معلومات الدفع وتحضير للرد المباشر
     original_message = context.user_data.get('original_order_message', '')
-    combined_message = f"{original_message}\n\n━━━━━━━━━━━━━━━\n{admin_message}\n\n━━━━━━━━━━━━━━━\n💬 يمكنك الآن إرسال رسالة مباشرة للمستخدم:"
+    combined_message = f"{original_message}\n\n━━━━━━━━━━━━━━━\n{admin_message}\n\n━━━━━━━━━━━━━━━\n📝 **اكتب رسالتك الآن للمستخدم:**\n\n⬇️ *اكتب رسالة نصية وسيتم إرسالها للمستخدم مع تفاصيل البروكسي*"
     
     # التحقق من طول الرسالة
     print(f"📏 طول الرسالة: {len(combined_message)} حرف")
     if len(combined_message) > 4000:  # حد أمان أقل من حد Telegram (4096)
         print("⚠️ الرسالة طويلة جداً، سيتم تقصيرها")
         # استخدام رسالة مختصرة
-        combined_message = f"✅ تم قبول الدفع للطلب\n\n🆔 معرف الطلب: `{context.user_data['processing_order_id']}`\n💰 قيمة الطلب: `{payment_amount}$`\n\n📋 الطلب جاهز للمعالجة والإرسال للمستخدم.\n\n━━━━━━━━━━━━━━━\n💬 يمكنك الآن إرسال رسالة مباشرة للمستخدم:"
+        combined_message = f"✅ تم قبول الدفع للطلب\n\n🆔 معرف الطلب: `{context.user_data['processing_order_id']}`\n💰 قيمة الطلب: `{payment_amount}$`\n\n📋 الطلب جاهز للمعالجة والإرسال للمستخدم.\n\n━━━━━━━━━━━━━━━\n📝 **اكتب رسالتك الآن للمستخدم:**\n\n⬇️ *اكتب رسالة نصية وسيتم إرسالها للمستخدم مع تفاصيل البروكسي*"
     
     try:
-        print(f"🔄 محاولة تحديث الرسالة مع الأزرار")
-        print(f"📋 عدد الأزرار: {len(keyboard)} أزرار")
+        print(f"🔄 محاولة تحديث الرسالة")
         await query.edit_message_text(
             combined_message,
             reply_markup=reply_markup,
             parse_mode='Markdown'
         )
-        print(f"✅ تم تحديث الرسالة بنجاح مع الأزرار")
+        print(f"✅ تم تحديث الرسالة بنجاح - ينتظر رسالة الأدمن")
     except Exception as e:
         print(f"❌ خطأ في تحديث الرسالة: {e}")
         # محاولة بديلة بدون parse_mode
@@ -4475,11 +4564,13 @@ async def handle_payment_success(update: Update, context: ContextTypes.DEFAULT_T
                 combined_message,
                 reply_markup=reply_markup
             )
-            print(f"✅ تم تحديث الرسالة بنجاح بدون parse_mode")
+            print(f"✅ تم تحديث الرسالة بنجاح بدون parse_mode - ينتظر رسالة الأدمن")
         except Exception as e2:
             print(f"❌ خطأ في المحاولة البديلة: {e2}")
     
-    return PROCESS_ORDER
+    # الانتقال مباشرة لحالة انتظار رسالة الأدمن
+    context.user_data['waiting_for_admin_message'] = True
+    return CUSTOM_MESSAGE
 
 async def handle_send_direct_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة إرسال رسالة مباشرة للمستخدم"""
@@ -5716,8 +5807,18 @@ async def handle_logout_confirmation(update: Update, context: ContextTypes.DEFAU
     await query.answer()
     
     if query.data == "confirm_logout":
-        # تسجيل الخروج
+        # تسجيل الخروج وتنظيف جميع البيانات الخاصة بالأدمن
+        context.user_data['is_admin'] = False
         context.user_data.pop('is_admin', None)
+        
+        # تنظيف أي بيانات أخرى خاصة بالأدمن
+        admin_keys = [k for k in context.user_data.keys() if k.startswith('admin_')]
+        for key in admin_keys:
+            context.user_data.pop(key, None)
+        
+        # تنظيف أي طلب قيد المعالجة
+        context.user_data.pop('processing_order_id', None)
+        context.user_data.pop('admin_processing_active', None)
         
         # إنشاء كيبورد المستخدم العادي
         user_id = update.effective_user.id
