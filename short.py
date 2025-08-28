@@ -5957,6 +5957,19 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
                     )
                 return
         
+        # التحقق من حالة انتظار رسالة أدمن عادية
+        if is_admin and context.user_data.get('waiting_for_admin_message'):
+            try:
+                await handle_admin_message_for_proxy(update, context)
+                return
+            except Exception as e:
+                logger.error(f"خطأ في معالجة رسالة الأدمن المخصصة: {e}")
+                await update.message.reply_text(
+                    f"❌ حدث خطأ أثناء معالجة رسالتك\n\nالخطأ: {str(e)}"
+                )
+                await restore_admin_keyboard(context, update.effective_chat.id)
+                return
+        
         # أزرار الأدمن
         if is_admin:
             # القوائم الرئيسية للأدمن
@@ -5970,6 +5983,13 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
                 await handle_admin_settings_menu(update, context)
             elif text == "🚪 تسجيل الخروج":
                 await admin_logout_confirmation(update, context)
+            else:
+                # التعامل مع النصوص غير المعروفة للأدمن
+                await update.message.reply_text(
+                    "⚠️ أمر غير معروف. يرجى استخدام الأزرار الموجودة في لوحة الأدمن.",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+                await restore_admin_keyboard(context, update.effective_chat.id)
             return
         
         # التحقق من الأزرار الرئيسية للمستخدم
@@ -5983,6 +6003,21 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             await handle_order_reminder(update, context)
         elif text == MESSAGES[language]['main_menu_buttons'][4]:  # الإعدادات
             await handle_settings(update, context)
+        else:
+            # التعامل مع النصوص غير المعروفة
+            if language == 'ar':
+                await update.message.reply_text(
+                    "⚠️ لم أفهم طلبك. يرجى استخدام الأزرار الموجودة في القائمة الرئيسية.",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+            else:
+                await update.message.reply_text(
+                    "⚠️ I didn't understand your request. Please use the buttons in the main menu.",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+            # العودة للقائمة الرئيسية
+            await start(update, context)
+            return
         
     except Exception as e:
         logger.error(f"Error in handle_text_messages: {e}")
