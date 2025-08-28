@@ -2227,17 +2227,32 @@ async def handle_static_proxy_request(update: Update, context: ContextTypes.DEFA
     db.log_action(user_id, "static_proxy_request_started")
     
     # عرض رسالة الحزمة بدون معرف الطلب
-    package_message = MESSAGES[language]['static_package'].replace('معرف الطلب: `{}`', 'سيتم إنشاء معرف الطلب بعد إرسال إثبات الدفع')
+    if language == 'ar':
+        replacement_text = 'سيتم إنشاء معرف الطلب بعد إرسال إثبات الدفع'
+    else:
+        replacement_text = 'Order ID will be generated after sending payment proof'
+    
+    package_message = MESSAGES[language]['static_package'].replace('معرف الطلب: `{}`' if language == 'ar' else 'Order ID: `{}`', replacement_text)
     await update.message.reply_text(package_message, parse_mode='Markdown')
     
     # عرض أزرار الكمية أولاً
-    keyboard = [
-        [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single_static")],
-        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package_static")],
-        [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_proxy_request")]
-    ]
+    if language == 'ar':
+        keyboard = [
+            [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single_static")],
+            [InlineKeyboardButton("📦 باكج", callback_data="quantity_package_static")],
+            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_proxy_request")]
+        ]
+        quantity_text = "اختر الكمية المطلوبة:"
+    else:
+        keyboard = [
+            [InlineKeyboardButton("🔗 Single Proxy", callback_data="quantity_single_static")],
+            [InlineKeyboardButton("📦 Package", callback_data="quantity_package_static")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_user_proxy_request")]
+        ]
+        quantity_text = "Choose the required quantity:"
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("اختر الكمية المطلوبة:", reply_markup=reply_markup)
+    await update.message.reply_text(quantity_text, reply_markup=reply_markup)
     context.user_data['proxy_type'] = 'static'
     return
 
@@ -2252,17 +2267,32 @@ async def handle_socks_proxy_request(update: Update, context: ContextTypes.DEFAU
     db.log_action(user_id, "socks_proxy_request_started")
     
     # عرض رسالة الحزمة بدون معرف الطلب
-    package_message = MESSAGES[language]['socks_package'].replace('معرف الطلب: `{}`', 'سيتم إنشاء معرف الطلب بعد إرسال إثبات الدفع')
+    if language == 'ar':
+        replacement_text = 'سيتم إنشاء معرف الطلب بعد إرسال إثبات الدفع'
+    else:
+        replacement_text = 'Order ID will be generated after sending payment proof'
+    
+    package_message = MESSAGES[language]['socks_package'].replace('معرف الطلب: `{}`' if language == 'ar' else 'Order ID: `{}`', replacement_text)
     await update.message.reply_text(package_message, parse_mode='Markdown')
     
     # عرض أزرار الكمية أولاً (مثل الستاتيك)
-    keyboard = [
-        [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single_socks")],
-        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package_socks")],
-        [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_proxy_request")]
-    ]
+    if language == 'ar':
+        keyboard = [
+            [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single_socks")],
+            [InlineKeyboardButton("📦 باكج", callback_data="quantity_package_socks")],
+            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_proxy_request")]
+        ]
+        quantity_text = "اختر الكمية المطلوبة:"
+    else:
+        keyboard = [
+            [InlineKeyboardButton("🔗 Single Proxy", callback_data="quantity_single_socks")],
+            [InlineKeyboardButton("📦 Package", callback_data="quantity_package_socks")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_user_proxy_request")]
+        ]
+        quantity_text = "Choose the required quantity:"
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("اختر الكمية المطلوبة:", reply_markup=reply_markup)
+    await update.message.reply_text(quantity_text, reply_markup=reply_markup)
     context.user_data['proxy_type'] = 'socks'
     return
 
@@ -2284,17 +2314,27 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
         
         if query.data == "manual_country":
             # الإدخال اليدوي للدولة
-            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
+            if language == 'ar':
+                keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
+                manual_text = "يرجى إدخال اسم الدولة يدوياً:"
+            else:
+                keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_manual_input")]]
+                manual_text = "Please enter country name manually:"
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("يرجى إدخال اسم الدولة يدوياً:", reply_markup=reply_markup)
+            await query.edit_message_text(manual_text, reply_markup=reply_markup)
             context.user_data['waiting_for'] = 'manual_country'
             return
         
         elif query.data == "manual_state":
             # الإدخال اليدوي للولاية
-            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
+            if language == 'ar':
+                keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_manual_input")]]
+                manual_text = "يرجى إدخال اسم الولاية/المنطقة يدوياً:"
+            else:
+                keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_manual_input")]]
+                manual_text = "Please enter state/region name manually:"
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("يرجى إدخال اسم الولاية/المنطقة يدوياً:", reply_markup=reply_markup)
+            await query.edit_message_text(manual_text, reply_markup=reply_markup)
             context.user_data['waiting_for'] = 'manual_state'
             return
         
@@ -2369,13 +2409,22 @@ async def handle_country_selection(update: Update, context: ContextTypes.DEFAULT
 async def show_payment_methods(query, context: ContextTypes.DEFAULT_TYPE, language: str) -> None:
     """عرض طرق الدفع"""
     try:
-        keyboard = [
-            [InlineKeyboardButton("💳 شام كاش", callback_data="payment_shamcash")],
-            [InlineKeyboardButton("💳 سيرياتيل كاش", callback_data="payment_syriatel")],
-            [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
-            [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
-            [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
-        ]
+        if language == 'ar':
+            keyboard = [
+                [InlineKeyboardButton("💳 شام كاش", callback_data="payment_shamcash")],
+                [InlineKeyboardButton("💳 سيرياتيل كاش", callback_data="payment_syriatel")],
+                [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
+                [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
+                [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
+            ]
+        else:
+            keyboard = [
+                [InlineKeyboardButton("💳 Sham Cash", callback_data="payment_shamcash")],
+                [InlineKeyboardButton("💳 Syriatel Cash", callback_data="payment_syriatel")],
+                [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
+                [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
+                [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
+            ]
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
@@ -2415,7 +2464,10 @@ async def handle_payment_method_selection(update: Update, context: ContextTypes.
         context.user_data['payment_method'] = payment_method
         
         # إضافة زر الإلغاء
-        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_payment_proof")]]
+        if language == 'ar':
+            keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_payment_proof")]]
+        else:
+            keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_payment_proof")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
@@ -5838,23 +5890,40 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
     if waiting_for == 'manual_country':
         context.user_data['selected_country'] = text
         context.user_data.pop('waiting_for', None)
-        await update.message.reply_text(f"تم اختيار الدولة: {text}\nيرجى إدخال اسم المنطقة/الولاية:")
+        if language == 'ar':
+            reply_text = f"تم اختيار الدولة: {text}\nيرجى إدخال اسم المنطقة/الولاية:"
+        else:
+            reply_text = f"Country selected: {text}\nPlease enter state/region name:"
+        await update.message.reply_text(reply_text)
         context.user_data['waiting_for'] = 'manual_state'
         return
     
     elif waiting_for == 'manual_state':
         context.user_data['selected_state'] = text
         context.user_data.pop('waiting_for', None)
-        await update.message.reply_text(f"تم اختيار المنطقة: {text}")
+        if language == 'ar':
+            reply_text = f"تم اختيار المنطقة: {text}"
+        else:
+            reply_text = f"State/region selected: {text}"
+        await update.message.reply_text(reply_text)
         
         # الانتقال لطرق الدفع
-        keyboard = [
-            [InlineKeyboardButton("💳 شام كاش", callback_data="payment_shamcash")],
-            [InlineKeyboardButton("💳 سيرياتيل كاش", callback_data="payment_syriatel")],
-            [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
-            [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
-            [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
-        ]
+        if language == 'ar':
+            keyboard = [
+                [InlineKeyboardButton("💳 شام كاش", callback_data="payment_shamcash")],
+                [InlineKeyboardButton("💳 سيرياتيل كاش", callback_data="payment_syriatel")],
+                [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
+                [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
+                [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
+            ]
+        else:
+            keyboard = [
+                [InlineKeyboardButton("💳 Sham Cash", callback_data="payment_shamcash")],
+                [InlineKeyboardButton("💳 Syriatel Cash", callback_data="payment_syriatel")],
+                [InlineKeyboardButton("🪙 Coinex", callback_data="payment_coinex")],
+                [InlineKeyboardButton("🪙 Binance", callback_data="payment_binance")],
+                [InlineKeyboardButton("🪙 Payeer", callback_data="payment_payeer")]
+            ]
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
@@ -8518,16 +8587,29 @@ async def handle_back_to_quantity(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     await query.answer()
     
+    # تحديد لغة الأدمن (افتراضياً العربية للأدمن)
+    admin_language = get_user_language(query.from_user.id)
+    
     # إعادة عرض خيارات الكمية
-    keyboard = [
-        [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single")],
-        [InlineKeyboardButton("📦 باكج", callback_data="quantity_package")],
-        [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")]
-    ]
+    if admin_language == 'ar':
+        keyboard = [
+            [InlineKeyboardButton("🔗 بروكسي واحد", callback_data="quantity_single")],
+            [InlineKeyboardButton("📦 باكج", callback_data="quantity_package")],
+            [InlineKeyboardButton("❌ إلغاء المعالجة", callback_data="cancel_processing")]
+        ]
+        quantity_text = "1️⃣ اختر الكمية المطلوبة:"
+    else:
+        keyboard = [
+            [InlineKeyboardButton("🔗 Single Proxy", callback_data="quantity_single")],
+            [InlineKeyboardButton("📦 Package", callback_data="quantity_package")],
+            [InlineKeyboardButton("❌ Cancel Processing", callback_data="cancel_processing")]
+        ]
+        quantity_text = "1️⃣ Choose the required quantity:"
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await query.edit_message_text(
-        "1️⃣ اختر الكمية المطلوبة:",
+        quantity_text,
         reply_markup=reply_markup
     )
     
