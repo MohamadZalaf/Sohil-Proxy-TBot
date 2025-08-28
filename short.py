@@ -4953,6 +4953,10 @@ async def send_proxy_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE,
         admin_keys = [k for k in context.user_data.keys() if k.startswith('admin_')]
         for key in admin_keys:
             del context.user_data[key]
+        
+        # إزالة معرف الطلب قيد المعالجة لضمان إمكانية معالجة طلبات جديدة
+        context.user_data.pop('processing_order_id', None)
+        context.user_data.pop('admin_processing_active', None)
 
 async def send_proxy_to_user_direct(update: Update, context: ContextTypes.DEFAULT_TYPE, thank_message: str = None) -> None:
     """إرسال تفاصيل البروكسي للمستخدم مباشرة"""
@@ -5017,6 +5021,15 @@ async def send_proxy_to_user_direct(update: Update, context: ContextTypes.DEFAUL
         
         # التحقق من إضافة رصيد الإحالة لأول عملية شراء
         await check_and_add_referral_bonus(context, user_id, order_id)
+        
+        # تنظيف البيانات المؤقتة (مطلوب لضمان عدم تعليق البوت)
+        admin_keys = [k for k in context.user_data.keys() if k.startswith('admin_')]
+        for key in admin_keys:
+            context.user_data.pop(key, None)
+        
+        # إزالة معرف الطلب قيد المعالجة لضمان إمكانية معالجة طلبات جديدة
+        context.user_data.pop('processing_order_id', None)
+        context.user_data.pop('admin_processing_active', None)
 
 async def handle_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة البحث عن مستخدم"""
