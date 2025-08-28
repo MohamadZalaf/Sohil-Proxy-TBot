@@ -4085,6 +4085,38 @@ async def send_proxy_with_custom_message(update: Update, context: ContextTypes.D
         # إعادة تفعيل كيبورد الأدمن الرئيسي
         await restore_admin_keyboard(context, update.effective_chat.id)
 
+async def handle_admin_message_for_proxy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة رسالة الأدمن التي تحتوي على معلومات البروكسي"""
+    # التحقق من أن هناك طلب قيد المعالجة وانتظار رسالة
+    if not context.user_data.get('processing_order_id') or not context.user_data.get('waiting_for_admin_message'):
+        await update.message.reply_text("❌ لا يوجد طلب قيد المعالجة حالياً")
+        return ConversationHandler.END
+    
+    custom_message = update.message.text
+    order_id = context.user_data['processing_order_id']
+    
+    try:
+        # استدعاء دالة إرسال البروكسي مع الرسالة المخصصة
+        await send_proxy_with_custom_message(update, context, custom_message)
+        
+        # رسالة تأكيد للأدمن
+        await update.message.reply_text(
+            f"✅ تم إرسال البروكسي والرسالة للمستخدم بنجاح!\n\n🆔 معرف الطلب: `{order_id}`",
+            parse_mode='Markdown'
+        )
+        
+        # إعادة تفعيل كيبورد الأدمن
+        await restore_admin_keyboard(context, update.effective_chat.id)
+        
+        return ConversationHandler.END
+        
+    except Exception as e:
+        logger.error(f"خطأ في إرسال البروكسي: {e}")
+        await update.message.reply_text(
+            f"❌ حدث خطأ أثناء إرسال البروكسي\n\nالخطأ: {str(e)}"
+        )
+        return PROCESS_ORDER
+
 async def schedule_order_deletion(context: ContextTypes.DEFAULT_TYPE, order_id: str, user_id: int = None) -> None:
     """جدولة حذف الطلب بعد 48 ساعة"""
     import asyncio
@@ -6594,6 +6626,9 @@ async def handle_cancel_processing(update: Update, context: ContextTypes.DEFAULT
             (order_id,)
         )
 
+        # تنظيف حالة انتظار رسالة الأدمن
+        context.user_data.pop('waiting_for_admin_message', None)
+        
         clean_user_data_preserve_admin(context)
         
         # إعادة تفعيل كيبورد الأدمن الرئيسي
@@ -7943,7 +7978,9 @@ process_order_conv_handler = ConversationHandler(
             CallbackQueryHandler(handle_quantity_selection, pattern="^quantity_"),
             CallbackQueryHandler(handle_proxy_details_input, pattern="^proxy_type_"),
             CallbackQueryHandler(handle_back_to_quantity, pattern="^back_to_quantity$"),
-            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$")
+            CallbackQueryHandler(handle_cancel_processing, pattern="^cancel_processing$"),
+            # معالج الرسائل النصية عندما ينتظر البوت رسالة الأدمن
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_message_for_proxy)
         ],
         ENTER_PROXY_TYPE: [
             CallbackQueryHandler(handle_proxy_details_input, pattern="^proxy_type_"),
