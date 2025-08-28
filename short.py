@@ -3678,6 +3678,10 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         elif query.data == "back_to_pending_orders":
             logger.info(f"Routing back to pending orders for user {user_id}")
             await handle_back_to_pending_orders(update, context)
+        elif query.data == "admin_main_menu":
+            logger.info(f"Routing to admin main menu for user {user_id}")
+            await query.answer()
+            await restore_admin_keyboard(context, update.effective_chat.id, "🏠 العودة للقائمة الرئيسية")
         elif query.data.startswith("view_order_"):
             logger.info(f"Routing to order details for user {user_id}")
             await handle_view_order_details(update, context)
@@ -4562,26 +4566,29 @@ async def handle_direct_process_order(update: Update, context: ContextTypes.DEFA
     query = update.callback_query
     await query.answer()
     
-    # التحقق من وجود طلب قيد المعالجة
+    # التحقق من وجود طلب قيد المعالجة (إنهاء الطلب السابق تلقائياً)
     current_processing_order = context.user_data.get('processing_order_id')
     if current_processing_order:
-        # إظهار مربع حوار تحذيري
-        keyboard = [
-            [InlineKeyboardButton("✅ فهمت", callback_data="understood_current_processing")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            f"⚠️ **تحذير: يوجد طلب قيد المعالجة حالياً**\n\n"
-            f"🆔 معرف الطلب الحالي: `{current_processing_order}`\n\n"
-            f"📋 **أنهِ الطلب الحالي أولاً** قبل معالجة طلب آخر:\n"
-            f"• إما إتمام الطلب بنجاح (إرسال البروكسي للمستخدم)\n"
-            f"• أو الضغط على زر الإلغاء في أي مرحلة\n\n"
-            f"💡 هذا يضمن عدم تداخل العمليات وجودة الخدمة",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-        return
+        # تنظيف الطلب السابق تلقائياً
+        try:
+            # إعادة الطلب السابق إلى حالة pending إذا لم يكتمل
+            db.execute_query(
+                "UPDATE orders SET status = 'pending' WHERE id = ? AND status != 'completed'",
+                (current_processing_order,)
+            )
+            
+            # تنظيف البيانات المؤقتة للطلب السابق
+            context.user_data.pop('waiting_for_direct_admin_message', None)
+            context.user_data.pop('waiting_for_admin_message', None)
+            context.user_data.pop('direct_processing', None)
+            context.user_data.pop('admin_processing_active', None)
+            
+            logger.info(f"تم تنظيف الطلب السابق {current_processing_order} تلقائياً لبدء طلب جديد")
+        except Exception as e:
+            logger.error(f"خطأ في تنظيف الطلب السابق: {e}")
+            
+        # إشعار بسيط للأدمن (اختياري)
+        await query.answer(f"تم إنهاء الطلب السابق {current_processing_order[:8]}... تلقائياً", show_alert=False)
     
     order_id = query.data.replace("direct_process_", "")
     
@@ -7223,6 +7230,34 @@ async def send_proxy_with_custom_message_direct(update: Update, context: Context
         context.user_data.pop('waiting_for_direct_admin_message', None)
         context.user_data.pop('direct_processing', None)
         clean_user_data_preserve_admin(context)
+        
+        # إرسال رسالة تأكيد للأدمن مع خيار العودة للطلبات المعلقة
+        keyboard = [
+            [InlineKeyboardButton("🔄 معالجة طلب آخر", callback_data="back_to_pending_orders")],
+            [InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="admin_main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        success_message = f"""✅ **تم إنجاز الطلب بنجاح!**
+
+🆔 معرف الطلب: `{order_id}`
+👤 المستخدم: {user_full_name}
+📅 التاريخ: {current_date} - {current_time}
+
+━━━━━━━━━━━━━━━
+✅ تم إرسال البروكسي للمستخدم بنجاح
+✅ تم تحديث حالة الطلب إلى مكتمل
+✅ تمت معالجة رصيد الإحالة (إن وجد)
+
+🎯 **جاهز لمعالجة المزيد من الطلبات!**
+
+💡 **نصيحة:** يمكنك الآن معالجة عدة طلبات متتالية بسرعة دون قيود!"""
+
+        await update.message.reply_text(
+            success_message,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
 
 async def handle_cancel_user_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة إلغاء البحث عن مستخدم"""
