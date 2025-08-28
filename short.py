@@ -6302,7 +6302,6 @@ async def handle_logout_confirmation(update: Update, context: ContextTypes.DEFAU
     
     if query.data == "confirm_logout":
         # تسجيل الخروج وتنظيف جميع البيانات الخاصة بالأدمن
-        context.user_data['is_admin'] = False
         context.user_data.pop('is_admin', None)
         
         # تنظيف أي بيانات أخرى خاصة بالأدمن
@@ -6332,6 +6331,14 @@ async def handle_logout_confirmation(update: Update, context: ContextTypes.DEFAU
             parse_mode='Markdown'
         )
         
+        # إزالة الكيبورد القديم أولاً
+        await context.bot.send_message(
+            update.effective_chat.id,
+            "🔄 جاري تحديث القائمة...",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        
+        # إرسال الكيبورد الجديد
         await context.bot.send_message(
             update.effective_chat.id,
             "🎯 القائمة الرئيسية\nاختر الخدمة المطلوبة:",
